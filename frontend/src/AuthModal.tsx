@@ -25,8 +25,21 @@ export function AuthModal({ onClose, onSuccess }: Props) {
     setMessage('')
     try {
       if (mode === 'signUp') {
-        await signUp({ username: email, password, options: { userAttributes: { email } } })
-        setMessage('Check your email to confirm your account, then sign in.')
+        const result = await signUp({
+          username: email,
+          password,
+          options: {
+            userAttributes: { email },
+            autoSignIn: { enabled: true },
+          },
+        })
+        if (result.isSignUpComplete) {
+          onSuccess(email)
+        } else {
+          const signedIn = await signIn({ username: email, password })
+          if (signedIn.isSignedIn) onSuccess(email)
+          else setMessage('Your workspace is ready. Continue by signing in.')
+        }
       } else {
         const result = await signIn({ username: email, password })
         if (result.isSignedIn) onSuccess(email)

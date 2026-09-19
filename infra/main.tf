@@ -27,7 +27,6 @@ resource "aws_dynamodb_table" "user_data" {
 resource "aws_cognito_user_pool" "main" {
   name                     = "\${var.project_name}-users"
   username_attributes      = ["email"]
-  auto_verified_attributes = ["email"]
 
   password_policy {
     minimum_length    = 12
