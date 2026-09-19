@@ -56,13 +56,15 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Documents' })).toBeInTheDocument()
   })
 
-  it('shows a helpful not-found page for an unknown route', () => {
+  it('renders the landing page for an unknown hosted route', async () => {
+    const user = userEvent.setup()
+    authMocks.cognitoGetCurrentUser.mockResolvedValue(null)
     window.history.pushState({}, '', '/missing-page')
 
     render(<App />)
+    await user.click(screen.getByRole('button', { name: 'Complete splash' }))
 
-    expect(screen.getByRole('heading', { name: 'That page took a wrong turn.' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /back to home/i })).toHaveAttribute('href', '/')
+    expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
   })
 
 })

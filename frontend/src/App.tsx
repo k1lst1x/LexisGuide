@@ -72,39 +72,6 @@ function useTilt(ref: React.RefObject<HTMLElement | null>) {
   })
 }
 
-/* ───── Counter animation hook ───── */
-function AnimatedCounter({ target, suffix = '' }: { target: number; suffix?: string }) {
-  const [count, setCount] = useState(0)
-  const ref = useRef<HTMLSpanElement>(null)
-  const started = useRef(false)
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !started.current) {
-          started.current = true
-          const start = Date.now()
-          const duration = 1200
-          const tick = () => {
-            const pct = Math.min((Date.now() - start) / duration, 1)
-            const eased = 1 - Math.pow(1 - pct, 3)
-            setCount(Math.round(eased * target))
-            if (pct < 1) requestAnimationFrame(tick)
-          }
-          requestAnimationFrame(tick)
-        }
-      },
-      { threshold: 0.5 }
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [target])
-
-  return <span ref={ref}>{count}<sup className="plus-sup">{suffix}</sup></span>
-}
-
 /* ───── Click ripple ───── */
 function addRipple(e: React.MouseEvent<HTMLElement>) {
   const btn = e.currentTarget
