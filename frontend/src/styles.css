@@ -5570,3 +5570,52 @@ html, body {
 .d2-ai-edit-btn-primary, .d2-shelf-priority strong { color: #b8701f !important; }
 @media (max-width: 900px) { .d2-document-shelf-card { grid-template-columns: 26px 36px minmax(0, 1fr) 90px; }.d2-shelf-deadline { grid-column: 3; }.d2-shelf-priority { grid-column: 4; grid-row: 1 / span 2; }.d2-document-shelf-card > b { display: none; } }
 @media (max-width: 560px) { .d2-document-shelf-heading { align-items: start; flex-direction: column; }.d2-document-shelf-card { grid-template-columns: 24px 34px minmax(0, 1fr); }.d2-shelf-deadline, .d2-shelf-priority { grid-column: 3; grid-row: auto; }.d2-document-workspace.d2-document-modal-open { inset: 4px !important; height: calc(100vh - 8px) !important; min-height: calc(100vh - 8px) !important; border-radius: 17px !important; padding: 14px !important; } }
+
+/* Permanent dashboard theme lock: light only unless this block is intentionally changed. */
+.d2-root {
+  color-scheme: light !important;
+  --d2-ink: #292824 !important;
+  --d2-muted: #706e67 !important;
+  --d2-faint: rgba(42,40,36,.10) !important;
+  --d2-panel: #fffefa !important;
+  --d2-panel-alt: #f8f7f2 !important;
+  background: #e7e5df !important;
+  color: #292824 !important;
+}
+.d2-root .d2-sidebar,
+.d2-root .d2-main,
+.d2-root .d2-content,
+.d2-root .d2-topbar,
+.d2-root .d2-overview-panel,
+.d2-root .d2-finding-card,
+.d2-root .d2-finding-detail,
+.d2-root .d2-chain-content,
+.d2-root .d2-team-members-card,
+.d2-root .d2-chat-card,
+.d2-root .d2-settings-card,
+.d2-root .d2-message-workspace,
+.d2-root .d2-message-thread,
+.d2-root .d2-message-info {
+  color: #292824 !important;
+  background: #fffefa !important;
+  border-color: rgba(42,40,36,.12) !important;
+  box-shadow: 0 4px 18px rgba(42,40,36,.04) !important;
+}
+.d2-root .d2-sidebar { background: #dedcd5 !important; box-shadow: none !important; }
+.d2-root .d2-main, .d2-root .d2-content { background: #f1f0eb !important; }
+.d2-root .d2-topbar { background: #f8f7f2 !important; }
+.d2-root .d2-sidebar-brand, .d2-root .d2-sidebar-logo, .d2-root .d2-workspace-title strong,
+.d2-root .d2-page-title, .d2-root .d2-panel-heading h2, .d2-root .d2-reference-heading .d2-page-title,
+.d2-root .d2-bc-current, .d2-root .d2-health-score strong, .d2-root .d2-health-stats strong,
+.d2-root .d2-finding-table-row > span:first-child, .d2-root .d2-rating-large { color: #292824 !important; }
+.d2-root .d2-workspace-title div span, .d2-root .d2-section-header-copy p, .d2-root .d2-reference-heading p,
+.d2-root .d2-topbar-location, .d2-root .d2-health-score p, .d2-root .d2-health-progress,
+.d2-root .d2-rating-factors-copy, .d2-root .d2-finding-table-head, .d2-root .d2-documents-hero p,
+.d2-root .d2-document-explanation p { color: #706e67 !important; }
+.d2-root .d2-nav-btn, .d2-root .d2-nav-exit, .d2-root .d2-collapse-btn { color: #706e67 !important; }
+.d2-root .d2-nav-btn:hover, .d2-root .d2-collapse-btn:hover { color: #292824 !important; background: #f1f0eb !important; }
+.d2-root .d2-nav-active { color: #292824 !important; background: #f8f7f2 !important; box-shadow: inset 0 0 0 1px rgba(42,40,36,.12) !important; }
+.d2-root .d2-health-stats > div, .d2-root .d2-rating-factor-list > div,
+.d2-root .d2-mix-legend span { background: #f8f7f2 !important; border-color: rgba(42,40,36,.10) !important; }
+.d2-root .d2-document-shelf-list { grid-template-columns: 1fr !important; }
+.d2-root .d2-document-shelf-card { grid-column: 1 !important; }
