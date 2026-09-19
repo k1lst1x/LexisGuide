@@ -190,3 +190,10 @@ tfplan
 .DS_Store
 .idea/
 .vscode/
+
+# Local AgentCore scaffolding and deployment state
+.agentcore-scaffold/
+agentcore/.cache/
+agentcore/.cli/
+agentcore/cdk/node_modules/
+agentcore/cdk/dist/

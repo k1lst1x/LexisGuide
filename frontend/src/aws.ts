@@ -124,3 +124,12 @@ export async function cognitoGetCurrentUser() {
     return null
   }
 }
+
+export async function cognitoGetIdToken() {
+  try {
+    const session = await fetchAuthSession()
+    return session.tokens?.idToken?.toString()
+  } catch {
+    return undefined
+  }
+}

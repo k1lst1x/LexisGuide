@@ -3887,6 +3887,9 @@ html, body {
 .d2-content:has(.d2-demo-overlay) { overflow: hidden; }
 
 .d2-upload-status { margin: -8px 0 16px; padding: 11px 14px; color: #325238; background: #edf5ee; border: 1px solid #c3dec7; border-radius: 10px; font-size: 12.5px; }
+.d2-jurisdiction-field { display: grid; gap: 4px; color: #6b7280; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.d2-jurisdiction-field input { width: 135px; padding: 9px 10px; border: 1px solid #d8dbe4; border-radius: 8px; color: #1f2937; background: #fff; font-size: 12px; font-weight: 500; letter-spacing: normal; text-transform: none; }
+.d2-jurisdiction-field input:focus { outline: 2px solid rgba(79,70,229,.24); border-color: #6366f1; }
 
 .d2-import-overlay { position: fixed; inset: 0; z-index: 10070; display: grid; place-items: center; padding: 16px; background: rgba(25, 25, 25, 0.45); backdrop-filter: blur(7px); animation: d2-demo-overlay-in .2s ease both; }
 .d2-import-modal { position: relative; display: grid; gap: 14px; width: min(660px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 30px; overflow: auto; border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 22px; color: #191919; background: #ffffff; box-shadow: 0 28px 80px rgba(0, 0, 0, 0.16); animation: d2-demo-modal-in .3s cubic-bezier(.2,.8,.2,1) both; }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 import { AIWorkflowProgress } from './components/AIWorkflowProgress'
+import { cognitoGetIdToken } from './aws'
 
 /* ───────── Types ───────── */
 type SampleDoc = {
@@ -15,6 +16,11 @@ type SampleDoc = {
   date: string
   hash: string
   text: string
+  summary?: string
+  assessment?: string
+  confidence?: string
+  nextSteps?: string[]
+  sources?: Array<{ title: string; citation: string; url?: string | null; support: string }>
   findings: Array<{
     id: string
     title: string
@@ -23,6 +29,9 @@ type SampleDoc = {
     explanation: string
     evidence: string
     rule: string
+    whyItMatters?: string
+    negotiationPoint?: string
+    suggestedRewrite?: string
   }>
 }
 
@@ -501,6 +510,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [pasteDialogOpen, setPasteDialogOpen] = useState(false)
   const [pastedTitle, setPastedTitle] = useState('')
   const [pastedText, setPastedText] = useState('')
+  const [jurisdiction, setJurisdiction] = useState('')
   const [tutorialStep, setTutorialStep] = useState(0)
   const [tutorialStripOpen, setTutorialStripOpen] = useState(true)
   const [tutorialOpen, setTutorialOpen] = useState(true)
@@ -580,29 +590,60 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   }
 
   const addScannedDocument = async ({ id, title, type, text, hash }: { id: string; title: string; type: string; text: string; hash: string }) => {
+    let aiResult: {
+      findings?: Array<{ title: string; explanation: string; severity: string; source_text?: string | null; why_it_matters?: string | null; negotiation_point?: string | null; suggested_rewrite?: string | null }>
+      overall_assessment?: string
+      confidence?: string
+      summary?: string
+      next_steps?: string[]
+      sources?: Array<{ title?: string; citation?: string; url?: string | null; support?: string }>
+    } | null = null
     setUploadMessage(`Scanning ${title}…`)
     try {
-      await fetch('/api/v1/analyze', {
+      const token = await cognitoGetIdToken()
+      const apiBase = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+      const response = await fetch(`${apiBase}/api/v1/analyze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ document_text: text.slice(0, 100000) }),
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ document_text: text.slice(0, 100000), jurisdiction: jurisdiction.trim() || undefined }),
       })
+      if (response.ok) aiResult = await response.json()
     } catch {
       // The local quick scan remains available when the API is offline.
     }
-    const findings = scanUploadedText(text)
+    const findings = aiResult?.findings?.length
+      ? aiResult.findings.map((finding, index) => ({
+        id: `ai-${index}`,
+        title: finding.title,
+        severity: /critical|high/i.test(finding.severity) ? 'critical' as const : /low|pass/i.test(finding.severity) ? 'pass' as const : 'warning' as const,
+        category: 'AI legal review',
+        explanation: finding.explanation,
+        evidence: finding.source_text || 'No exact excerpt supplied.',
+        rule: finding.negotiation_point || finding.why_it_matters || 'Review this point with a qualified legal professional.',
+        whyItMatters: finding.why_it_matters || undefined,
+        negotiationPoint: finding.negotiation_point || undefined,
+        suggestedRewrite: finding.suggested_rewrite || undefined,
+      }))
+      : scanUploadedText(text)
+    const assessment = aiResult?.overall_assessment
+    const score = assessment === 'favorable' ? 85 : assessment === 'unfavorable' ? 35 : assessment === 'insufficient_information' ? 50 : 62
     const uploaded: SampleDoc = {
       ...sampleDocs[0],
       id,
       title,
       type,
-      version: 'Quick scan complete',
-      score: findings.some((finding) => finding.severity === 'warning') ? 62 : 86,
-      status: findings.some((finding) => finding.severity === 'warning') ? 'Review recommended' : 'No common risks found',
+      version: aiResult ? 'AgentCore review complete' : 'Quick scan complete',
+      score,
+      status: assessment ? assessment.replaceAll('_', ' ') : findings.some((finding) => finding.severity === 'warning') ? 'Review recommended' : 'No common risks found',
       date: new Date().toLocaleDateString(),
       hash,
       text,
       findings,
+      summary: aiResult?.summary,
+      assessment,
+      confidence: aiResult?.confidence,
+      nextSteps: aiResult?.next_steps,
+      sources: aiResult?.sources?.map((source) => ({ title: source.title || 'Legal authority', citation: source.citation || '', url: source.url, support: source.support || '' })),
     }
     setDocuments((current) => [uploaded, ...current])
     setSelectedDoc(uploaded)
@@ -920,6 +961,9 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   <p>Understand a document before you agree. Add a PDF, Word, webpage, or text file—or paste its contents—then select a highlighted passage to see what it could mean for you.</p>
                 </div>
                 <div className="d2-document-hero-actions">
+                  <label className="d2-jurisdiction-field">Jurisdiction
+                    <input value={jurisdiction} onChange={(event) => setJurisdiction(event.target.value)} placeholder="State / country" aria-label="Legal jurisdiction" />
+                  </label>
                   {isDemoMode && <button className="d2-demo-open-btn" onClick={() => setTutorialOpen(true)}>How does this work?</button>}
                   <button className="d2-paste-btn" onClick={() => triggerAiWorkflow(selectedDoc.title, 'document-audit')} title="Watch AI fairness & due process workflow execution">⚡ AI Workflow</button>
                   <button className="d2-paste-btn" onClick={() => setPasteDialogOpen(true)} disabled={isScanning}>Paste text</button>
@@ -1017,8 +1061,11 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                     <h2>{selectedFindingObj.title}</h2>
                     <p className="d2-explanation-intro">This is a potential issue, not a finding of fraud.</p>
                     <div className="d2-explanation-section"><span>Highlighted passage</span><blockquote>“{selectedFindingObj.evidence}”</blockquote></div>
-                    <div className="d2-explanation-section"><span>Why it matters to you</span><p>{selectedFindingObj.explanation}</p></div>
+                    <div className="d2-explanation-section"><span>Why it matters to you</span><p>{selectedFindingObj.whyItMatters || selectedFindingObj.explanation}</p></div>
+                    {selectedFindingObj.negotiationPoint && <div className="d2-explanation-section"><span>Negotiation point</span><p>{selectedFindingObj.negotiationPoint}</p></div>}
+                    {selectedFindingObj.suggestedRewrite && <div className="d2-explanation-section"><span>Suggested rewrite</span><blockquote>{selectedFindingObj.suggestedRewrite}</blockquote></div>}
                     <div className="d2-next-step"><span>Recommended next step</span><p>{selectedFindingObj.rule}</p></div>
+                    {selectedDoc.sources?.length ? <div className="d2-explanation-section"><span>Authorities consulted</span>{selectedDoc.sources.slice(0, 3).map((source) => <p key={`${source.citation}-${source.title}`}><strong>{source.title}</strong><br />{source.citation}{source.url && <> · <a href={source.url} target="_blank" rel="noreferrer">Open source</a></>}</p>)}</div> : null}
                   </> : <><h2>Select a highlight</h2><p>Choose a highlighted word or sentence in the document to see a clear explanation here.</p></>}
                 </aside>
               </div>

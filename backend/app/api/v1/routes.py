@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.auth import current_user
+from app.legal_agent import configured_agent
 from app.storage import get_profile, list_records, put_profile, save_record
 
 router = APIRouter(prefix="/api/v1", tags=["v1"])
@@ -15,6 +16,10 @@ class HealthResponse(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     document_text: str = Field(min_length=1, max_length=100_000)
+    action: str = Field(default="review", pattern="^(review|negotiate|rewrite)$")
+    jurisdiction: str | None = Field(default=None, max_length=200)
+    user_context: str | None = Field(default=None, max_length=5_000)
+    goals: str | None = Field(default=None, max_length=2_000)
 
 
 class Finding(BaseModel):
@@ -22,11 +27,27 @@ class Finding(BaseModel):
     explanation: str
     severity: str
     source_text: str | None = None
+    why_it_matters: str | None = None
+    negotiation_point: str | None = None
+    suggested_rewrite: str | None = None
+
+
+class Source(BaseModel):
+    title: str = ""
+    citation: str = ""
+    url: str | None = None
+    support: str = ""
 
 
 class AnalyzeResponse(BaseModel):
     findings: list[Finding]
     disclaimer: str
+    overall_assessment: str | None = None
+    confidence: str | None = None
+    summary: str | None = None
+    next_steps: list[str] = Field(default_factory=list)
+    questions_for_user: list[str] = Field(default_factory=list)
+    sources: list[Source] = Field(default_factory=list)
 
 
 class ProfileUpdate(BaseModel):
@@ -57,14 +78,28 @@ async def health_check() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
-@router.post("/analyze", response_model=AnalyzeResponse)
+@router.post(
+    "/analyze",
+    response_model=AnalyzeResponse,
+    response_model_exclude_none=True,
+    response_model_exclude_defaults=True,
+)
 async def analyze_document(payload: AnalyzeRequest) -> AnalyzeResponse:
-    """Temporary contract for the forthcoming document-analysis pipeline."""
-    del payload
-    return AnalyzeResponse(
-        findings=[],
-        disclaimer="LexisGuide provides general information, not legal advice.",
+    """Review a document when Bedrock is configured; retain a safe local stub otherwise."""
+    agent = configured_agent()
+    if agent is None:
+        return AnalyzeResponse(
+            findings=[],
+            disclaimer="LexisGuide provides general information, not legal advice.",
+        )
+    result = agent.review(
+        payload.document_text,
+        action=payload.action,
+        jurisdiction=payload.jurisdiction,
+        user_context=payload.user_context,
+        goals=payload.goals,
     )
+    return AnalyzeResponse(**result)
 
 
 @router.get("/me", response_model=UserProfile)
