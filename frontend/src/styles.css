@@ -152,3 +152,53 @@ button:focus-visible { outline: 0; box-shadow: 0 0 0 3px rgba(255,100,47,.28), 0
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-9px); }
 }
+
+/* Oversized hero magnifier: a glassy 3D inspection lens over the document. */
+.halo-one {
+  z-index: 3;
+  pointer-events: none;
+}
+.halo-one::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: clamp(190px, 17vw, 290px);
+  aspect-ratio: 1;
+  border: 4px solid rgba(255,236,224,.82);
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 25%, rgba(255,255,255,.3), rgba(255,132,91,.11) 28%, rgba(30,10,5,.08) 64%, rgba(255,100,47,.18));
+  box-shadow: 0 0 0 8px rgba(255,100,47,.08), 0 0 28px rgba(255,100,47,.75), inset 0 0 32px rgba(255,195,167,.38), inset -20px -25px 45px rgba(255,83,37,.25);
+  backdrop-filter: blur(2px) saturate(1.35);
+  transform: translate(-50%, -50%) translateZ(80px) rotate(-18deg);
+  transform-style: preserve-3d;
+  animation: hero-lens-sweep 7.5s cubic-bezier(.45,.05,.55,.95) infinite;
+}
+.halo-one::after {
+  content: '';
+  position: absolute;
+  left: 64%;
+  top: 72%;
+  width: clamp(115px, 12vw, 210px);
+  height: clamp(18px, 1.5vw, 28px);
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffb49a, #ff642f 42%, #68200e 100%);
+  border: 1px solid rgba(255,218,202,.65);
+  box-shadow: 0 8px 22px rgba(0,0,0,.45), 0 0 22px rgba(255,100,47,.55), inset 0 2px 3px rgba(255,255,255,.35);
+  transform: translateZ(45px) rotate(45deg);
+  transform-origin: left center;
+  animation: hero-handle-sweep 7.5s cubic-bezier(.45,.05,.55,.95) infinite;
+}
+.cursor-chip::before, .cursor-chip::after { display: none; }
+@keyframes hero-lens-sweep {
+  0%, 100% { transform: translate(-50%, -50%) translate3d(-50px, 34px, 80px) rotate(-20deg) scale(.92); }
+  24% { transform: translate(-50%, -50%) translate3d(62px, -58px, 130px) rotate(12deg) scale(1.08); }
+  52% { transform: translate(-50%, -50%) translate3d(92px, 54px, 105px) rotate(30deg) scale(.98); }
+  78% { transform: translate(-50%, -50%) translate3d(-70px, -32px, 120px) rotate(-8deg) scale(1.04); }
+}
+@keyframes hero-handle-sweep {
+  0%, 100% { transform: translate3d(-50px, 34px, 45px) rotate(45deg); }
+  24% { transform: translate3d(62px, -58px, 95px) rotate(57deg); }
+  52% { transform: translate3d(92px, 54px, 70px) rotate(75deg); }
+  78% { transform: translate3d(-70px, -32px, 85px) rotate(38deg); }
+}
