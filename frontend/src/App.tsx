@@ -13,6 +13,11 @@ function App() {
   const [active, setActive] = useState(0)
   const [progress, setProgress] = useState(0)
   const [heroDepth, setHeroDepth] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIsLoading(false), 1850)
+    return () => window.clearTimeout(timer)
+  }, [])
   useEffect(() => {
     const revealObserver = new IntersectionObserver((entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add('in-view')), { threshold: 0.14 })
     document.querySelectorAll('.reveal-on-scroll').forEach((element) => revealObserver.observe(element))
@@ -27,7 +32,7 @@ function App() {
   }, [])
   const go = (message: string) => { document.querySelector('#experience')?.scrollIntoView({ behavior: 'smooth' }); setToast(message) }
 
-  return <div className="experience-shell"><div className="scroll-progress" style={{ transform: `scaleX(${progress})` }} />
+  return <div className="experience-shell">{isLoading && <div className="loading-screen" aria-hidden="true"><div className="loader-grid" /><div className="loader-content"><p>INITIALIZING CLARITY LAYER</p><div className="loader-wordmark"><span>LEXIS</span><i>GUIDE</i></div><div className="loader-orbit"><span /><b>L</b></div><small>01 / 01</small></div></div>}<div className="scroll-progress" style={{ transform: `scaleX(${progress})` }} />
     <header className="floating-nav">
       <a className="brand" href="#top"><span className="brand-orb">L</span><span>LEXIS<span className="orange">GUIDE</span></span></a>
       <nav><a href="#experience">Experience</a><a href="#principles">Principles</a><a href="#trust">Trust layer</a></nav>
