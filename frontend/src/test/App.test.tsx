@@ -32,8 +32,10 @@ describe('App', () => {
     render(<App />)
     await user.click(screen.getByRole('button', { name: 'Complete splash' }))
 
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Account menu' }))
     expect(await screen.findByText('person@example.com')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Sign Out' }))
+    await user.click(screen.getByRole('button', { name: 'Sign Out & Exit' }))
 
     expect(authMocks.cognitoSignOut).toHaveBeenCalledOnce()
     expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()

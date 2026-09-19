@@ -9,9 +9,9 @@ describe('DashboardV2', () => {
     const user = userEvent.setup()
     render(<DashboardV2 onClose={vi.fn()} userEmail="person@example.com" />)
 
-    await user.click(screen.getByRole('button', { name: 'Checks' }))
+    await user.click(screen.getByRole('button', { name: 'Review' }))
 
-    expect(screen.getByRole('heading', { name: 'Document checks' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
     expect(screen.getAllByText('Appeal filing deadline is vague')).toHaveLength(2)
   })
 
@@ -19,12 +19,24 @@ describe('DashboardV2', () => {
     const user = userEvent.setup()
     render(<DashboardV2 onClose={vi.fn()} />)
 
-    await user.click(screen.getByRole('button', { name: 'Notes' }))
+    await user.click(screen.getByRole('button', { name: 'Messages' }))
     await user.type(screen.getByPlaceholderText('Type a message...'), 'Please cite the appeal rule.')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
     expect(screen.getByText('Please cite the appeal rule.')).toBeInTheDocument()
     expect(screen.getByText('You (Reviewer)')).toBeInTheDocument()
+  })
+
+  it('explains a highlighted document issue in plain language', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+    await user.click(screen.getByRole('button', { name: /Appeals must be submitted within the standard filing period/i }))
+
+    expect(screen.getByText('Why it matters to you')).toBeInTheDocument()
+    expect(screen.getByText(/without specifying an exact calendar date/i)).toBeInTheDocument()
+    expect(screen.getByText('Recommended next step')).toBeInTheDocument()
   })
 
   it('exits through the sidebar control', async () => {

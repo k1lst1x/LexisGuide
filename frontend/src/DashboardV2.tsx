@@ -220,12 +220,12 @@ const icons: Record<string, React.ReactNode> = {
 }
 
 const navItems: { key: NavItem; label: string }[] = [
-  { key: 'overview', label: 'Home' },
-  { key: 'linter', label: 'Checks' },
+  { key: 'overview', label: 'Dashboard' },
+  { key: 'linter', label: 'Review' },
   { key: 'documents', label: 'Documents' },
-  { key: 'chain', label: 'History' },
-  { key: 'team', label: 'Notes' },
-  { key: 'settings', label: 'Account' },
+  { key: 'chain', label: 'Activity' },
+  { key: 'team', label: 'Messages' },
+  { key: 'settings', label: 'Profile' },
 ]
 
 function scanUploadedText(text: string): SampleDoc['findings'] {
@@ -234,6 +234,9 @@ function scanUploadedText(text: string): SampleDoc['findings'] {
     { pattern: /forfeiture of rights/i, title: 'Rights may be lost', category: 'Consequences', explanation: 'This language says you could lose rights but does not clearly explain the outcome or available alternatives.', rule: 'Ask what rights are affected and whether you can still reapply or request review.' },
     { pattern: /may result in (?:tenant )?liability/i, title: 'Responsibility is unclear', category: 'Obligations', explanation: 'The document may shift costs or responsibility to you without defining the limit or the other party’s duties.', rule: 'Ask for the exact condition, cost, and responsibility in writing.' },
     { pattern: /may be adjusted/i, title: 'Amount can change without details', category: 'Cost', explanation: 'A price or payment can change, but the document does not explain how the amount is calculated or capped.', rule: 'Request the calculation, effective date, and any maximum increase.' },
+    { pattern: /final forfeiture of rights/i, title: 'Loss of rights needs an explanation', category: 'Consequences', explanation: 'This phrase says rights can be lost without clearly explaining what can be recovered, appealed, or requested next.', rule: 'Ask which rights would be affected and how to request a review before any deadline.' },
+    { pattern: /subject to deductions/i, title: 'Deductions are not defined', category: 'Money', explanation: 'The document allows deductions but does not say what qualifies, how costs are documented, or when any remainder is returned.', rule: 'Ask for the deduction rules, proof requirements, and a return date in writing.' },
+    { pattern: /either party may terminate[^.]*\./i, title: 'Notice period is missing', category: 'Ending an agreement', explanation: 'The agreement permits termination but does not say how much advance notice is required. That can create an unexpected move-out or payment risk.', rule: 'Request a specific notice period and the delivery method for notice.' },
   ]
 
   const findings = checks.flatMap((check, index) => {
@@ -290,15 +293,25 @@ function DocumentText({ document, onSelectFinding }: { document: SampleDoc; onSe
   }) : line}{'\n'}</span>)}</pre>
 }
 
+function documentKind(type: string) {
+  if (/lease|housing|residential/i.test(type)) return { icon: '⌂', label: 'Housing' }
+  if (/employment|work|offer/i.test(type)) return { icon: '▣', label: 'Work' }
+  if (/school|education|student/i.test(type)) return { icon: '▤', label: 'School' }
+  if (/benefit|administrative|government/i.test(type)) return { icon: '⌘', label: 'Public service' }
+  return { icon: '▤', label: 'Document' }
+}
+
 /* ───────── Main Dashboard V2 ───────── */
-export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userEmail?: string }) {
-  const [collapsed, setCollapsed] = useState(false)
+export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => void; onSignOut?: () => void; userEmail?: string }) {
+  const [collapsed, setCollapsed] = useState(true)
   const [activeNav, setActiveNav] = useState<NavItem>('overview')
   const [documents, setDocuments] = useState<SampleDoc[]>(sampleDocs)
   const [selectedDoc, setSelectedDoc] = useState<SampleDoc>(sampleDocs[0])
   const [activeFinding, setActiveFinding] = useState<string | null>(sampleDocs[0].findings[0]?.id || null)
   const [isScanning, setIsScanning] = useState(false)
   const [uploadMessage, setUploadMessage] = useState('')
+  const [tutorialStep, setTutorialStep] = useState(0)
+  const [tutorialOpen, setTutorialOpen] = useState(true)
   const [comments, setComments] = useState<Array<{ user: string; text: string; time: string }>>([
     { user: 'Elena Moritz (Legal Aid)', text: 'The appeal deadline is completely missing in v1. We should add a 30-day requirement.', time: '10:14 AM' },
     { user: 'Agency Reviewer', text: 'Agreed. Updating notice to include deadline date of Oct 14, 2026.', time: '10:28 AM' },
@@ -362,6 +375,8 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
     setActiveFinding(uploaded.findings[0]?.id || null)
     setIsScanning(false)
     setUploadMessage(`${file.name} scanned. Click a highlight to see why it needs attention.`)
+    setTutorialStep(3)
+    setTutorialOpen(false)
     setActiveNav('documents')
     event.target.value = ''
   }
@@ -377,14 +392,21 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
   const criticalCount = selectedDoc.findings.filter(f => f.severity === 'critical').length
   const warningCount = selectedDoc.findings.filter(f => f.severity === 'warning').length
   const passCount = selectedDoc.findings.filter(f => f.severity === 'pass').length
+  const findingTotal = Math.max(selectedDoc.findings.length, 1)
+  const potentialRiskCount = criticalCount + warningCount
+  const potentialRiskPercent = Math.round((potentialRiskCount / findingTotal) * 100)
+  const checkedPercent = Math.round((passCount / findingTotal) * 100)
+  const criticalPercent = (criticalCount / findingTotal) * 100
+  const warningPercent = (warningCount / findingTotal) * 100
+  const isDemoMode = !documents.some((document) => document.id.startsWith('upload-'))
 
   const breadcrumbMap: Record<NavItem, string> = {
-    overview: 'Home',
-    linter: 'Checks',
+    overview: 'Dashboard',
+    linter: 'Review',
     documents: 'Documents',
-    chain: 'History',
-    team: 'Notes',
-    settings: 'Account',
+    chain: 'Activity',
+    team: 'Messages',
+    settings: 'Profile',
   }
 
   return (
@@ -404,7 +426,10 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
               <button
                 key={item.key}
                 className={`d2-nav-btn ${activeNav === item.key ? 'd2-nav-active' : ''}`}
-                onClick={() => setActiveNav(item.key)}
+                onClick={() => {
+                  setActiveNav(item.key)
+                  if (item.key === 'documents' && isDemoMode) setTutorialOpen(true)
+                }}
                 aria-label={item.label}
                 title={item.label}
               >
@@ -433,24 +458,27 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
       <div className="d2-main">
         {/* Top bar */}
         <header className="d2-topbar">
-          <div className="d2-breadcrumb">
-            <span className="d2-bc-icon">{icons.home}</span>
-            <span className="d2-bc-sep">{icons.chevronRight}</span>
-            <span className="d2-bc-current">{breadcrumbMap[activeNav]}</span>
+          <div className="d2-workspace-title">
+            <span className="d2-workspace-mark">L</span>
+            <div>
+              <strong>LexisGuide</strong>
+              <span>Document workspace</span>
+            </div>
+          </div>
+
+          <div className="d2-topbar-location">
+            <span className="d2-topbar-location-dot" />
+            <span>{breadcrumbMap[activeNav]}</span>
           </div>
 
           <div className="d2-topbar-right">
-            <div className="d2-search-box">
-              {icons.search}
-              <span className="d2-search-text">Search...</span>
-              <kbd className="d2-search-kbd">⌘K</kbd>
-            </div>
+            <button className="d2-icon-btn d2-clean-icon-btn" aria-label="Search">{icons.search}</button>
             <button className="d2-icon-btn d2-notif-btn" aria-label="Notifications">
               {icons.bell}
               <span className="d2-notif-dot" />
             </button>
             <div className="d2-user-menu-anchor" ref={userMenuRef}>
-              <button className="d2-avatar-btn" onClick={() => setUserMenuOpen(!userMenuOpen)}>
+              <button className="d2-avatar-btn" onClick={() => setUserMenuOpen(!userMenuOpen)} aria-label="Account menu">
                 <div className="d2-avatar-circle">
                   {(userEmail || 'U')[0].toUpperCase()}
                 </div>
@@ -461,7 +489,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
                     <strong>{userEmail || 'User'}</strong>
                     <span>AWS Cognito</span>
                   </div>
-                  <button className="d2-dropdown-item" onClick={onClose}>
+                  <button className="d2-dropdown-item" onClick={onSignOut ?? onClose}>
                     {icons.logout}
                     <span>Sign Out & Exit</span>
                   </button>
@@ -475,9 +503,13 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
         <main className="d2-content">
           {/* ═════ OVERVIEW ═════ */}
           {activeNav === 'overview' && (
-            <div className="d2-page d2-overview-page">
-              <div className="d2-page-header">
-                <h1 className="d2-page-title">Home</h1>
+            <div className="d2-page d2-overview-page d2-reference-overview">
+              <div className="d2-reference-heading">
+                <div>
+                  <span className="d2-eyebrow">WORKSPACE</span>
+                  <h1 className="d2-page-title">Dashboard</h1>
+                  <p>Document health, progress, and the next action in one place.</p>
+                </div>
                 <select
                   className="d2-doc-select"
                   value={selectedDoc.id}
@@ -495,80 +527,50 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
                 </select>
               </div>
 
-              {/* KPI Row */}
-              <div className="d2-kpi-row">
-                <div className="d2-kpi-card d2-kpi-score">
-                  <ScoreGauge score={selectedDoc.score} />
-                  <div className="d2-kpi-info">
-                    <span className="d2-kpi-label">Fairness Score</span>
-                    <span className={`d2-kpi-status ${selectedDoc.score < 65 ? 'd2-status-red' : selectedDoc.score < 80 ? 'd2-status-amber' : 'd2-status-green'}`}>
-                      {selectedDoc.status}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="d2-kpi-card">
-                  <div className="d2-kpi-number d2-red">{criticalCount}</div>
-                  <span className="d2-kpi-label">Critical Issues</span>
-                  <div className="d2-kpi-bar"><div className="d2-kpi-bar-fill d2-bar-red" style={{ width: `${(criticalCount / Math.max(selectedDoc.findings.length, 1)) * 100}%` }} /></div>
-                </div>
-
-                <div className="d2-kpi-card">
-                  <div className="d2-kpi-number d2-amber">{warningCount}</div>
-                  <span className="d2-kpi-label">Warnings</span>
-                  <div className="d2-kpi-bar"><div className="d2-kpi-bar-fill d2-bar-amber" style={{ width: `${(warningCount / Math.max(selectedDoc.findings.length, 1)) * 100}%` }} /></div>
-                </div>
-
-                <div className="d2-kpi-card">
-                  <div className="d2-kpi-number d2-green">{passCount}</div>
-                  <span className="d2-kpi-label">Passed Checks</span>
-                  <div className="d2-kpi-bar"><div className="d2-kpi-bar-fill d2-bar-green" style={{ width: `${(passCount / Math.max(selectedDoc.findings.length, 1)) * 100}%` }} /></div>
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="d2-quick-row">
-                <div className="d2-info-card">
-                  <span className="d2-info-tag">{selectedDoc.type}</span>
-                  <h3 className="d2-info-title">{selectedDoc.title}</h3>
-                  <p className="d2-info-meta">{selectedDoc.agency} · Issued {selectedDoc.date}</p>
-                  <p className="d2-info-meta" style={{ fontFamily: 'monospace', fontSize: '11px', marginTop: '8px', color: '#9ca3af' }}>
-                    SHA-256: {selectedDoc.hash.slice(0, 32)}...
-                  </p>
-                  <div className="d2-info-version">{selectedDoc.version}</div>
-                </div>
-
-                <div className="d2-actions-card">
-                  <h3 className="d2-actions-title">Quick Actions</h3>
-                  {selectedDoc.score < 75 && (
-                    <button className="d2-action-btn d2-action-primary" onClick={handleRemediate} disabled={remediating}>
-                      {remediating ? '⚙ Running AI Remediation...' : '⚡ Run Auto-Remediation (v1 → v4)'}
-                    </button>
-                  )}
-                  <button className="d2-action-btn" onClick={() => setActiveNav('linter')}>
-                    View Audit Findings ({selectedDoc.findings.length})
-                  </button>
-                  <button className="d2-action-btn" onClick={() => setActiveNav('chain')}>
-                    View Review Chain
-                  </button>
-                  <button className="d2-action-btn" onClick={() => setActiveNav('documents')}>
-                    Open Document Viewer
-                  </button>
-                </div>
-              </div>
-
-              {/* Recent Findings Summary */}
-              <div className="d2-section-card">
-                <h3 className="d2-section-title">Recent Findings</h3>
-                <div className="d2-findings-mini">
-                  {selectedDoc.findings.slice(0, 3).map(f => (
-                    <div key={f.id} className="d2-finding-mini" onClick={() => { setActiveFinding(f.id); setActiveNav('linter'); }}>
-                      <span className={`d2-sev-dot d2-sev-${f.severity}`} />
-                      <span className="d2-finding-mini-title">{f.title}</span>
-                      <span className="d2-finding-mini-cat">{f.category}</span>
+              <div className="d2-overview-top-grid">
+                <section className="d2-overview-panel d2-health-panel">
+                  <div className="d2-panel-heading"><div><span className="d2-eyebrow">DOCUMENT HEALTH</span><h2>{selectedDoc.title}</h2></div><button className="d2-panel-link" onClick={() => setActiveNav('documents')}>Open document →</button></div>
+                  <div className="d2-health-content">
+                    <div className="d2-health-score"><ScoreGauge score={selectedDoc.score} /><div><strong>{selectedDoc.status}</strong><p>Current review score</p></div></div>
+                    <div className="d2-health-stats">
+                      <div><span>Critical</span><strong className="d2-red">{criticalCount}</strong><small>needs attention</small></div>
+                      <div><span>Warnings</span><strong className="d2-amber">{warningCount}</strong><small>review suggested</small></div>
+                      <div><span>Checked</span><strong className="d2-green">{passCount}</strong><small>clear items</small></div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                  <div className="d2-health-progress"><span>Review coverage</span><div><i style={{ width: `${Math.max(selectedDoc.score, 12)}%` }} /></div><strong>{selectedDoc.score}%</strong></div>
+                </section>
+
+                <section className="d2-overview-panel d2-trend-panel">
+                  <div className="d2-panel-heading"><div><span className="d2-eyebrow">REVIEW PROGRESS</span><h2>Health trend</h2></div><span className="d2-trend-positive">+{Math.max(0, selectedDoc.score - 54)} pts</span></div>
+                  <svg className="d2-trend-chart" viewBox="0 0 480 175" preserveAspectRatio="none" aria-label="Document health trend" role="img">
+                    <defs><linearGradient id="d2TrendFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#818cf8" stopOpacity=".32"/><stop offset="1" stopColor="#818cf8" stopOpacity="0"/></linearGradient></defs>
+                    <path className="d2-chart-grid" d="M0 35H480M0 87H480M0 140H480" />
+                    <path d="M0 143 C45 132 58 112 95 118 S145 138 181 100 S234 114 270 76 S325 93 360 54 S430 63 480 25 L480 175 L0 175Z" fill="url(#d2TrendFill)" />
+                    <path className="d2-chart-line" d="M0 143 C45 132 58 112 95 118 S145 138 181 100 S234 114 270 76 S325 93 360 54 S430 63 480 25" />
+                    <circle cx="480" cy="25" r="5" className="d2-chart-point" />
+                  </svg>
+                  <div className="d2-chart-axis"><span>Uploaded</span><span>Checked</span><span>Reviewed</span><span>Today</span></div>
+                </section>
+              </div>
+
+              <div className="d2-overview-bottom-grid">
+                <section className="d2-overview-panel d2-findings-panel">
+                  <div className="d2-panel-heading"><div><span className="d2-eyebrow">ITEMS TO REVIEW</span><h2>Finding activity</h2></div><button className="d2-panel-link" onClick={() => setActiveNav('linter')}>View all →</button></div>
+                  <div className="d2-findings-table">
+                    <div className="d2-findings-table-head"><span>Finding</span><span>Category</span><span>Status</span></div>
+                    {selectedDoc.findings.slice(0, 4).map((finding) => <button key={finding.id} className="d2-finding-table-row" onClick={() => { setActiveFinding(finding.id); setActiveNav('linter') }}><span><i className={`d2-sev-dot d2-sev-${finding.severity}`} />{finding.title}</span><span>{finding.category}</span><span className={`d2-table-status d2-table-status-${finding.severity}`}>{finding.severity === 'pass' ? 'Checked' : finding.severity === 'critical' ? 'Priority' : 'Review'}</span></button>)}
+                  </div>
+                </section>
+
+                <section className="d2-overview-panel d2-balance-panel">
+                  <div className="d2-panel-heading"><div><span className="d2-eyebrow">ISSUE BREAKDOWN</span><h2>Review balance</h2></div></div>
+                  <div className="d2-balance-content">
+                    <div className="d2-radar-wrap"><svg viewBox="0 0 200 180" className="d2-radar" aria-label="Review balance chart" role="img"><polygon points="100,12 174,66 145,154 55,154 26,66" className="d2-radar-grid"/><polygon points="100,42 148,76 130,134 70,134 52,76" className="d2-radar-grid"/><polygon points={`100,${24 + criticalCount * 10} ${158 - warningCount * 8},78 ${135 - passCount * 9},137 ${65 + warningCount * 8},137 ${42 + criticalCount * 9},78`} className="d2-radar-data"/></svg></div>
+                    <div className="d2-balance-legend"><span><i className="d2-legend-critical" />Priority <strong>{criticalCount}</strong></span><span><i className="d2-legend-warning" />Review <strong>{warningCount}</strong></span><span><i className="d2-legend-pass" />Checked <strong>{passCount}</strong></span></div>
+                  </div>
+                  <button className="d2-balance-action" onClick={() => setActiveNav('documents')}>Read highlighted passages</button>
+                </section>
               </div>
             </div>
           )}
@@ -577,7 +579,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
           {activeNav === 'linter' && (
             <div className="d2-page">
               <div className="d2-page-header">
-                <h1 className="d2-page-title">Document checks</h1>
+                <div className="d2-section-header-copy"><span className="d2-eyebrow">DOCUMENTS</span><h1 className="d2-page-title">Review</h1><p>See every item that needs your attention and why it matters.</p></div>
                 <div className="d2-header-meta">
                   <span className="d2-finding-count">{selectedDoc.findings.length} findings</span>
                   {selectedDoc.score < 75 && (
@@ -640,29 +642,114 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
 
           {/* ═════ DOCUMENTS ═════ */}
           {activeNav === 'documents' && (
-            <div className="d2-page">
-              <div className="d2-page-header">
-                <div><h1 className="d2-page-title">Documents</h1><p className="d2-page-subtitle">Read the full text and select a highlighted passage for a plain-language explanation.</p></div>
-                <div className="d2-document-actions"><input ref={uploadInputRef} type="file" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv" onChange={handleUpload} hidden /><button className="d2-upload-btn" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>{isScanning ? 'Scanning…' : 'Add document'}</button><div className="d2-info-version">{selectedDoc.version}</div></div>
+            <div className="d2-page d2-documents-page">
+              <input ref={uploadInputRef} type="file" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv" onChange={handleUpload} hidden />
+              <div className="d2-documents-hero">
+                <div>
+                  <span className="d2-eyebrow">DOCUMENT REVIEW</span>
+                  <h1>Documents</h1>
+                  <p>Understand a document before you agree. Upload a text document for a quick scan, then select a highlighted passage to see what it could mean for you.</p>
+                </div>
+                <div className="d2-document-hero-actions">{isDemoMode && <button className="d2-demo-open-btn" onClick={() => setTutorialOpen(true)}>How does this work?</button>}<button className="d2-upload-btn d2-upload-btn-large" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>
+                  <span>+</span>{isScanning ? 'Scanning document…' : 'Add document'}
+                </button></div>
               </div>
 
-              <div className="d2-doc-viewer">
-                <div className="d2-doc-meta-bar">
-                  <span className="d2-doc-type-tag">{selectedDoc.type}</span>
-                  <span className="d2-doc-agency">{selectedDoc.agency} · {selectedDoc.date}</span>
+              {uploadMessage && <div className="d2-upload-status" role="status">{uploadMessage}</div>}
+
+              {isDemoMode && <section className="d2-demo-tutorial" aria-label="Document review tutorial">
+                <div className="d2-demo-intro"><span className="d2-demo-badge">DEMO MODE</span><div><h2>Try it with a sample document</h2><p>Learn how LexisGuide works before adding a personal file. Nothing in these samples belongs to you.</p></div></div>
+                <div className="d2-demo-steps">
+                  <button className={`d2-demo-step ${tutorialStep === 1 ? 'd2-demo-step-active' : ''}`} onClick={() => { setSelectedDoc(sampleDocs[2]); setActiveFinding(sampleDocs[2].findings[0]?.id ?? null); setTutorialStep(1) }}><span>1</span><div><strong>Choose a sample</strong><small>Open a housing, benefit, or agreement example.</small></div></button>
+                  <button className={`d2-demo-step ${tutorialStep === 2 ? 'd2-demo-step-active' : ''}`} onClick={() => { setSelectedDoc(sampleDocs[0]); setActiveFinding('f-1'); setTutorialStep(2) }}><span>2</span><div><strong>Select a highlight</strong><small>See a plain-language explanation and next step.</small></div></button>
+                  <button className={`d2-demo-step ${tutorialStep === 3 ? 'd2-demo-step-active' : ''}`} onClick={() => { setTutorialStep(3); uploadInputRef.current?.click() }}><span>3</span><div><strong>Add your document</strong><small>Run the same quick scan on a text file.</small></div></button>
+                </div>
+              </section>}
+
+              <section className="d2-document-insights" aria-label="Document scan summary">
+                <div className="d2-insight-risk">
+                  <div>
+                    <span className="d2-eyebrow">SCAN SUMMARY</span>
+                    <h2>Potential risk</h2>
+                    <p>{potentialRiskCount ? `${potentialRiskCount} item${potentialRiskCount === 1 ? '' : 's'} should be reviewed before you agree.` : 'No common risk patterns were found in this scan.'}</p>
+                  </div>
+                  <div className="d2-risk-ring" aria-label={`${potentialRiskPercent}% potential risk markers`}>
+                    <svg viewBox="0 0 100 100" aria-hidden="true"><circle className="d2-ring-track" cx="50" cy="50" r="40"/><circle className="d2-ring-risk" cx="50" cy="50" r="40" pathLength="100" strokeDasharray={`${potentialRiskPercent} ${100 - potentialRiskPercent}`} /></svg>
+                    <strong>{potentialRiskPercent}%</strong><span>review</span>
+                  </div>
                 </div>
 
-                {uploadMessage && <div className="d2-upload-status" role="status">{uploadMessage}</div>}
-                <div className="d2-doc-reader-layout"><div className="d2-paper">
-                  <div className="d2-paper-watermark">CONFIDENTIAL · LEGAL DISCLOSURE</div>
-                  <DocumentText document={selectedDoc} onSelectFinding={(id) => setActiveFinding(id)} />
-                </div>{selectedFindingObj && <aside className="d2-document-explanation"><span className={`d2-sev-badge d2-sev-badge-${selectedFindingObj.severity}`}>{selectedFindingObj.severity === 'critical' ? 'IMPORTANT' : selectedFindingObj.severity === 'warning' ? 'CHECK THIS' : 'CLEAR'}</span><h2>{selectedFindingObj.title}</h2><p><b>Why it needs attention:</b> {selectedFindingObj.explanation}</p><blockquote>“{selectedFindingObj.evidence}”</blockquote><div><span>What you can do</span><p>{selectedFindingObj.rule}</p></div></aside>}</div>
-
-                <div className="d2-hash-bar">
-                  <span className="d2-hash-label">SHA-256 PROVENANCE:</span>
-                  <code className="d2-hash-value">{selectedDoc.hash}</code>
+                <div className="d2-insight-mix">
+                  <div className="d2-insight-heading"><div><span className="d2-eyebrow">FINDING MIX</span><h2>Good and bad signals</h2></div><span>{findingTotal} checks</span></div>
+                  <div className="d2-mix-bar" role="img" aria-label={`${criticalCount} high priority, ${warningCount} review, and ${passCount} checked findings`}>
+                    {criticalCount > 0 && <i className="d2-mix-critical" style={{ width: `${criticalPercent}%` }} />}
+                    {warningCount > 0 && <i className="d2-mix-warning" style={{ width: `${warningPercent}%` }} />}
+                    {passCount > 0 && <i className="d2-mix-pass" style={{ width: `${checkedPercent}%` }} />}
+                  </div>
+                  <div className="d2-mix-legend"><span><i className="d2-legend-critical" />High priority <b>{criticalCount}</b></span><span><i className="d2-legend-warning" />Review <b>{warningCount}</b></span><span><i className="d2-legend-pass" />Checked <b>{passCount}</b></span></div>
                 </div>
+
+                <div className="d2-insight-categories">
+                  <span className="d2-eyebrow">WHAT TO LOOK AT</span>
+                  <div>{selectedDoc.findings.filter((finding) => finding.severity !== 'pass').slice(0, 3).map((finding) => <button key={finding.id} onClick={() => { setActiveFinding(finding.id); setActiveNav('documents') }}><i className={`d2-sev-dot d2-sev-${finding.severity}`} /><span>{finding.category}</span><b>›</b></button>)}{potentialRiskCount === 0 && <p>All completed checks are shown as clear.</p>}</div>
+                </div>
+              </section>
+
+              <div className="d2-document-workspace">
+                <aside className="d2-document-library" aria-label="Your documents">
+                  <div className="d2-library-heading"><div><span className="d2-eyebrow">{isDemoMode ? 'PRACTICE FILES' : 'YOUR FILES'}</span><h2>{isDemoMode ? 'Sample documents' : 'Your documents'}</h2></div><span>{documents.length}</span></div>
+                  <div className="d2-library-list">
+                    {documents.map((document) => {
+                      const kind = documentKind(document.type)
+                      const issueCount = document.findings.filter((finding) => finding.severity !== 'pass').length
+                      return <button key={document.id} className={`d2-library-item ${selectedDoc.id === document.id ? 'd2-library-item-active' : ''}`} onClick={() => { setSelectedDoc(document); setActiveFinding(document.findings.find((finding) => finding.severity !== 'pass')?.id ?? document.findings[0]?.id ?? null) }}>
+                        <span className="d2-library-icon" aria-hidden="true">{kind.icon}</span>
+                        <span className="d2-library-copy"><strong>{document.title}</strong><small>{kind.label} · {document.date}</small></span>
+                        <span className={`d2-library-count ${issueCount ? 'd2-library-count-risk' : ''}`}>{issueCount ? `${issueCount} issue${issueCount === 1 ? '' : 's'}` : 'Checked'}</span>
+                      </button>
+                    })}
+                  </div>
+                  <button className="d2-library-add" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>+ Add another document</button>
+                  <p className="d2-library-note">{isDemoMode ? 'These examples are here to help you practice. Add your own text file when you are ready.' : 'Text files (.txt, .md, .csv) are scanned in this demo. Your document stays in this browser for the quick scan.'}</p>
+                </aside>
+
+                <section className="d2-document-reader-section">
+                  <div className="d2-reader-toolbar">
+                    <div><span className="d2-doc-type-tag">{documentKind(selectedDoc.type).label}</span><h2>{selectedDoc.title}</h2><p>{selectedDoc.agency} · {selectedDoc.date}</p></div>
+                    <div className="d2-scan-summary"><strong>{selectedDoc.findings.filter((finding) => finding.severity !== 'pass').length}</strong><span>items to review</span></div>
+                  </div>
+                  <div className="d2-reader-hint"><span className="d2-highlight-key" /> Highlighted text may need a closer look. Select it to see why.</div>
+                  <div className="d2-paper d2-paper-scrollable">
+                    <div className="d2-paper-watermark">DOCUMENT COPY</div>
+                    <DocumentText document={selectedDoc} onSelectFinding={(id) => setActiveFinding(id)} />
+                  </div>
+                  <div className="d2-hash-bar"><span className="d2-hash-label">DOCUMENT ID:</span><code className="d2-hash-value">{selectedDoc.hash}</code></div>
+                </section>
+
+                <aside className="d2-document-explanation d2-document-explanation-prominent">
+                  {selectedFindingObj ? <>
+                    <span className={`d2-sev-badge d2-sev-badge-${selectedFindingObj.severity}`}>{selectedFindingObj.severity === 'critical' ? 'HIGH PRIORITY' : selectedFindingObj.severity === 'warning' ? 'REVIEW THIS' : 'CHECKED'}</span>
+                    <h2>{selectedFindingObj.title}</h2>
+                    <p className="d2-explanation-intro">This is a potential issue, not a finding of fraud.</p>
+                    <div className="d2-explanation-section"><span>Highlighted passage</span><blockquote>“{selectedFindingObj.evidence}”</blockquote></div>
+                    <div className="d2-explanation-section"><span>Why it matters to you</span><p>{selectedFindingObj.explanation}</p></div>
+                    <div className="d2-next-step"><span>Recommended next step</span><p>{selectedFindingObj.rule}</p></div>
+                  </> : <><h2>Select a highlight</h2><p>Choose a highlighted word or sentence in the document to see a clear explanation here.</p></>}
+                </aside>
               </div>
+
+              {isDemoMode && tutorialOpen && <div className="d2-demo-overlay" role="dialog" aria-modal="true" aria-labelledby="demo-tour-title">
+                <section className="d2-demo-modal">
+                  <button className="d2-demo-close" onClick={() => setTutorialOpen(false)} aria-label="Close tutorial">×</button>
+                  <div className="d2-demo-modal-intro"><span>LEXISGUIDE DEMO</span><h2 id="demo-tour-title">Learn the document check in under a minute.</h2><p>Start with a safe example, see how flagged language is explained, then use the same tool for your own document.</p></div>
+                  <div className="d2-demo-modal-steps">
+                    <button onClick={() => { setSelectedDoc(sampleDocs[2]); setActiveFinding(sampleDocs[2].findings[0]?.id ?? null); setTutorialStep(1); setTutorialOpen(false) }}><span className="d2-demo-modal-number">01</span><span className="d2-demo-modal-icon">⌂</span><strong>Explore a sample</strong><small>Open a practice housing agreement with realistic review flags.</small><em>Start exploring →</em></button>
+                    <button onClick={() => { setSelectedDoc(sampleDocs[0]); setActiveFinding('f-1'); setTutorialStep(2); setTutorialOpen(false) }}><span className="d2-demo-modal-number">02</span><span className="d2-demo-modal-icon">!</span><strong>See an issue explained</strong><small>Jump to a highlighted sentence and read what it could mean for you.</small><em>Show an example →</em></button>
+                    <button onClick={() => { setTutorialStep(3); setTutorialOpen(false); uploadInputRef.current?.click() }}><span className="d2-demo-modal-number">03</span><span className="d2-demo-modal-icon">+</span><strong>Scan your own file</strong><small>Add a text document when you are ready to begin your own review.</small><em>Add a document →</em></button>
+                  </div>
+                  <p className="d2-demo-modal-footnote">Practice documents only. Automated flags are prompts to review—not proof of fraud or legal advice.</p>
+                </section>
+              </div>}
             </div>
           )}
 
@@ -670,7 +757,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
           {activeNav === 'chain' && (
             <div className="d2-page">
               <div className="d2-page-header">
-                <h1 className="d2-page-title">History</h1>
+                <div className="d2-section-header-copy"><span className="d2-eyebrow">YOUR WORKSPACE</span><h1 className="d2-page-title">Activity</h1><p>Follow each review step and see how a document has changed.</p></div>
               </div>
 
               <div className="d2-chain-timeline">
@@ -703,7 +790,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
           {activeNav === 'team' && (
             <div className="d2-page">
               <div className="d2-page-header">
-                <h1 className="d2-page-title">Notes</h1>
+                <div className="d2-section-header-copy"><span className="d2-eyebrow">COLLABORATION</span><h1 className="d2-page-title">Messages</h1><p>Keep important review conversations together with your documents.</p></div>
                 <button className="d2-action-btn d2-btn-sm" onClick={() => alert('Secure invite link copied!')}>+ Invite Member</button>
               </div>
 
@@ -763,7 +850,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
           {activeNav === 'settings' && (
             <div className="d2-page">
               <div className="d2-page-header">
-                <h1 className="d2-page-title">Account</h1>
+                <div className="d2-section-header-copy"><span className="d2-eyebrow">ACCOUNT</span><h1 className="d2-page-title">Profile</h1><p>Manage your workspace preferences and account details.</p></div>
               </div>
 
               <div className="d2-settings-grid">

@@ -124,6 +124,7 @@ export function App() {
     cognitoGetCurrentUser().then((user) => {
       if (user) {
         setCurrentUser({ email: user.email, username: user.username })
+        setDashOpen(true)
       }
     })
   }, [])
@@ -146,6 +147,7 @@ export function App() {
   const handleAuthSuccess = (email: string) => {
     setAuthOpen(false)
     setCurrentUser({ email, username: email })
+    setDashOpen(true)
     setToast(`✓ Authenticated as ${email} via AWS Cognito`)
   }
 
@@ -191,7 +193,7 @@ export function App() {
   if (dashOpen) {
     return (
       <>
-        <DashboardV2 onClose={closeDashboard} userEmail={currentUser?.email} />
+        <DashboardV2 onClose={closeDashboard} onSignOut={handleSignOut} userEmail={currentUser?.email} />
         <TransitionLoader visible={transitioning} message={transitionMsg} />
       </>
     )
