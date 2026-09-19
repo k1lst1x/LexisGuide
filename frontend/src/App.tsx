@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
+import * as THREE from 'three'
 
 import { AuthModal } from './AuthModal'
 const principles = [
@@ -86,6 +87,46 @@ function App() {
     visual.innerHTML = '<div class="courtroom-aura"></div><div class="court-arch"><span class="arch-cap"></span><span class="arch-inner"><b>§</b><small>CLARITY / 01</small></span></div><div class="court-column court-column-left"><i></i><i></i><i></i></div><div class="court-column court-column-right"><i></i><i></i><i></i></div><div class="judicial-seal"><span>LG</span><small>VERIFIED</small></div><div class="legal-gavel"><span class="gavel-head"></span><span class="gavel-handle"></span></div><div class="evidence-orbit evidence-orbit-one"><span>FACT</span><span>RULE</span></div><div class="evidence-orbit evidence-orbit-two"><span>SOURCE</span><span>DATE</span></div><div class="court-scan"></div>'
     scene.appendChild(visual)
     return () => visual.remove()
+  }, [])
+  useEffect(() => {
+    const scene = document.querySelector('.scene')
+    if (!scene) return
+    const oldVisual = scene.querySelector('.legal-visual')
+    if (oldVisual) oldVisual.remove()
+    const mount = document.createElement('div')
+    mount.className = 'legal-webgl'
+    scene.appendChild(mount)
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(scene.clientWidth, scene.clientHeight)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    mount.appendChild(renderer.domElement)
+    const camera = new THREE.PerspectiveCamera(32, scene.clientWidth / scene.clientHeight, .1, 100)
+    camera.position.set(0, .25, 9)
+    const renderScene = new THREE.Scene()
+    const world = new THREE.Group()
+    world.rotation.set(-.08, -.24, .02)
+    renderScene.add(world)
+    const orange = new THREE.MeshPhysicalMaterial({ color: 0xff642f, metalness: .72, roughness: .2, emissive: 0x351005, emissiveIntensity: .55, clearcoat: 1 })
+    const ivory = new THREE.MeshPhysicalMaterial({ color: 0xffd6c4, metalness: .2, roughness: .25, emissive: 0x3b1207, emissiveIntensity: .3, clearcoat: 1 })
+    const glass = new THREE.MeshPhysicalMaterial({ color: 0xff8b60, metalness: .15, roughness: .08, transmission: .35, transparent: true, opacity: .72, emissive: 0x481207, emissiveIntensity: .45 })
+    const add = (geometry: THREE.BufferGeometry, material: THREE.Material, position: THREE.Vector3) => { const mesh = new THREE.Mesh(geometry, material); mesh.position.copy(position); world.add(mesh); return mesh }
+    const ring = add(new THREE.TorusGeometry(1.6, .035, 12, 96), ivory, new THREE.Vector3(0, 0, 0)); ring.rotation.x = Math.PI / 2.3
+    const ringTwo = add(new THREE.TorusGeometry(2.2, .018, 10, 96), orange, new THREE.Vector3(0, 0, 0)); ringTwo.rotation.set(1.2, .45, -.3)
+    const core = add(new THREE.IcosahedronGeometry(1.18, 2), glass, new THREE.Vector3(0, .15, .15)); core.scale.setScalar(1.15)
+    const seal = add(new THREE.TorusGeometry(.62, .09, 16, 64), orange, new THREE.Vector3(0, .2, 1.08)); seal.rotation.x = .2
+    const columns = new THREE.Group(); world.add(columns)
+    for (const x of [-1.65, 1.65]) { const column = new THREE.Mesh(new THREE.CylinderGeometry(.23, .32, 2.6, 24), ivory); column.position.set(x, -.35, .15); columns.add(column); const capital = new THREE.Mesh(new THREE.BoxGeometry(.7, .18, .7), orange); capital.position.set(x, .98, .15); columns.add(capital) }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(3.9, .16, .25), orange); beam.position.set(0, 1.04, .15); columns.add(beam)
+    const evidence = new THREE.Group(); world.add(evidence)
+    for (let index = 0; index < 6; index += 1) { const angle = (index / 6) * Math.PI * 2; const node = new THREE.Mesh(new THREE.BoxGeometry(.25, .25, .25), index % 2 ? ivory : orange); node.position.set(Math.cos(angle) * 2.35, Math.sin(angle) * .75, Math.sin(angle) * 1.2); node.rotation.set(angle, angle * 1.7, 0); evidence.add(node) }
+    world.add(new THREE.AmbientLight(0xffd5c5, 1.7)); const key = new THREE.PointLight(0xff642f, 22, 14); key.position.set(3, 3, 5); world.add(key); const fill = new THREE.PointLight(0xffdcca, 12, 12); fill.position.set(-4, 1, 3); world.add(fill)
+    const resize = () => { const width = scene.clientWidth; const height = scene.clientHeight; camera.aspect = width / height; camera.updateProjectionMatrix(); renderer.setSize(width, height) }
+    window.addEventListener('resize', resize)
+    let frame = 0
+    const animate = () => { world.rotation.y += .003; core.rotation.x += .004; core.rotation.z += .002; seal.rotation.z -= .008; ring.rotation.z += .006; ringTwo.rotation.z -= .004; evidence.rotation.y -= .006; evidence.rotation.x = Math.sin(performance.now() * .0006) * .16; renderer.render(renderScene, camera); frame = window.requestAnimationFrame(animate) }
+    animate()
+    return () => { window.cancelAnimationFrame(frame); window.removeEventListener('resize', resize); renderer.dispose(); mount.remove() }
   }, [])
   const go = (message: string) => { document.querySelector('#experience')?.scrollIntoView({ behavior: 'smooth' }); setToast(message) }
 
