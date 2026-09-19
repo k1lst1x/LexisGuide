@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 
 /* ───────── Types ───────── */
 type SampleDoc = {
@@ -805,7 +806,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 </aside>
               </div>
 
-              {isDemoMode && tutorialOpen && <div className="d2-demo-overlay" role="dialog" aria-modal="true" aria-labelledby="demo-tour-title">
+              {isDemoMode && tutorialOpen && createPortal(<div className="d2-demo-overlay" role="dialog" aria-modal="true" aria-labelledby="demo-tour-title">
                 <section className="d2-demo-modal">
                   <button className="d2-demo-close" onClick={() => setTutorialOpen(false)} aria-label="Close tutorial">×</button>
                   <div className="d2-demo-modal-intro"><span>LEXISGUIDE DEMO</span><h2 id="demo-tour-title">Learn the document check in under a minute.</h2><p>Start with a safe example, see how flagged language is explained, then use the same tool for your own document.</p></div>
@@ -816,7 +817,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   </div>
                   <p className="d2-demo-modal-footnote">Practice documents only. Automated flags are prompts to review—not proof of fraud or legal advice.</p>
                 </section>
-              </div>}
+              </div>, document.body)}
             </div>
           )}
 
