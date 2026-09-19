@@ -1,7 +1,4 @@
 import { FormEvent, useState } from 'react'
-import { signIn, signInWithRedirect, signUp } from 'aws-amplify/auth'
-
-import { authConfigured } from './aws'
 
 type Props = {
   onClose: () => void
@@ -12,51 +9,10 @@ export function AuthModal({ onClose, onSuccess }: Props) {
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [message, setMessage] = useState('')
-  const [busy, setBusy] = useState(false)
 
-  const submit = async (event: FormEvent) => {
+  const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!authConfigured) {
-      setMessage('AWS authentication is not configured yet. Add the VITE_COGNITO_* values first.')
-      return
-    }
-    setBusy(true)
-    setMessage('')
-    try {
-      if (mode === 'signUp') {
-        const result = await signUp({
-          username: email,
-          password,
-          options: {
-            userAttributes: { email },
-            autoSignIn: { enabled: true },
-          },
-        })
-        if (result.isSignUpComplete) {
-          onSuccess(email)
-        } else {
-          const signedIn = await signIn({ username: email, password })
-          if (signedIn.isSignedIn) onSuccess(email)
-          else setMessage('Your workspace is ready. Continue by signing in.')
-        }
-      } else {
-        const result = await signIn({ username: email, password })
-        if (result.isSignedIn) onSuccess(email)
-      }
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Authentication failed. Please try again.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const socialSignIn = async (provider: 'Google' | 'SignInWithApple') => {
-    if (!authConfigured) {
-      setMessage('AWS authentication is not configured yet. Add the VITE_COGNITO_* values first.')
-      return
-    }
-    await signInWithRedirect({ provider: { custom: provider } })
+    onSuccess(email.trim())
   }
 
   return <div className="auth-backdrop" role="presentation" onMouseDown={onClose}>
@@ -64,18 +20,12 @@ export function AuthModal({ onClose, onSuccess }: Props) {
       <button className="auth-close" onClick={onClose} aria-label="Close sign in">×</button>
       <p className="eyebrow"><span /> SECURE WORKSPACE ACCESS</p>
       <h2 id="auth-title">{mode === 'signIn' ? 'Welcome back.' : 'Create your workspace.'}</h2>
-      <p className="auth-copy">Your account keeps documents, review history, and saved findings private to you.</p>
-      <div className="social-auth">
-        <button onClick={() => socialSignIn('Google')}>Continue with Google</button>
-        <button onClick={() => socialSignIn('SignInWithApple')}>Continue with Apple</button>
-      </div>
-      <div className="auth-divider"><span>or use email</span></div>
+      <p className="auth-copy">Use any email and password to enter the local demo workspace. No external identity configuration is required.</p>
       <form onSubmit={submit}>
         <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
         <label>Password<input type="password" autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'} minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
-        <button className="orange-button auth-submit" disabled={busy}>{busy ? 'Working…' : mode === 'signIn' ? 'Sign in' : 'Create account'} <span className="arrow">↗</span></button>
+        <button className="orange-button auth-submit">{mode === 'signIn' ? 'Sign in' : 'Create account'} <span className="arrow">↗</span></button>
       </form>
-      {message && <p className="auth-message">{message}</p>}
       <button className="auth-switch" onClick={() => setMode(mode === 'signIn' ? 'signUp' : 'signIn')}>{mode === 'signIn' ? 'New here? Create an account' : 'Already have an account? Sign in'}</button>
     </section>
   </div>
