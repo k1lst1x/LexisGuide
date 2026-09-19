@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const principles = [
   ['01', 'Read the signal', 'Extract the decision, deadline, appeal path, and consequence from every important document.'],
@@ -11,9 +11,21 @@ function Arrow() { return <span className="arrow">↗</span> }
 function App() {
   const [toast, setToast] = useState('')
   const [active, setActive] = useState(0)
+  const [progress, setProgress] = useState(0)
+  useEffect(() => {
+    const revealObserver = new IntersectionObserver((entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add('in-view')), { threshold: 0.14 })
+    document.querySelectorAll('.reveal-on-scroll').forEach((element) => revealObserver.observe(element))
+    const onScroll = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight
+      setProgress(max > 0 ? window.scrollY / max : 0)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => { revealObserver.disconnect(); window.removeEventListener('scroll', onScroll) }
+  }, [])
   const go = (message: string) => { document.querySelector('#experience')?.scrollIntoView({ behavior: 'smooth' }); setToast(message) }
 
-  return <div className="experience-shell">
+  return <div className="experience-shell"><div className="scroll-progress" style={{ transform: `scaleX(${progress})` }} />
     <header className="floating-nav">
       <a className="brand" href="#top"><span className="brand-orb">L</span><span>LEXIS<span className="orange">GUIDE</span></span></a>
       <nav><a href="#experience">Experience</a><a href="#principles">Principles</a><a href="#trust">Trust layer</a></nav>
@@ -28,13 +40,13 @@ function App() {
         <div className="hero-bottom"><span>SCROLL TO EXPLORE</span><span className="hero-line" /><span>01 / 04</span></div>
       </section>
 
-      <section className="statement" id="experience"><p className="eyebrow orange-label"><span /> THE CLARITY LAYER</p><h2>Legal documents<br />should feel <i>human.</i></h2><p className="statement-body">LexisGuide transforms notices, agreements, and administrative letters into a spatial map of what matters: decisions, dates, rights, responsibilities, and proof.</p></section>
+      <section className="statement reveal-on-scroll" id="experience"><p className="eyebrow orange-label"><span /> THE CLARITY LAYER</p><h2>Legal documents<br />should feel <i>human.</i></h2><p className="statement-body">LexisGuide transforms notices, agreements, and administrative letters into a spatial map of what matters: decisions, dates, rights, responsibilities, and proof.</p></section>
 
-      <section className="principles" id="principles"><div className="section-heading"><p className="eyebrow"><span /> THE EXPERIENCE</p><h2>Three moves.<br /><i>Less uncertainty.</i></h2></div><div className="principle-layout"><div className="principle-nav">{principles.map(([number, title], index) => <button className={active === index ? 'active' : ''} key={number} onClick={() => setActive(index)}><span>{number}</span>{title}<b>↗</b></button>)}</div><div className="principle-stage"><div className="stage-orb" /><div className="stage-card"><span className="stage-number">{principles[active][0]}</span><div className="stage-icon">{active === 0 ? '◌' : active === 1 ? '⌁' : '↗'}</div><h3>{principles[active][1]}</h3><p>{principles[active][2]}</p><div className="stage-meter"><span style={{ width: `${(active + 1) * 33}%` }} /></div><small>LEXISGUIDE / INTERFACE {principles[active][0]}</small></div></div></div></section>
+      <section className="principles reveal-on-scroll" id="principles"><div className="section-heading"><p className="eyebrow"><span /> THE EXPERIENCE</p><h2>Three moves.<br /><i>Less uncertainty.</i></h2></div><div className="principle-layout"><div className="principle-nav">{principles.map(([number, title], index) => <button className={active === index ? 'active' : ''} key={number} onClick={() => setActive(index)}><span>{number}</span>{title}<b>↗</b></button>)}</div><div className="principle-stage"><div className="stage-orb" /><div className="stage-card"><span className="stage-number">{principles[active][0]}</span><div className="stage-icon">{active === 0 ? '◌' : active === 1 ? '⌁' : '↗'}</div><h3>{principles[active][1]}</h3><p>{principles[active][2]}</p><div className="stage-meter"><span style={{ width: `${(active + 1) * 33}%` }} /></div><small>LEXISGUIDE / INTERFACE {principles[active][0]}</small></div></div></div></section>
 
-      <section className="trust3d" id="trust"><div className="trust-glow" /><div className="trust-content"><p className="eyebrow"><span /> THE TRUST LAYER</p><h2>Useful AI.<br /><i>Visible reasoning.</i></h2><p>Not a score you have to trust. A chain you can inspect: source document, evidence span, rule run, explanation, human decision.</p><button className="glass-button" onClick={() => setToast('Review chain opened — every version stays connected.')}>Open the review chain <Arrow /></button></div><div className="chain-visual"><div className="chain-line" />{['DOCUMENT', 'EVIDENCE', 'RULE RUN', 'HUMAN', 'REPORT'].map((item, index) => <div className={`chain-node chain-${index}`} key={item}><span>{String(index + 1).padStart(2, '0')}</span><b>{item}</b></div>)}</div></section>
+      <section className="trust3d reveal-on-scroll" id="trust"><div className="trust-glow" /><div className="trust-content"><p className="eyebrow"><span /> THE TRUST LAYER</p><h2>Useful AI.<br /><i>Visible reasoning.</i></h2><p>Not a score you have to trust. A chain you can inspect: source document, evidence span, rule run, explanation, human decision.</p><button className="glass-button" onClick={() => setToast('Review chain opened — every version stays connected.')}>Open the review chain <Arrow /></button></div><div className="chain-visual"><div className="chain-line" />{['DOCUMENT', 'EVIDENCE', 'RULE RUN', 'HUMAN', 'REPORT'].map((item, index) => <div className={`chain-node chain-${index}`} key={item}><span>{String(index + 1).padStart(2, '0')}</span><b>{item}</b></div>)}</div></section>
 
-      <section className="closing3d"><div className="closing-orb" /><p className="eyebrow orange-label"><span /> LEXISGUIDE / 2026</p><h2>Clarity is<br /><i>a superpower.</i></h2><p>Start with one document. Leave with a next step you can defend.</p><button className="orange-button" onClick={() => go('Workspace initialized — ready for your first document.')}>Start the journey <Arrow /></button></section>
+      <section className="closing3d reveal-on-scroll"><div className="closing-orb" /><p className="eyebrow orange-label"><span /> LEXISGUIDE / 2026</p><h2>Clarity is<br /><i>a superpower.</i></h2><p>Start with one document. Leave with a next step you can defend.</p><button className="orange-button" onClick={() => go('Workspace initialized — ready for your first document.')}>Start the journey <Arrow /></button></section>
     </main>
     <footer className="footer3d"><a className="brand" href="#top"><span className="brand-orb">L</span><span>LEXIS<span className="orange">GUIDE</span></span></a><span>AI-assisted clarity for real-world decisions.</span><span>Not legal advice.</span></footer>
     {toast && <button className="toast3d" onClick={() => setToast('')}>{toast}<b>×</b></button>}
