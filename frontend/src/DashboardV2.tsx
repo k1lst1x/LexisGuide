@@ -330,10 +330,10 @@ async function extractDocumentText(file: File): Promise<ExtractedDocument> {
 /* ───────── Animated Score Gauge ───────── */
 function ScoreGauge({ score }: { score: number }) {
   const [animated, setAnimated] = useState(0)
-  const radius = 52
-  const circumference = 2 * Math.PI * radius
-  const offset = circumference - (animated / 100) * circumference
   const color = score < 65 ? '#ef4444' : score < 80 ? '#f59e0b' : '#22c55e'
+  const axes = Array.from({ length: 6 }, (_, index) => (Math.PI * 2 * index) / 6 - Math.PI / 2)
+  const pointFor = (angle: number, ratio: number) => `${65 + Math.cos(angle) * 49 * ratio},${65 + Math.sin(angle) * 49 * ratio}`
+  const scoreShape = axes.map((angle, index) => pointFor(angle, Math.max(.22, (animated / 100) * [.95, .81, 1, .73, .9, .84][index]))).join(' ')
 
   useEffect(() => {
     const timer = setTimeout(() => setAnimated(score), 100)
@@ -344,16 +344,11 @@ function ScoreGauge({ score }: { score: number }) {
     <div className={`d2-gauge-container d2-gauge-live ${score < 65 ? 'd2-gauge-risk' : score < 80 ? 'd2-gauge-review' : 'd2-gauge-clear'}`}>
       <span className="d2-gauge-orbit" aria-hidden="true" />
       <svg width="130" height="130" viewBox="0 0 130 130">
-        <circle cx="65" cy="65" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="8" />
-        <circle
-          cx="65" cy="65" r={radius}
-          fill="none" stroke={color} strokeWidth="8"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          transform="rotate(-90 65 65)"
-          style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)' }}
-        />
+        <defs><linearGradient id="d2-radar-fill" x1="0" x2="1" y1="0" y2="1"><stop stopColor={color} stopOpacity=".34" /><stop offset="1" stopColor={color} stopOpacity=".06" /></linearGradient></defs>
+        {[.33, .66, 1].map((ratio) => <polygon key={ratio} className="d2-radar-grid" points={axes.map((angle) => pointFor(angle, ratio)).join(' ')} />)}
+        {axes.map((angle) => <line key={angle} className="d2-radar-axis" x1="65" y1="65" x2={65 + Math.cos(angle) * 49} y2={65 + Math.sin(angle) * 49} />)}
+        <polygon className="d2-radar-shape" points={scoreShape} fill="url(#d2-radar-fill)" stroke={color} />
+        {axes.map((angle, index) => { const ratio = Math.max(.22, (animated / 100) * [.95, .81, 1, .73, .9, .84][index]); return <circle key={`${angle}-${ratio}`} className="d2-radar-node" cx={65 + Math.cos(angle) * 49 * ratio} cy={65 + Math.sin(angle) * 49 * ratio} fill={color} /> })}
       </svg>
       <div className="d2-gauge-label">
         <span className="d2-gauge-num" style={{ color }}>{Math.round(animated)}</span>
@@ -361,6 +356,45 @@ function ScoreGauge({ score }: { score: number }) {
       </div>
     </div>
   )
+}
+
+function DocumentScoreSignal({ documents, selectedDocument, onSelect }: { documents: SampleDoc[]; selectedDocument: SampleDoc; onSelect: (document: SampleDoc) => void }) {
+  const displayedDocuments = documents.slice(0, 5)
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const width = 620
+  const height = 190
+  const padding = { top: 18, right: 24, bottom: 30, left: 28 }
+  const plotWidth = width - padding.left - padding.right
+  const plotHeight = height - padding.top - padding.bottom
+  const pointFor = (document: SampleDoc, index: number) => ({
+    x: padding.left + (displayedDocuments.length === 1 ? plotWidth / 2 : index * (plotWidth / (displayedDocuments.length - 1))),
+    y: padding.top + (1 - document.score / 100) * plotHeight,
+  })
+  const points = displayedDocuments.map(pointFor)
+  const curveSegments = points.slice(1).map((point, index) => {
+    const previous = points[index]
+    const controlDistance = (point.x - previous.x) * .42
+    return `C ${previous.x + controlDistance} ${previous.y}, ${point.x - controlDistance} ${point.y}, ${point.x} ${point.y}`
+  }).join(' ')
+  const signal = points.length ? `M ${points[0].x} ${points[0].y} ${curveSegments}` : ''
+  const averageScore = Math.round(displayedDocuments.reduce((total, document) => total + document.score, 0) / Math.max(displayedDocuments.length, 1))
+  const averageY = padding.top + (1 - averageScore / 100) * plotHeight
+  const activeIndex = Math.max(displayedDocuments.findIndex((document) => document.id === (hoveredId ?? selectedDocument.id)), 0)
+  const activeDocument = displayedDocuments[activeIndex]
+  const activePoint = points[activeIndex]
+
+  return <div className="d2-score-signal" role="img" aria-label="Interactive document score signal" onMouseLeave={() => setHoveredId(null)}>
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+      <defs><linearGradient id="d2-score-signal-fill" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#7c73ed" stopOpacity=".22" /><stop offset="1" stopColor="#7c73ed" stopOpacity="0" /></linearGradient><linearGradient id="d2-score-signal-line" x1="0" x2="1"><stop stopColor="#a5b4fc" /><stop offset="1" stopColor="#4f46e5" /></linearGradient></defs>
+      {[0, 25, 50, 75, 100].map((value) => { const y = padding.top + (1 - value / 100) * plotHeight; return <g key={value}><line className="d2-score-grid-line" x1={padding.left} x2={width - padding.right} y1={y} y2={y} /><text className="d2-score-grid-label" x="0" y={y + 3}>{value}</text></g> })}
+      <line className="d2-score-average-line" x1={padding.left} x2={width - padding.right} y1={averageY} y2={averageY} /><text className="d2-score-average-label" x={width - padding.right} y={averageY - 4}>AVG {averageScore}</text>
+      <path className="d2-score-signal-area" d={`${signal} L ${points.at(-1)?.x ?? padding.left} ${height - padding.bottom} L ${points[0]?.x ?? padding.left} ${height - padding.bottom} Z`} />
+      <path className="d2-score-signal-line" d={signal} />
+      {displayedDocuments.map((document, index) => { const point = points[index]; const active = document.id === (hoveredId ?? selectedDocument.id); return <g key={document.id} className={`d2-score-point ${active ? 'd2-score-point-active' : ''}`} role="button" tabIndex={0} aria-label={`${document.title}: ${document.score} out of 100`} onMouseEnter={() => setHoveredId(document.id)} onFocus={() => setHoveredId(document.id)} onBlur={() => setHoveredId(null)} onClick={() => onSelect(document)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(document) } }}><circle cx={point.x} cy={point.y} r={active ? 5.5 : 3.5} /><text x={point.x} y={height - 8}>{document.title.replace('Notice of ', '').split(' ').slice(0, 2).join(' ')}</text></g> })}
+      {activeDocument && <g className="d2-score-signal-readout"><rect x={Math.min(Math.max(activePoint.x - 32, padding.left), width - 90)} y={Math.max(activePoint.y - 31, 2)} width="64" height="20" rx="3" /><text x={Math.min(Math.max(activePoint.x, padding.left + 32), width - 58)} y={Math.max(activePoint.y - 18, 15)}>{activeDocument.score} / 100</text></g>}
+    </svg>
+    <div className="d2-score-signal-meta"><span><i /> live score model</span><code>revision-aware · evidence weighted</code><span>{activeDocument?.title}</span></div>
+  </div>
 }
 
 const profileActivity = [
@@ -780,11 +814,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
 
                 <section className="d2-overview-panel d2-rating-chart-panel">
                   <div className="d2-panel-heading"><div><span className="d2-eyebrow"><span className="d2-ai-sparkle" aria-hidden="true">✦</span> DOCUMENT RATINGS</span><h2>Document score signal</h2></div><span className="d2-rating-average">Avg. {workspaceAverage}</span></div>
-                  <div key={selectedDoc.id} className="d2-rating-bars" role="img" aria-label="Ratings by document">
-                    {documents.slice(0, 5).map((document) => <button key={document.id} className={`d2-rating-bar ${selectedDoc.id === document.id ? 'd2-rating-bar-active' : ''}`} onClick={() => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id ?? null) }} aria-label={`${document.title}: ${document.score} out of 100`}>
-                      <span className="d2-rating-bar-value">{document.score}</span><span className="d2-rating-bar-track"><i style={{ height: `${document.score}%` }} /></span><span className="d2-rating-bar-label">{document.title.replace('Notice of ', '').split(' ').slice(0, 2).join(' ')}</span>
-                    </button>)}
-                  </div>
+                  <DocumentScoreSignal documents={documents} selectedDocument={selectedDoc} onSelect={(document) => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id ?? null) }} />
                   <div className="d2-rating-chart-footer"><span>100-point scale · latest document revision</span><strong>Best: {highestScore}/100</strong></div>
                 </section>
               </div>
@@ -803,9 +833,9 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   <div className="d2-panel-heading"><div><span className="d2-eyebrow"><span className="d2-ai-sparkle" aria-hidden="true">✦</span> RATING FACTORS</span><h2>What affected this score</h2></div><strong className="d2-rating-large">{selectedDoc.score}</strong></div>
                   <p className="d2-rating-factors-copy">The score reflects the findings in <b>{selectedDoc.title}</b>.</p>
                   <div className="d2-rating-factor-list">
-                    <div><span><i className="d2-legend-critical" />High-priority concerns <b>{criticalCount}</b></span><em><i className="d2-factor-critical" style={{ width: `${criticalPercent}%` }} /></em></div>
-                    <div><span><i className="d2-legend-warning" />Items to review <b>{warningCount}</b></span><em><i className="d2-factor-warning" style={{ width: `${warningPercent}%` }} /></em></div>
-                    <div><span><i className="d2-legend-pass" />Checks completed <b>{passCount}</b></span><em><i className="d2-factor-pass" style={{ width: `${checkedPercent}%` }} /></em></div>
+                    <div><span><i className="d2-legend-critical" />High-priority concerns <b>{criticalCount}</b></span><em><i className="d2-factor-critical" style={{ width: `${criticalPercent}%` }} /></em><small>{criticalCount ? `${criticalCount} urgent signal${criticalCount === 1 ? '' : 's'} linked to document evidence` : 'No urgent patterns found in this scan'}</small></div>
+                    <div><span><i className="d2-legend-warning" />Items to review <b>{warningCount}</b></span><em><i className="d2-factor-warning" style={{ width: `${warningPercent}%` }} /></em><small>{warningCount ? `${warningCount} phrase${warningCount === 1 ? '' : 's'} queued for your review` : 'No additional phrases waiting for review'}</small></div>
+                    <div><span><i className="d2-legend-pass" />Checks completed <b>{passCount}</b></span><em><i className="d2-factor-pass" style={{ width: `${checkedPercent}%` }} /></em><small>{passCount ? `${passCount} check${passCount === 1 ? '' : 's'} cleared against current rules` : 'Awaiting a completed rule check'}</small></div>
                   </div>
                   <div className="d2-factor-log"><code>rules evaluated: {findingTotal.toString().padStart(2, '0')} · evidence coverage: {selectedDoc.score}%</code><span>MODEL v1.0</span></div>
                   <button className="d2-balance-action" onClick={() => setActiveNav('documents')}>Read the highlighted passages</button>

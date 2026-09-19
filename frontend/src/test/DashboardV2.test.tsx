@@ -100,6 +100,15 @@ describe('DashboardV2', () => {
     expect(screen.getByRole('button', { name: /Viewing.*Lease agreement/i })).toBeInTheDocument()
   })
 
+  it('shows the interactive document score signal on the dashboard', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Dashboard' }))
+    expect(screen.getByRole('img', { name: 'Interactive document score signal' })).toBeInTheDocument()
+    expect(screen.getByText('live score model')).toBeInTheDocument()
+  })
+
   it('exits through the sidebar control', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()

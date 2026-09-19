@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 
 export interface WorkflowSubtask {
   id: string
@@ -236,7 +236,7 @@ export function AIWorkflowProgress({
   const timerRef = useRef<number | null>(null)
   const completionCalledRef = useRef(false)
 
-  const resetForMode = (targetMode: string) => {
+  const resetForMode = useCallback((targetMode: string) => {
     setCurrentMode(targetMode)
     const baseTasks = customTasks && targetMode === mode ? customTasks : PRESETS[targetMode] || PRESETS['document-audit']
     setTasks(JSON.parse(JSON.stringify(baseTasks)))
@@ -245,14 +245,14 @@ export function AIWorkflowProgress({
     setIsFinished(false)
     setElapsedMs(0)
     completionCalledRef.current = false
-  }
+  }, [customTasks, mode])
 
   // Reset or initialize state when dialog opens or initial mode changes
   useEffect(() => {
-    if (isOpen) {
-      resetForMode(mode)
-    }
-  }, [isOpen, mode])
+    if (!isOpen) return
+    const frame = window.requestAnimationFrame(() => resetForMode(mode))
+    return () => window.cancelAnimationFrame(frame)
+  }, [isOpen, mode, resetForMode])
 
   // Timer counter for real elapsed time display
   useEffect(() => {
@@ -375,6 +375,7 @@ export function AIWorkflowProgress({
               <h2 className="text-lg font-semibold text-white tracking-tight">
                 {title}
               </h2>
+              <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[450px]">{subtitle}</p>
               {documentName && (
                 <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[450px]">
                   Target Document: <span className="text-gray-200 font-medium">“{documentName}”</span>
