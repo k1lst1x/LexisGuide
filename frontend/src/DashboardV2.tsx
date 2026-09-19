@@ -504,6 +504,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [sectionTitleExpanded, setSectionTitleExpanded] = useState(true)
   const [documents, setDocuments] = useState<SampleDoc[]>(sampleDocs)
   const [selectedDoc, setSelectedDoc] = useState<SampleDoc>(sampleDocs[0])
+  const [documentModalOpen, setDocumentModalOpen] = useState(false)
   const [activeFinding, setActiveFinding] = useState<string | null>(sampleDocs[0].findings[0]?.id || null)
   const [isScanning, setIsScanning] = useState(false)
   const [uploadMessage, setUploadMessage] = useState('')
@@ -647,11 +648,58 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     }
     setDocuments((current) => [uploaded, ...current])
     setSelectedDoc(uploaded)
+    setDocumentModalOpen(true)
     setActiveFinding(uploaded.findings[0]?.id || null)
     setUploadMessage(`${title} is ready. Select a highlighted passage to see why it needs attention.`)
     setTutorialStep(3)
     setTutorialOpen(false)
     setActiveNav('documents')
+  }
+
+  const runDocumentAction = async (action: 'review' | 'negotiate' | 'rewrite') => {
+    setIsScanning(true)
+    setUploadMessage(`${action === 'rewrite' ? 'Preparing a proposed rewrite' : action === 'negotiate' ? 'Preparing negotiation points' : 'Refreshing the review'}â€¦`)
+    try {
+      const token = await cognitoGetIdToken()
+      const apiBase = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+      const response = await fetch(`${apiBase}/api/v1/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ document_text: selectedDoc.text.slice(0, 100000), action, jurisdiction: jurisdiction.trim() || undefined }),
+      })
+      if (!response.ok) throw new Error('The AI service could not complete this action.')
+      const result = await response.json() as { summary?: string; overall_assessment?: string; confidence?: string; next_steps?: string[]; sources?: SampleDoc['sources']; findings?: Array<{ title: string; explanation: string; severity: string; source_text?: string; why_it_matters?: string; negotiation_point?: string; suggested_rewrite?: string }> }
+      const findings = (result.findings ?? []).map((finding, index) => ({
+        id: `ai-${action}-${index}`,
+        title: finding.title,
+        severity: /critical|high/i.test(finding.severity) ? 'critical' as const : /low|pass/i.test(finding.severity) ? 'pass' as const : 'warning' as const,
+        category: action === 'rewrite' ? 'Proposed rewrite' : action === 'negotiate' ? 'Negotiation point' : 'AI legal review',
+        explanation: finding.explanation,
+        evidence: finding.source_text || 'No exact excerpt supplied.',
+        rule: finding.negotiation_point || finding.why_it_matters || 'Review this proposal with a qualified legal professional.',
+        whyItMatters: finding.why_it_matters,
+        negotiationPoint: finding.negotiation_point,
+        suggestedRewrite: finding.suggested_rewrite,
+      }))
+      const updated = { ...selectedDoc, findings: findings.length ? findings : selectedDoc.findings, summary: result.summary, assessment: result.overall_assessment, confidence: result.confidence, nextSteps: result.next_steps, sources: result.sources }
+      setDocuments((current) => current.map((document) => document.id === selectedDoc.id ? updated : document))
+      setSelectedDoc(updated)
+      setActiveFinding(updated.findings[0]?.id || null)
+      setUploadMessage(`${action === 'rewrite' ? 'Proposed rewrite' : action === 'negotiate' ? 'Negotiation plan' : 'AI review'} ready. Nothing was applied automatically.`)
+    } catch (error) {
+      setUploadMessage(error instanceof Error ? error.message : 'AI action failed. Your original document is unchanged.')
+    } finally {
+      setIsScanning(false)
+    }
+  }
+
+  const applySuggestedRewrite = () => {
+    if (!selectedFindingObj?.suggestedRewrite || !selectedFindingObj.evidence) return
+    const updatedText = selectedDoc.text.replace(selectedFindingObj.evidence, selectedFindingObj.suggestedRewrite)
+    const updated = { ...selectedDoc, text: updatedText, version: 'AI edit proposed - review before export' }
+    setDocuments((current) => current.map((document) => document.id === selectedDoc.id ? updated : document))
+    setSelectedDoc(updated)
+    setUploadMessage('The proposed clause was applied to a working copy. Review it before exporting or sharing.')
   }
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1014,14 +1062,23 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 </div>
               </section>
 
-              <div className="d2-document-workspace">
+              {!documentModalOpen && <section className="d2-document-shelf" aria-label="Documents">
+                {documents.map((document) => <button key={document.id} className="d2-document-shelf-card" onClick={() => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id || null); setDocumentModalOpen(true) }}>
+                  <span className="d2-shelf-icon">{documentKind(document.type).icon}</span>
+                  <span><strong>{document.title}</strong><small>{document.type} Â· {document.date}</small><em>{document.summary || 'Open this document in the AI review workspace.'}</em></span>
+                  <b>Open â†’</b>
+                </button>)}
+              </section>}
+
+              <div className={`d2-document-workspace ${documentModalOpen ? 'd2-document-modal-open' : 'd2-document-workspace-closed'}`}>
+                {documentModalOpen && <button className="d2-document-modal-close" onClick={() => setDocumentModalOpen(false)} aria-label="Close document">Ã—</button>}
                 <aside className="d2-document-library" aria-label="Your documents">
                   <div className="d2-library-heading"><div><span className="d2-eyebrow">{isDemoMode ? 'PRACTICE FILES' : 'YOUR FILES'}</span><h2>{isDemoMode ? 'Sample documents' : 'Your documents'}</h2></div><span>{documents.length}</span></div>
                   <div className="d2-library-list">
                     {documents.map((document) => {
                       const kind = documentKind(document.type)
                       const issueCount = document.findings.filter((finding) => finding.severity !== 'pass').length
-                      return <button key={document.id} className={`d2-library-item ${selectedDoc.id === document.id ? 'd2-library-item-active' : ''}`} onClick={() => { setSelectedDoc(document); setActiveFinding(document.findings.find((finding) => finding.severity !== 'pass')?.id ?? document.findings[0]?.id ?? null) }}>
+                      return <button key={document.id} className={`d2-library-item ${selectedDoc.id === document.id ? 'd2-library-item-active' : ''}`} onClick={() => { setSelectedDoc(document); setActiveFinding(document.findings.find((finding) => finding.severity !== 'pass')?.id ?? document.findings[0]?.id ?? null); setDocumentModalOpen(true) }}>
                         <span className="d2-library-icon" aria-hidden="true">{kind.icon}</span>
                         <span className="d2-library-copy"><strong>{document.title}</strong><small>{kind.label} · {document.date}</small></span>
                         <span className={`d2-library-count ${issueCount ? 'd2-library-count-risk' : ''}`}>{issueCount ? `${issueCount} issue${issueCount === 1 ? '' : 's'}` : 'Checked'}</span>
@@ -1045,6 +1102,9 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                         ⚡ AI Workflow
                       </button>
                       <div className="d2-scan-summary"><strong>{selectedDoc.findings.filter((finding) => finding.severity !== 'pass').length}</strong><span>items to review</span></div>
+                      <button className="d2-ai-edit-btn" onClick={() => runDocumentAction('review')} disabled={isScanning}>Summarize</button>
+                      <button className="d2-ai-edit-btn" onClick={() => runDocumentAction('negotiate')} disabled={isScanning}>Negotiate</button>
+                      <button className="d2-ai-edit-btn d2-ai-edit-btn-primary" onClick={() => runDocumentAction('rewrite')} disabled={isScanning}>Propose rewrite</button>
                     </div>
                   </div>
                   <div className="d2-reader-hint"><span className="d2-highlight-key" /> Highlighted text may need a closer look. Select it to see why.</div>
@@ -1059,11 +1119,12 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   {selectedFindingObj ? <>
                     <span className={`d2-sev-badge d2-sev-badge-${selectedFindingObj.severity}`}>{selectedFindingObj.severity === 'critical' ? 'HIGH PRIORITY' : selectedFindingObj.severity === 'warning' ? 'REVIEW THIS' : 'CHECKED'}</span>
                     <h2>{selectedFindingObj.title}</h2>
+                    {selectedDoc.summary && <p className="d2-ai-summary"><strong>AI summary:</strong> {selectedDoc.summary}</p>}
                     <p className="d2-explanation-intro">This is a potential issue, not a finding of fraud.</p>
                     <div className="d2-explanation-section"><span>Highlighted passage</span><blockquote>“{selectedFindingObj.evidence}”</blockquote></div>
                     <div className="d2-explanation-section"><span>Why it matters to you</span><p>{selectedFindingObj.whyItMatters || selectedFindingObj.explanation}</p></div>
                     {selectedFindingObj.negotiationPoint && <div className="d2-explanation-section"><span>Negotiation point</span><p>{selectedFindingObj.negotiationPoint}</p></div>}
-                    {selectedFindingObj.suggestedRewrite && <div className="d2-explanation-section"><span>Suggested rewrite</span><blockquote>{selectedFindingObj.suggestedRewrite}</blockquote></div>}
+                    {selectedFindingObj.suggestedRewrite && <div className="d2-explanation-section"><span>Suggested rewrite</span><blockquote>{selectedFindingObj.suggestedRewrite}</blockquote><button className="d2-ai-edit-btn d2-ai-edit-btn-primary" onClick={applySuggestedRewrite}>Apply to working copy</button></div>}
                     <div className="d2-next-step"><span>Recommended next step</span><p>{selectedFindingObj.rule}</p></div>
                     {selectedDoc.sources?.length ? <div className="d2-explanation-section"><span>Authorities consulted</span>{selectedDoc.sources.slice(0, 3).map((source) => <p key={`${source.citation}-${source.title}`}><strong>{source.title}</strong><br />{source.citation}{source.url && <> · <a href={source.url} target="_blank" rel="noreferrer">Open source</a></>}</p>)}</div> : null}
                   </> : <><h2>Select a highlight</h2><p>Choose a highlighted word or sentence in the document to see a clear explanation here.</p></>}
