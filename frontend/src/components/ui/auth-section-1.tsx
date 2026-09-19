@@ -118,14 +118,14 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
               </div>
 
               <button type="submit" className="auth-submit-btn">
-                Create Account & Open Workspace →
+                Submit
               </button>
             </form>
           </div>
         </div>
 
-        {/* Right Column — Grain Gradient Shader Banner */}
-        <div className="relative flex min-h-[720px] overflow-hidden rounded-r-2xl bg-black p-8 text-white sm:p-12 lg:min-h-0">
+        {/* Right Column — Rounded Grain Gradient Shader Banner */}
+        <div className="relative min-h-[500px] w-full overflow-hidden rounded-[20px] bg-black lg:min-h-0">
           <GrainGradient
             speed={1}
             scale={1}
@@ -139,26 +139,8 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
             frame={2854.5}
             colors={["#FFFFFF", "#FC7819", "#FC7819", "#FFFFFF"]}
             colorBack="#00000000"
-            className="absolute inset-0 bg-black"
+            className="absolute inset-0 h-full w-full rounded-[20px] object-cover bg-black"
           />
-
-          <div className="relative z-10 flex h-full w-full flex-col justify-between">
-            <h2 className="max-w-[620px] pt-0 text-5xl font-medium tracking-[-0.05em] text-white sm:text-6xl lg:pt-16 lg:text-[64px] lg:leading-[0.98] xl:text-[70px]">
-              Think fast,
-              <br />
-              Build faster
-            </h2>
-
-            <a
-              href="#"
-              className="mb-0 inline-flex h-12 max-w-full items-center gap-3 rounded-[10px] border border-white/25 px-5 text-base font-medium text-white/85 backdrop-blur-sm transition-colors hover:border-white/45 hover:text-white xl:mb-12 xl:px-6 xl:text-xl"
-            >
-              <WindowsIcon className="size-5 shrink-0 xl:size-7" />
-              <span className="truncate whitespace-nowrap">
-                Download the windows app
-              </span>
-            </a>
-          </div>
         </div>
       </div>
     </section>
@@ -234,14 +216,6 @@ function AppleIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M17.05 12.54c-.03-3.02 2.47-4.47 2.58-4.54-1.41-2.06-3.6-2.34-4.38-2.37-1.86-.19-3.64 1.1-4.58 1.1-.95 0-2.42-1.07-3.98-1.04-2.05.03-3.94 1.19-4.99 3.02-2.13 3.69-.54 9.16 1.53 12.15 1.01 1.46 2.22 3.1 3.81 3.04 1.53-.06 2.11-.99 3.96-.99s2.37.99 3.99.96c1.65-.03 2.69-1.49 3.69-2.96 1.16-1.69 1.64-3.33 1.66-3.41-.04-.02-3.2-1.23-3.24-4.87ZM14.03 3.66c.84-1.02 1.41-2.43 1.25-3.84-1.21.05-2.68.81-3.55 1.83-.78.9-1.46 2.34-1.28 3.72 1.35.1 2.73-.69 3.58-1.71Z" />
-    </svg>
-  );
-}
-
-function WindowsIcon({ className }: { className?: string }) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M3 4.7 10.7 3.6v7.7H3V4.7Zm8.8-1.25L21 2.1v9.2h-9.2V3.45ZM3 12.7h7.7v7.7L3 19.3v-6.6Zm8.8 0H21v9.2l-9.2-1.3v-7.9Z" />
     </svg>
   );
 }
