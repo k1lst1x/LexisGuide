@@ -208,7 +208,7 @@ export function App() {
           {/* Header Nav */}
           <header className="header reveal" style={{ animationDelay: '0.1s' }}>
             <div className="brand">
-              <span className="brand-name">LexisGuide</span><span className="trademark">®</span>
+              <span className="brand-name">LexisGuide</span>
             </div>
             
             <nav className="nav-links">
@@ -295,7 +295,7 @@ export function App() {
           {/* Main Hero Title & Info */}
           <div className="hero-middle-grid">
             <div className="hero-title-container reveal" style={{ animationDelay: '0.3s' }}>
-              <h1 className="hero-title">LexisGuide<span className="title-trademark">®</span></h1>
+              <h1 className="hero-title">LexisGuide</h1>
             </div>
             
             <div className="hero-info reveal" style={{ animationDelay: '0.5s' }}>
@@ -594,7 +594,7 @@ export function App() {
       {/* 5. FOOTER SECTION */}
       <footer className="footer reveal">
         <div className="footer-header">
-          <h2 className="footer-logo">LexisGuide<span className="footer-trademark">®</span></h2>
+          <h2 className="footer-logo">LexisGuide</h2>
           <span className="footer-year">© 20 - 26°</span>
         </div>
         
