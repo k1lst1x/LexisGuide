@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 
 const principles = [
   ['01', 'Read the signal', 'Extract the decision, deadline, appeal path, and consequence from every important document.'],
@@ -12,6 +12,8 @@ function App() {
   const [toast, setToast] = useState('')
   const [active, setActive] = useState(0)
   const [progress, setProgress] = useState(0)
+  const [sceneKey, setSceneKey] = useState(0)
+  const [wiping, setWiping] = useState(false)
   useEffect(() => {
     const revealObserver = new IntersectionObserver((entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add('in-view')), { threshold: 0.14 })
     document.querySelectorAll('.reveal-on-scroll').forEach((element) => revealObserver.observe(element))
@@ -24,8 +26,9 @@ function App() {
     return () => { revealObserver.disconnect(); window.removeEventListener('scroll', onScroll) }
   }, [])
   const go = (message: string) => { document.querySelector('#experience')?.scrollIntoView({ behavior: 'smooth' }); setToast(message) }
+  const recreateScene = () => { setWiping(true); setSceneKey((key) => key + 1); setToast('Scene rebuilt — the clarity layer is recalibrating.'); window.setTimeout(() => setWiping(false), 850) }
 
-  return <div className="experience-shell"><div className="scroll-progress" style={{ transform: `scaleX(${progress})` }} />
+  return <div className={`experience-shell ${wiping ? 'is-wiping' : ''}`}><div className="scroll-progress" style={{ transform: `scaleX(${progress})` }} /><div className="wipe-layer" />
     <header className="floating-nav">
       <a className="brand" href="#top"><span className="brand-orb">L</span><span>LEXIS<span className="orange">GUIDE</span></span></a>
       <nav><a href="#experience">Experience</a><a href="#principles">Principles</a><a href="#trust">Trust layer</a></nav>
@@ -35,8 +38,8 @@ function App() {
     <main id="top">
       <section className="hero3d">
         <div className="hero-noise" /><div className="hero-grid" />
-        <div className="hero-copy3d"><p className="eyebrow"><span /> AI × LAW · PROCEDURAL FAIRNESS</p><h1>Make the<br /><i>complex</i> clear.</h1><p className="hero-deck">A living clarity layer for the documents that shape your life. Find the signal, follow the evidence, and know your next step.</p><div className="hero-buttons"><button className="orange-button" onClick={() => go('Demo mode engaged — scroll through the experience.')}>Enter the experience <Arrow /></button><a href="#experience">Scroll to explore <span className="scroll-arrow">↓</span></a></div></div>
-        <div className="scene" aria-label="Animated 3D LexisGuide document experience"><div className="scene-glow" /><div className="orbit orbit-large" /><div className="orbit orbit-small" /><div className="document-3d"><div className="document-edge" /><div className="document-face"><span className="doc-kicker">LEXISGUIDE / 001</span><div className="doc-seal">L</div><h2>Notice<br /><span>decoded.</span></h2><div className="doc-rule" /><p>Procedural clarity<br /><strong>81 / 100</strong></p><div className="doc-lines"><i /><i /><i className="short" /></div></div></div><div className="node node-a"><b>01</b><span>deadline</span></div><div className="node node-b"><b>02</b><span>appeal path</span></div><div className="node node-c"><b>03</b><span>evidence</span></div><div className="cursor-chip">drag to inspect <span>↗</span></div></div>
+        <div className="hero-copy3d"><p className="eyebrow"><span /> AI × LAW · PROCEDURAL FAIRNESS</p><h1>Make the<br /><i>complex</i> clear.</h1><p className="hero-deck">A living clarity layer for the documents that shape your life. Find the signal, follow the evidence, and know your next step.</p><div className="hero-buttons"><button className="orange-button" onClick={() => go('Demo mode engaged — scroll through the experience.')}>Enter the experience <Arrow /></button><button className="replay-button" onClick={recreateScene}>Recreate scene <span>↻</span></button><a href="#experience">Scroll to explore <span className="scroll-arrow">↓</span></a></div></div>
+        <div className="scene" key={sceneKey} style={{ '--scene-scale': 1 + progress * .12, '--scene-y': `${-progress * 30}px` } as CSSProperties} aria-label="Animated 3D LexisGuide document experience"><div className="scene-glow" /><div className="orbit orbit-large" /><div className="orbit orbit-small" /><div className="document-3d"><div className="document-edge" /><div className="document-face"><span className="doc-kicker">LEXISGUIDE / 001</span><div className="doc-seal">L</div><h2>Notice<br /><span>decoded.</span></h2><div className="doc-rule" /><p>Procedural clarity<br /><strong>81 / 100</strong></p><div className="doc-lines"><i /><i /><i className="short" /></div></div></div><div className="node node-a"><b>01</b><span>deadline</span></div><div className="node node-b"><b>02</b><span>appeal path</span></div><div className="node node-c"><b>03</b><span>evidence</span></div><div className="cursor-chip">drag to inspect <span>↗</span></div></div>
         <div className="hero-bottom"><span>SCROLL TO EXPLORE</span><span className="hero-line" /><span>01 / 04</span></div>
       </section>
 
