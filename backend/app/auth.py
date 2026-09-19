@@ -17,7 +17,9 @@ def _settings() -> tuple[str, str, str]:
     user_pool_id = os.getenv("COGNITO_USER_POOL_ID", "")
     client_id = os.getenv("COGNITO_USER_POOL_CLIENT_ID", "")
     if not all((region, user_pool_id, client_id)):
-        raise RuntimeError("AWS_REGION, COGNITO_USER_POOL_ID, and COGNITO_USER_POOL_CLIENT_ID are required.")
+        raise RuntimeError(
+            "AWS_REGION, COGNITO_USER_POOL_ID, and COGNITO_USER_POOL_CLIENT_ID are required."
+        )
     return region, user_pool_id, client_id
 
 
@@ -33,7 +35,10 @@ def current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> dict[str, str]:
     if credentials is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token.",
+        )
     try:
         region, user_pool_id, client_id = _settings()
         token = credentials.credentials

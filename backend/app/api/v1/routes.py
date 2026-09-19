@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import current_user
 from app.storage import get_profile, list_records, put_profile, save_record
+
 router = APIRouter(prefix="/api/v1", tags=["v1"])
 
 
@@ -81,8 +82,15 @@ async def update_me(
     payload: ProfileUpdate,
     user: dict[str, str] = Depends(current_user),
 ) -> UserProfile:
-    profile = put_profile(user["sub"], {"display_name": payload.display_name, "email": user["email"]})
-    return UserProfile(sub=user["sub"], email=user["email"], display_name=profile["display_name"])
+    profile = put_profile(
+        user["sub"],
+        {"display_name": payload.display_name, "email": user["email"]},
+    )
+    return UserProfile(
+        sub=user["sub"],
+        email=user["email"],
+        display_name=profile["display_name"],
+    )
 
 
 @router.get("/me/records", response_model=list[UserRecord])
