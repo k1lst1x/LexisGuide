@@ -13,11 +13,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@types/three": "^0.186.0",
     "aws-amplify": "^6.20.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0",
-    "three": "^0.186.0"
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

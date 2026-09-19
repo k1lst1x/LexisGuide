@@ -1,163 +1,85 @@
-import { useEffect, useState, type CSSProperties } from 'react'
-import * as THREE from 'three'
+import { useEffect, useState } from 'react'
 
 import { AuthModal } from './AuthModal'
-const principles = [
-  ['01', 'Read the signal', 'Extract the decision, deadline, appeal path, and consequence from every important document.'],
-  ['02', 'See the proof', 'Every issue is anchored to evidence, a rule, and a human-readable explanation.'],
-  ['03', 'Move with confidence', 'Turn a first read into a next step, shared review, and a verifiable history.'],
+
+const capabilities = [
+  ['01', 'Spot what matters', 'Turn a dense notice into the decision, deadline, and next action in one calm view.'],
+  ['02', 'Follow the source', 'See the exact clause, public rule, or evidence span behind every recommendation.'],
+  ['03', 'Move with confidence', 'Build a private record of questions, replies, and the steps you have already taken.'],
 ]
 
-function Arrow() { return <span className="arrow">↗</span> }
+const faqs = [
+  ['What kinds of documents can LexisGuide read?', 'Notices, letters, agreements, policies, benefits decisions, and other documents that deserve a clearer first read.'],
+  ['Does LexisGuide replace a lawyer?', 'No. It helps you understand a document and prepare better questions. It is not legal advice or a substitute for professional counsel.'],
+  ['Where does the explanation come from?', 'Each result is designed to point back to relevant language in your document and the source material used to explain it.'],
+  ['Can I save my work for later?', 'Yes. Your workspace keeps the document, notes, key dates, and evidence trail together for future review.'],
+]
 
-function Dashboard({ email, onSignOut }: { email: string; onSignOut: () => void }) {
-  const [section, setSection] = useState('Overview')
-  const [notice, setNotice] = useState('')
-  const firstName = email.split('@')[0].split(/[._-]/)[0] || 'there'
-  const documents = [
-    ['Rental renewal notice', 'Today · 11:42 AM', '2 items need review', 'High'],
-    ['Employment agreement', 'Yesterday · 4:18 PM', 'No new issues', 'Clear'],
-    ['Insurance denial letter', 'Sep 14 · 9:30 AM', 'Appeal deadline found', 'Action needed'],
-  ]
-
-  return <div className="dashboard-shell">
-    <aside className="dashboard-sidebar">
-      <a className="brand" href="#dashboard"><span className="brand-orb">L</span><span>LEXIS<span className="orange">GUIDE</span></span></a>
-      <p className="workspace-label">YOUR WORKSPACE</p>
-      <nav className="dashboard-nav" aria-label="Workspace navigation">
-        {['Overview', 'Documents', 'Review queue', 'Saved evidence'].map((item) => <button className={section === item ? 'selected' : ''} key={item} onClick={() => { setSection(item); setNotice(`${item} selected`) }}><span>{item === 'Overview' ? '▦' : item === 'Documents' ? '▤' : item === 'Review queue' ? '◌' : '⌁'}</span>{item}</button>)}
-      </nav>
-      <div className="sidebar-footer"><span className="avatar">{firstName[0].toUpperCase()}</span><div><b>{email}</b><button onClick={onSignOut}>Sign out</button></div></div>
-    </aside>
-
-    <main className="dashboard-main" id="dashboard">
-      <header className="dashboard-header"><div><p className="eyebrow"><span /> {section.toUpperCase()}</p><h1>Good morning, <i>{firstName}.</i></h1><p>Here’s the clearest path through what needs your attention.</p></div><button className="orange-button" onClick={() => setNotice('Upload flow ready — choose a document to begin.')}>Add a document <Arrow /></button></header>
-
-      <section className="dashboard-metrics" aria-label="Workspace summary">
-        <article><span>DOCUMENTS TRACKED</span><strong>06</strong><small>2 added this week</small></article>
-        <article><span>OPEN ACTIONS</span><strong>03</strong><small className="attention">1 due this week</small></article>
-        <article><span>CLARITY SCORE</span><strong>81<em>/100</em></strong><small>Across active documents</small></article>
-      </section>
-
-      <section className="dashboard-grid">
-        <article className="priority-card"><div className="card-heading"><div><p className="eyebrow orange-label"><span /> PRIORITY REVIEW</p><h2>Rental renewal notice</h2></div><button onClick={() => setNotice('Opening the rental renewal review…')}>Open review <Arrow /></button></div><p className="priority-copy">Two terms could affect your housing options. Both are linked to the source language below.</p><div className="issue-list"><div><span className="severity high">HIGH</span><div><b>30-day response window</b><p>Your response deadline is October 4, 2026.</p></div><span className="issue-arrow">↗</span></div><div><span className="severity medium">CHECK</span><div><b>Automatic rent adjustment</b><p>Confirm how the increase is calculated before renewal.</p></div><span className="issue-arrow">↗</span></div></div></article>
-
-        <article className="next-step-card"><p className="eyebrow"><span /> NEXT STEP</p><div className="calendar-mark"><b>04</b><span>OCT</span></div><h2>Reply to your landlord</h2><p>Save the notice and decide whether to renew, ask a question, or give notice.</p><button className="glass-button" onClick={() => setNotice('Action plan opened.')}>View action plan <Arrow /></button></article>
-      </section>
-
-      <section className="documents-card"><div className="card-heading"><div><p className="eyebrow"><span /> RECENT DOCUMENTS</p><h2>Keep the thread visible.</h2></div><button onClick={() => setNotice('All documents selected.')}>View all <Arrow /></button></div><div className="document-table">{documents.map(([name, date, detail, status]) => <button key={name} onClick={() => setNotice(`${name} selected`)}><span className="document-icon">▤</span><span className="document-name"><b>{name}</b><small>{date}</small></span><span className="document-detail">{detail}</span><span className={`document-status ${status.toLowerCase().replaceAll(' ', '-')}`}>{status}</span><span className="issue-arrow">↗</span></button>)}</div></section>
-      {notice && <button className="toast3d" onClick={() => setNotice('')}>{notice}<b>×</b></button>}
-    </main>
-  </div>
-}
+function Arrow() { return <span aria-hidden="true">↗</span> }
 
 function App() {
-  const [toast, setToast] = useState('')
-  const [active, setActive] = useState(0)
-  const [progress, setProgress] = useState(0)
-  const [heroDepth, setHeroDepth] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
   const [authOpen, setAuthOpen] = useState(false)
-  const [userEmail, setUserEmail] = useState('')
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => window.localStorage.getItem('lexisguide-theme') === 'dark' ? 'dark' : 'light')
-  useEffect(() => {
-    const timer = window.setTimeout(() => setIsLoading(false), 1850)
-    return () => window.clearTimeout(timer)
-  }, [])
-  useEffect(() => {
-    window.localStorage.setItem('lexisguide-theme', theme)
-  }, [theme])
-  useEffect(() => {
-    const revealObserver = new IntersectionObserver((entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add('in-view')), { threshold: 0.14 })
-    document.querySelectorAll('.reveal-on-scroll').forEach((element) => revealObserver.observe(element))
-    const onScroll = () => {
-      const max = document.documentElement.scrollHeight - window.innerHeight
-      setProgress(max > 0 ? window.scrollY / max : 0)
-      setHeroDepth(Math.min(window.scrollY / Math.max(window.innerHeight, 1), 1))
-    }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    onScroll()
-    return () => { revealObserver.disconnect(); window.removeEventListener('scroll', onScroll) }
-  }, [])
-  useEffect(() => {
-    const scene = document.querySelector('.scene')
-    if (!scene) return
-    const visual = document.createElement('div')
-    visual.className = 'legal-visual'
-    visual.innerHTML = '<div class="courtroom-aura"></div><div class="court-arch"><span class="arch-cap"></span><span class="arch-inner"><b>§</b><small>CLARITY / 01</small></span></div><div class="court-column court-column-left"><i></i><i></i><i></i></div><div class="court-column court-column-right"><i></i><i></i><i></i></div><div class="judicial-seal"><span>LG</span><small>VERIFIED</small></div><div class="legal-gavel"><span class="gavel-head"></span><span class="gavel-handle"></span></div><div class="evidence-orbit evidence-orbit-one"><span>FACT</span><span>RULE</span></div><div class="evidence-orbit evidence-orbit-two"><span>SOURCE</span><span>DATE</span></div><div class="court-scan"></div>'
-    scene.appendChild(visual)
-    return () => visual.remove()
-  }, [])
-  useEffect(() => {
-    const scene = document.querySelector('.scene')
-    if (!scene) return
-    const oldVisual = scene.querySelector('.legal-visual')
-    if (oldVisual) oldVisual.remove()
-    const mount = document.createElement('div')
-    mount.className = 'legal-webgl'
-    scene.appendChild(mount)
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.setSize(scene.clientWidth, scene.clientHeight)
-    renderer.outputColorSpace = THREE.SRGBColorSpace
-    mount.appendChild(renderer.domElement)
-    const camera = new THREE.PerspectiveCamera(32, scene.clientWidth / scene.clientHeight, .1, 100)
-    camera.position.set(0, .25, 9)
-    const renderScene = new THREE.Scene()
-    const world = new THREE.Group()
-    world.rotation.set(-.08, -.24, .02)
-    renderScene.add(world)
-    const orange = new THREE.MeshPhysicalMaterial({ color: 0xff642f, metalness: .72, roughness: .2, emissive: 0x351005, emissiveIntensity: .55, clearcoat: 1 })
-    const ivory = new THREE.MeshPhysicalMaterial({ color: 0xffd6c4, metalness: .2, roughness: .25, emissive: 0x3b1207, emissiveIntensity: .3, clearcoat: 1 })
-    const glass = new THREE.MeshPhysicalMaterial({ color: 0xff8b60, metalness: .15, roughness: .08, transmission: .35, transparent: true, opacity: .72, emissive: 0x481207, emissiveIntensity: .45 })
-    const add = (geometry: THREE.BufferGeometry, material: THREE.Material, position: THREE.Vector3) => { const mesh = new THREE.Mesh(geometry, material); mesh.position.copy(position); world.add(mesh); return mesh }
-    const ring = add(new THREE.TorusGeometry(1.6, .035, 12, 96), ivory, new THREE.Vector3(0, 0, 0)); ring.rotation.x = Math.PI / 2.3
-    const ringTwo = add(new THREE.TorusGeometry(2.2, .018, 10, 96), orange, new THREE.Vector3(0, 0, 0)); ringTwo.rotation.set(1.2, .45, -.3)
-    const core = add(new THREE.IcosahedronGeometry(1.18, 2), glass, new THREE.Vector3(0, .15, .15)); core.scale.setScalar(1.15)
-    const seal = add(new THREE.TorusGeometry(.62, .09, 16, 64), orange, new THREE.Vector3(0, .2, 1.08)); seal.rotation.x = .2
-    const columns = new THREE.Group(); world.add(columns)
-    for (const x of [-1.65, 1.65]) { const column = new THREE.Mesh(new THREE.CylinderGeometry(.23, .32, 2.6, 24), ivory); column.position.set(x, -.35, .15); columns.add(column); const capital = new THREE.Mesh(new THREE.BoxGeometry(.7, .18, .7), orange); capital.position.set(x, .98, .15); columns.add(capital) }
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(3.9, .16, .25), orange); beam.position.set(0, 1.04, .15); columns.add(beam)
-    const evidence = new THREE.Group(); world.add(evidence)
-    for (let index = 0; index < 6; index += 1) { const angle = (index / 6) * Math.PI * 2; const node = new THREE.Mesh(new THREE.BoxGeometry(.25, .25, .25), index % 2 ? ivory : orange); node.position.set(Math.cos(angle) * 2.35, Math.sin(angle) * .75, Math.sin(angle) * 1.2); node.rotation.set(angle, angle * 1.7, 0); evidence.add(node) }
-    world.add(new THREE.AmbientLight(0xffd5c5, 1.7)); const key = new THREE.PointLight(0xff642f, 22, 14); key.position.set(3, 3, 5); world.add(key); const fill = new THREE.PointLight(0xffdcca, 12, 12); fill.position.set(-4, 1, 3); world.add(fill)
-    const resize = () => { const width = scene.clientWidth; const height = scene.clientHeight; camera.aspect = width / height; camera.updateProjectionMatrix(); renderer.setSize(width, height) }
-    window.addEventListener('resize', resize)
-    let frame = 0
-    const animate = () => { world.rotation.y += .003; core.rotation.x += .004; core.rotation.z += .002; seal.rotation.z -= .008; ring.rotation.z += .006; ringTwo.rotation.z -= .004; evidence.rotation.y -= .006; evidence.rotation.x = Math.sin(performance.now() * .0006) * .16; renderer.render(renderScene, camera); frame = window.requestAnimationFrame(animate) }
-    animate()
-    return () => { window.cancelAnimationFrame(frame); window.removeEventListener('resize', resize); renderer.dispose(); mount.remove() }
-  }, [])
-  const go = (message: string) => { document.querySelector('#experience')?.scrollIntoView({ behavior: 'smooth' }); setToast(message) }
+  const [activeCapability, setActiveCapability] = useState(0)
+  const [openFaq, setOpenFaq] = useState<number | null>(0)
+  const [toast, setToast] = useState('')
 
-  if (userEmail) return <Dashboard email={userEmail} onSignOut={() => { setUserEmail(''); setToast('Signed out of your local workspace.') }} />
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add('is-visible')),
+      { threshold: .14 },
+    )
+    document.querySelectorAll('.reveal').forEach((element) => observer.observe(element))
+    return () => observer.disconnect()
+  }, [])
 
-  return <div className={`experience-shell ${theme}-theme`}>{isLoading && <div className="loading-screen" aria-hidden="true"><div className="loader-grid" /><div className="loader-content"><p>INITIALIZING CLARITY LAYER</p><div className="loader-wordmark"><span>LEXIS</span><i>GUIDE</i></div><div className="loader-orbit"><span /><b>L</b></div><small>01 / 01</small></div></div>}<div className="scroll-progress" style={{ transform: `scaleX(${progress})` }} />
-    <header className="floating-nav">
-      <a className="brand" href="#top"><span className="brand-orb">L</span><span>LEXIS<span className="orange">GUIDE</span></span></a>
-      <nav><a href="#experience">Experience</a><a href="#principles">Principles</a><a href="#trust">Trust layer</a></nav>
-      <div className="nav-actions"><button className="theme-toggle" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`} aria-pressed={theme === 'dark'}><span className="theme-toggle-orb">{theme === 'light' ? '☼' : '◐'}</span><span>{theme === 'light' ? 'Bright' : 'Dark'}</span></button><button onClick={() => setAuthOpen(true)}>Sign in <Arrow /></button></div>
+  const start = () => setAuthOpen(true)
+
+  return <div className="reference-shell">
+    <header className="reference-nav">
+      <a className="wordmark" href="#top" aria-label="LexisGuide home"><span className="wordmark-mark">L</span><span>LexisGuide</span></a>
+      <nav aria-label="Primary navigation"><a href="#how-it-works">How it works</a><a href="#trust">Trust</a><a href="#questions">FAQ</a></nav>
+      <button className="nav-login" onClick={start}>Sign in <Arrow /></button>
     </header>
 
     <main id="top">
-      <section className="hero3d">
-        <div className="hero-noise" /><div className="hero-grid" />
-        <div className="hero-copy3d" style={{ transform: `translateY(${heroDepth * -64}px) scale(${1 - heroDepth * .08})`, opacity: 1 - heroDepth * .55 }}><p className="eyebrow"><span /> AI × LAW · PROCEDURAL FAIRNESS</p><h1>Make the<br /><i>complex</i> clear.</h1><p className="hero-deck">A living clarity layer for the documents that shape your life. Find the signal, follow the evidence, and know your next step.</p><div className="hero-buttons"><button className="orange-button" onClick={() => setAuthOpen(true)}>Create secure workspace <Arrow /></button><a href="#experience">Scroll to explore <span className="scroll-arrow">↓</span></a></div></div>
-        <div className="scene scene-enter" style={{ '--scene-scale': 1 + heroDepth * .42, '--scene-y': `${-heroDepth * 150}px`, opacity: 1 - heroDepth * .42 } as CSSProperties} aria-label="Animated 3D LexisGuide document experience"><div className="scene-glow" /><div className="scene-halo halo-one" /><div className="scene-halo halo-two" /><div className="orbit orbit-large" /><div className="orbit orbit-small" /><div className="document-3d"><div className="document-edge" /><div className="document-face"><span className="doc-kicker">LEXISGUIDE / 001</span><div className="doc-seal">L</div><h2>Notice<br /><span>decoded.</span></h2><div className="doc-rule" /><p>Procedural clarity<br /><strong>81 / 100</strong></p><div className="doc-lines"><i /><i /><i className="short" /></div></div></div><div className="node node-a"><b>01</b><span>deadline</span></div><div className="node node-b"><b>02</b><span>appeal path</span></div><div className="node node-c"><b>03</b><span>evidence</span></div><div className="cursor-chip">evidence, in motion <span>↗</span></div></div>
-        <div className="hero-bottom"><span>SCROLL TO EXPLORE</span><span className="hero-line" /><span>01 / 04</span></div>
+      <section className="architecture-hero">
+        <div className="architecture-scene" aria-hidden="true">
+          <div className="scene-sun" />
+          <div className="scene-wall scene-wall-left" /><div className="scene-wall scene-wall-back" />
+          <div className="scene-roof" /><div className="scene-floor" />
+          <div className="scene-column column-a" /><div className="scene-column column-b" /><div className="scene-column column-c" />
+          <div className="scene-garden"><i /><i /><i /><i /><i /><i /></div>
+          <div className="clarity-orb"><span>§</span><small>CLARITY</small></div>
+        </div>
+        <div className="hero-copy"><p className="micro-label">THE CLARITY LAYER FOR REAL-WORLD DECISIONS</p><h1>Understand the<br /><em>fine print.</em></h1><p>LexisGuide turns complicated letters and legal documents into a clear path: what changed, what matters, and what you can do next.</p><button className="black-button" onClick={start}>Start your first review <Arrow /></button></div>
+        <div className="hero-foot"><p>Evidence-led explanations for the documents that shape your life.</p><div><span>Clear next steps</span><span>Private workspace</span></div></div>
       </section>
 
-      <section className="statement reveal-on-scroll" id="experience"><p className="eyebrow orange-label"><span /> THE CLARITY LAYER</p><h2>Legal documents<br />should feel <i>human.</i></h2><p className="statement-body">LexisGuide transforms notices, agreements, and administrative letters into a spatial map of what matters: decisions, dates, rights, responsibilities, and proof.</p></section>
+      <section className="logo-strip reveal"><p>Built for people who need a better first read</p><div><b>NOTICES</b><b>AGREEMENTS</b><b>DECISIONS</b><b>POLICIES</b><b>APPEALS</b></div></section>
 
-      <section className="principles reveal-on-scroll" id="principles"><div className="section-heading"><p className="eyebrow"><span /> THE EXPERIENCE</p><h2>Three moves.<br /><i>Less uncertainty.</i></h2></div><div className="principle-layout"><div className="principle-nav">{principles.map(([number, title], index) => <button className={active === index ? 'active' : ''} key={number} onClick={() => setActive(index)}><span>{number}</span>{title}<b>↗</b></button>)}</div><div className="principle-stage"><div className="stage-orb" /><div className="stage-card"><span className="stage-number">{principles[active][0]}</span><div className="stage-icon">{active === 0 ? '◌' : active === 1 ? '⌁' : '↗'}</div><h3>{principles[active][1]}</h3><p>{principles[active][2]}</p><div className="stage-meter"><span style={{ width: `${(active + 1) * 33}%` }} /></div><small>LEXISGUIDE / INTERFACE {principles[active][0]}</small></div></div></div></section>
+      <section className="intro-panel reveal" id="how-it-works"><p className="micro-label">A CALMER WAY TO START</p><h2>Complex documents should not<br /><em>hide the important part.</em></h2><p className="intro-copy">Read a document with a system that surfaces deadlines, explains unfamiliar language, and keeps the evidence close enough to inspect.</p><button className="text-button" onClick={() => setToast('Your guided review is ready to begin.')}>Explore the workflow <Arrow /></button></section>
 
-      <section className="trust3d reveal-on-scroll" id="trust"><div className="trust-glow" /><div className="trust-content"><p className="eyebrow"><span /> THE TRUST LAYER</p><h2>Useful AI.<br /><i>Visible reasoning.</i></h2><p>Not a score you have to trust. A chain you can inspect: source document, evidence span, rule run, explanation, human decision.</p><button className="glass-button" onClick={() => setToast('Review chain opened — every version stays connected.')}>Open the review chain <Arrow /></button></div><div className="chain-visual"><div className="chain-line" />{['DOCUMENT', 'EVIDENCE', 'RULE RUN', 'HUMAN', 'REPORT'].map((item, index) => <div className={`chain-node chain-${index}`} key={item}><span>{String(index + 1).padStart(2, '0')}</span><b>{item}</b></div>)}</div></section>
+      <section className="capability-panel reveal">
+        <h2><em>Make legal information</em><br />usable at first glance.</h2>
+        <div className="capability-grid">
+          {capabilities.map(([number, title, body], index) => <button className={`capability-card capability-${index} ${activeCapability === index ? 'selected' : ''}`} key={title} onClick={() => setActiveCapability(index)}>
+            <span className="card-number">{number}</span><div className="card-visual"><i /><i /><i /></div><h3>{title}</h3><p>{body}</p><span className="card-arrow"><Arrow /></span>
+          </button>)}
+        </div>
+      </section>
 
-      <section className="closing3d reveal-on-scroll"><div className="closing-orb" /><p className="eyebrow orange-label"><span /> LEXISGUIDE / 2026</p><h2>Clarity is<br /><i>a superpower.</i></h2><p>Start with one document. Leave with a next step you can defend.</p><button className="orange-button" onClick={() => go('Workspace initialized — ready for your first document.')}>Start the journey <Arrow /></button></section>
+      <section className="trust-panel reveal" id="trust"><div className="trust-copy"><p className="micro-label">TRUST IS PART OF THE PRODUCT</p><h2>Every answer should show<br /><em>its work.</em></h2><p>LexisGuide keeps the explanation, source span, and next question in one place—so you are never asked to trust a black box.</p><button className="black-button" onClick={() => setToast('Source trail opened.')}>See the source trail <Arrow /></button></div><div className="source-sculpture" aria-hidden="true"><div className="source-plinth" /><div className="source-stone"><span>01</span></div><div className="source-orbit orbit-one" /><div className="source-orbit orbit-two" /><div className="source-chip chip-one">Clause</div><div className="source-chip chip-two">Rule</div><div className="source-chip chip-three">Date</div></div></section>
+
+      <section className="dark-panel reveal"><p className="micro-label">ONE WORKSPACE, FROM FIRST READ TO NEXT STEP</p><h2><em>Designed for clarity,</em> without<br />making the process feel heavier.</h2><div className="dark-grid"><article><span>01</span><h3>Read</h3><p>See a calm, structured summary before you lose time in the details.</p></article><article><span>02</span><h3>Check</h3><p>Open the exact language and supporting source behind a key point.</p></article><article><span>03</span><h3>Act</h3><p>Keep your notes, deadlines, and next questions together.</p></article></div><button className="white-button" onClick={start}>Create a workspace <Arrow /></button></section>
+
+      <section className="faq-panel reveal" id="questions"><div><p className="micro-label">FREQUENTLY ASKED QUESTIONS</p><h2>Questions deserve<br /><em>clear answers.</em></h2></div><div className="faq-list">{faqs.map(([question, answer], index) => <article className={openFaq === index ? 'open' : ''} key={question}><button onClick={() => setOpenFaq(openFaq === index ? null : index)}><span>{question}</span><b>{openFaq === index ? '−' : '+'}</b></button>{openFaq === index && <p>{answer}</p>}</article>)}</div></section>
+
+      <section className="final-panel reveal"><div className="final-orb" aria-hidden="true" /><p className="micro-label">A BETTER FIRST READ STARTS HERE</p><h2>Make the next<br /><em>step clearer.</em></h2><p>Bring one document. Leave with a map of what to notice and what to do.</p><button className="black-button" onClick={start}>Start a free review <Arrow /></button></section>
     </main>
-    <footer className="footer3d"><a className="brand" href="#top"><span className="brand-orb">L</span><span>LEXIS<span className="orange">GUIDE</span></span></a><span>AI-assisted clarity for real-world decisions.</span><span>Not legal advice.</span></footer>
-    {toast && <button className="toast3d" onClick={() => setToast('')}>{toast}<b>×</b></button>}
-    {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onSuccess={(email) => { setUserEmail(email); setAuthOpen(false); setToast('Signed in — your private workspace is ready.') }} />}
+
+    <footer><span>© 2026 LexisGuide</span><span>Evidence-first document clarity</span><span>Not legal advice</span></footer>
+    {toast && <button className="toast" onClick={() => setToast('')}>{toast}<b>×</b></button>}
+    {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onSuccess={(email) => { setAuthOpen(false); setToast(`Welcome, ${email}. Your workspace is ready.`) }} />}
   </div>
 }
 
