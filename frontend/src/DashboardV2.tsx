@@ -303,6 +303,45 @@ function documentKind(type: string) {
   return { icon: '▤', label: 'Document' }
 }
 
+function documentDisplayName(document: SampleDoc) {
+  if (document.id === 'doc-1') return 'Benefits decision · #8942-B'
+  if (document.id === 'doc-2') return 'Updated benefits decision'
+  if (document.id === 'doc-3') return 'Lease agreement'
+  return document.title
+}
+
+function DocumentPicker({ documents, selectedDocument, onSelect }: { documents: SampleDoc[]; selectedDocument: SampleDoc; onSelect: (document: SampleDoc) => void }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement>(null)
+  const kind = documentKind(selectedDocument.type)
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) setIsOpen(false)
+    }
+    document.addEventListener('mousedown', closeOnOutsideClick)
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick)
+  }, [])
+
+  return <div className="d2-document-picker" ref={pickerRef}>
+    <button className={`d2-document-picker-trigger ${isOpen ? 'd2-document-picker-open' : ''}`} onClick={() => setIsOpen((open) => !open)} aria-haspopup="listbox" aria-expanded={isOpen} title={selectedDocument.title}>
+      <span className="d2-document-picker-icon" aria-hidden="true">{kind.icon}</span>
+      <span className="d2-document-picker-copy"><small>Viewing</small><strong>{documentDisplayName(selectedDocument)}</strong></span>
+      <span className="d2-document-picker-chevron" aria-hidden="true">⌄</span>
+    </button>
+    {isOpen && <div className="d2-document-picker-menu" role="listbox" aria-label="Choose a document">
+      <div className="d2-document-picker-menu-head"><span>Choose a document</span><small>{documents.length} available</small></div>
+      {documents.map((document) => {
+        const itemKind = documentKind(document.type)
+        const issueCount = document.findings.filter((finding) => finding.severity !== 'pass').length
+        return <button key={document.id} className={`d2-document-picker-option ${selectedDocument.id === document.id ? 'd2-document-picker-option-active' : ''}`} role="option" aria-selected={selectedDocument.id === document.id} onClick={() => { onSelect(document); setIsOpen(false) }} title={document.title}>
+          <span className="d2-document-picker-option-icon" aria-hidden="true">{itemKind.icon}</span><span><strong>{documentDisplayName(document)}</strong><small>{itemKind.label} · {issueCount ? `${issueCount} item${issueCount === 1 ? '' : 's'} to review` : 'All checks complete'}</small></span>{selectedDocument.id === document.id && <b>✓</b>}
+        </button>
+      })}
+    </div>}
+  </div>
+}
+
 /* ───────── Main Dashboard V2 ───────── */
 export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => void; onSignOut?: () => void; userEmail?: string }) {
   const [collapsed, setCollapsed] = useState(true)
@@ -322,6 +361,9 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     { user: 'Agency Reviewer', text: 'Agreed. Updating notice to include deadline date of Oct 14, 2026.', time: '10:28 AM' },
   ])
   const [newComment, setNewComment] = useState('')
+  const [messageSearchOpen, setMessageSearchOpen] = useState(false)
+  const [messageSearch, setMessageSearch] = useState('')
+  const [messageNotice, setMessageNotice] = useState('')
   const [remediating, setRemediating] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
@@ -335,6 +377,18 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setMessageSearchOpen(true)
+      }
+      if (event.key === 'Escape') setMessageSearchOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
   useEffect(() => {
@@ -521,21 +575,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   <h1 className="d2-page-title">Dashboard</h1>
                   <p>Document health, progress, and the next action in one place.</p>
                 </div>
-                <select
-                  className="d2-doc-select"
-                  value={selectedDoc.id}
-                  onChange={(e) => {
-                    const found = documents.find(d => d.id === e.target.value)
-                    if (found) {
-                      setSelectedDoc(found)
-                      setActiveFinding(found.findings[0]?.id || null)
-                    }
-                  }}
-                >
-                  {documents.map(d => (
-                    <option key={d.id} value={d.id}>{d.title}</option>
-                  ))}
-                </select>
+                <DocumentPicker documents={documents} selectedDocument={selectedDoc} onSelect={(document) => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id || null) }} />
               </div>
 
               <div className="d2-overview-top-grid">
@@ -799,61 +839,56 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
 
           {/* ═════ TEAM ═════ */}
           {activeNav === 'team' && (
-            <div className="d2-page">
+            <div className="d2-page d2-messages-page">
               <div className="d2-page-header">
-                <div className="d2-section-header-copy"><span className="d2-eyebrow">COLLABORATION</span><h1 className="d2-page-title">Messages</h1><p>Keep important review conversations together with your documents.</p></div>
-                <button className="d2-action-btn d2-btn-sm" onClick={() => alert('Secure invite link copied!')}>+ Invite Member</button>
+                <div className="d2-section-header-copy"><span className="d2-eyebrow">COLLABORATION</span><h1 className="d2-page-title">Messages</h1><p>Keep document decisions, people, and next steps in one focused workspace.</p></div>
+                <div className="d2-message-page-actions"><button className="d2-message-search-btn" onClick={() => setMessageSearchOpen(true)}>⌕ <span>Search</span><kbd>⌘ K</kbd></button><button className="d2-action-btn d2-btn-sm" onClick={() => setMessageNotice('Invite link ready to share with your review team.')}>+ Invite</button></div>
               </div>
 
-              <div className="d2-team-layout">
-                <div className="d2-team-members-card">
-                  <h3>Workspace Members</h3>
-                  <div className="d2-member-list">
-                    <div className="d2-member">
-                      <div className="d2-member-avatar" style={{ background: 'linear-gradient(135deg, #ff6b00, #ea580c)' }}>E</div>
-                      <div><strong>Elena Moritz</strong><p>Legal Aid Director</p></div>
-                      <span className="d2-online-dot" />
-                    </div>
-                    <div className="d2-member">
-                      <div className="d2-member-avatar" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>A</div>
-                      <div><strong>Agency Reviewer</strong><p>Compliance Officer</p></div>
-                      <span className="d2-online-dot" />
-                    </div>
-                    {userEmail && (
-                      <div className="d2-member">
-                        <div className="d2-member-avatar" style={{ background: 'linear-gradient(135deg, #f97316, #ff8c00)' }}>{userEmail[0].toUpperCase()}</div>
-                        <div><strong>You</strong><p>{userEmail}</p></div>
-                        <span className="d2-online-dot" />
-                      </div>
-                    )}
-                  </div>
-                </div>
+              {messageNotice && <div className="d2-message-notice" role="status"><span>✓</span>{messageNotice}<button aria-label="Dismiss message" onClick={() => setMessageNotice('')}>×</button></div>}
 
-                <div className="d2-chat-card">
-                  <h3>Discussion</h3>
+              <div className="d2-message-workspace">
+                <aside className="d2-message-rail" aria-label="Conversations">
+                  <div className="d2-message-rail-head"><div><span className="d2-eyebrow">INBOX</span><h2>Conversations</h2></div><button aria-label="New conversation" className="d2-message-plus" onClick={() => setMessageNotice('New conversation started. Add a topic to begin.')}>+</button></div>
+                  <button className="d2-message-quick-search" onClick={() => setMessageSearchOpen(true)}><span>⌕</span> Search messages <kbd>⌘K</kbd></button>
+                  <div className="d2-message-section-label">WORKSPACE</div>
+                  <button className="d2-conversation d2-conversation-active"><span className="d2-conversation-icon">#</span><span><strong>Current review</strong><small>{selectedDoc.status}</small></span><b>{comments.length}</b></button>
+                  <button className="d2-conversation" onClick={() => setMessageNotice('Document questions are ready for the next discussion.')}><span className="d2-conversation-icon">?</span><span><strong>Document questions</strong><small>Get a second opinion</small></span></button>
+                  <button className="d2-conversation" onClick={() => setMessageNotice('Your saved updates will appear here.')}><span className="d2-conversation-icon">✦</span><span><strong>Saved updates</strong><small>Follow-up reminders</small></span></button>
+                  <div className="d2-message-rail-footer"><div className="d2-member-stack"><i>E</i><i>A</i>{userEmail && <i>{userEmail[0].toUpperCase()}</i>}</div><span>{userEmail ? '3 people online' : '2 people online'}</span></div>
+                </aside>
+
+                <section className="d2-message-thread" aria-label="Current review discussion">
+                  <header className="d2-message-thread-head"><div className="d2-thread-title"><span className="d2-thread-hash">#</span><div><h2>Current review</h2><p>{userEmail ? '3 participants' : '2 participants'} · Decision support for your document</p></div></div><div className="d2-thread-actions"><button aria-label="Search this conversation" onClick={() => setMessageSearchOpen(true)}>⌕</button><button aria-label="Thread information" onClick={() => setMessageNotice('Review details are open on the right.')}>ⓘ</button><button aria-label="More conversation actions" onClick={() => setMessageNotice('Conversation tools are ready when you need them.')}>•••</button></div></header>
+                  <div className="d2-thread-context"><span className="d2-thread-context-icon">{documentKind(selectedDoc.type).icon}</span><div><small>REVIEWING NOW</small><strong>{documentDisplayName(selectedDoc)}</strong></div><button onClick={() => setActiveNav('documents')}>Open document →</button></div>
                   <div className="d2-chat-messages">
-                    {comments.map((c, idx) => (
-                      <div key={idx} className="d2-chat-msg">
-                        <div className="d2-chat-msg-header">
-                          <strong>{c.user}</strong>
-                          <span>{c.time}</span>
-                        </div>
-                        <p>{c.text}</p>
+                    <div className="d2-message-day">Today</div>
+                    {comments.map((c, idx) => {
+                      const isMine = c.user.startsWith('You')
+                      const initial = isMine ? (userEmail?.[0].toUpperCase() || 'Y') : c.user.startsWith('Elena') ? 'E' : 'A'
+                      return <div key={`${c.time}-${idx}`} className={`d2-chat-msg ${isMine ? 'd2-chat-msg-mine' : ''}`}>
+                        <div className="d2-chat-avatar">{initial}</div><div className="d2-chat-bubble"><div className="d2-chat-msg-header"><strong>{c.user}</strong><span>{c.time}</span></div><p>{c.text}</p>{idx === 0 && <button className="d2-message-reference" onClick={() => setActiveNav('documents')}>↗ Review: appeal deadline</button>}</div>
                       </div>
-                    ))}
+                    })}
                   </div>
                   <form onSubmit={handleAddComment} className="d2-chat-form">
-                    <input
-                      type="text"
-                      placeholder="Type a message..."
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      className="d2-chat-input"
-                    />
-                    <button type="submit" className="d2-chat-send">Send</button>
+                    <button type="button" aria-label="Add an attachment" className="d2-composer-tool" onClick={() => setMessageNotice('Attachments can be added from the Documents workspace.')}>+</button>
+                    <input type="text" placeholder="Type a message..." value={newComment} onChange={(e) => setNewComment(e.target.value)} className="d2-chat-input" />
+                    <button type="button" aria-label="Add an emoji" className="d2-composer-tool" onClick={() => setNewComment(`${newComment} ✓`)}>☺</button>
+                    <button type="submit" className="d2-chat-send">Send <span>↗</span></button>
                   </form>
-                </div>
+                  <p className="d2-composer-note">Enter to send · Conversations stay linked to this review.</p>
+                </section>
+
+                <aside className="d2-message-info" aria-label="Review details">
+                  <div className="d2-message-info-head"><h2>Review details</h2><button aria-label="Close review details" onClick={() => setMessageNotice('Review details remain available from Messages.')}>×</button></div>
+                  <section><span className="d2-eyebrow">CURRENT DOCUMENT</span><button className="d2-info-document" onClick={() => setActiveNav('documents')}><span>{documentKind(selectedDoc.type).icon}</span><div><strong>{documentDisplayName(selectedDoc)}</strong><small>{potentialRiskCount ? `${potentialRiskCount} items to review` : 'All checks complete'}</small></div><b>›</b></button></section>
+                  <section><span className="d2-eyebrow">PEOPLE</span><div className="d2-info-person"><i className="d2-person-elena">E</i><div><strong>Elena Moritz</strong><small>Legal Aid Director · Online</small></div></div><div className="d2-info-person"><i className="d2-person-agency">A</i><div><strong>Agency Reviewer</strong><small>Compliance Officer · Online</small></div></div>{userEmail && <div className="d2-info-person"><i className="d2-person-you">{userEmail[0].toUpperCase()}</i><div><strong>You</strong><small>{userEmail}</small></div></div>}</section>
+                  <section><span className="d2-eyebrow">QUICK ACTIONS</span><button className="d2-info-action" onClick={() => setActiveNav('linter')}>! View items to review <b>›</b></button><button className="d2-info-action" onClick={() => setActiveNav('chain')}>◌ Review activity <b>›</b></button></section>
+                </aside>
               </div>
+
+              {messageSearchOpen && <div className="d2-message-search-overlay" role="dialog" aria-modal="true" aria-label="Search messages"><button className="d2-message-search-backdrop" aria-label="Close message search" onClick={() => setMessageSearchOpen(false)} /><div className="d2-message-search-panel"><div className="d2-search-field"><span>⌕</span><input autoFocus placeholder="Search messages, people, and documents..." value={messageSearch} onChange={(event) => setMessageSearch(event.target.value)} /><button aria-label="Close search" onClick={() => setMessageSearchOpen(false)}>×</button></div><div className="d2-search-tabs"><button className="d2-search-tab-active">All results</button><button>Messages</button><button>People</button><button>Documents</button></div><div className="d2-search-results"><small>IN THIS WORKSPACE</small><button onClick={() => { setMessageSearchOpen(false); setActiveNav('documents') }}><span className="d2-search-result-icon">{documentKind(selectedDoc.type).icon}</span><div><strong>{documentDisplayName(selectedDoc)}</strong><p>Open the document linked to this conversation</p></div><b>↵</b></button><button onClick={() => { setMessageSearchOpen(false); setMessageNotice('Current review conversation selected.') }}><span className="d2-search-result-icon">#</span><div><strong>Current review</strong><p>{comments.length} messages · {userEmail ? '3' : '2'} people</p></div><b>↵</b></button><button onClick={() => { setMessageSearchOpen(false); setMessageNotice('Elena Moritz is available in this workspace.') }}><span className="d2-search-result-avatar">E</span><div><strong>Elena Moritz</strong><p>Legal Aid Director</p></div><b>↵</b></button></div><footer><kbd>↑↓</kbd> Move <kbd>↵</kbd> Select <span><kbd>esc</kbd> Close</span></footer></div></div>}
             </div>
           )}
 

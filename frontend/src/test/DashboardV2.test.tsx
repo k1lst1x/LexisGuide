@@ -21,10 +21,21 @@ describe('DashboardV2', () => {
 
     await user.click(screen.getByRole('button', { name: 'Messages' }))
     await user.type(screen.getByPlaceholderText('Type a message...'), 'Please cite the appeal rule.')
-    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await user.click(screen.getByRole('button', { name: /Send/ }))
 
     expect(screen.getByText('Please cite the appeal rule.')).toBeInTheDocument()
     expect(screen.getByText('You (Reviewer)')).toBeInTheDocument()
+  })
+
+  it('opens the messages search workspace', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Messages' }))
+    await user.click(screen.getByRole('button', { name: 'Search this conversation' }))
+
+    expect(screen.getByRole('dialog', { name: 'Search messages' })).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Search messages, people, and documents...')).toBeInTheDocument()
   })
 
   it('explains a highlighted document issue in plain language', async () => {
@@ -37,6 +48,18 @@ describe('DashboardV2', () => {
     expect(screen.getByText('Why it matters to you')).toBeInTheDocument()
     expect(screen.getByText(/without specifying an exact calendar date/i)).toBeInTheDocument()
     expect(screen.getByText('Recommended next step')).toBeInTheDocument()
+  })
+
+  it('uses the document picker to switch the overview context', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Dashboard' }))
+    await user.click(screen.getByRole('button', { name: /Viewing.*Benefits decision.*8942-B/i }))
+    expect(screen.getByRole('listbox', { name: 'Choose a document' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('option', { name: /Lease agreement/i }))
+    expect(screen.getByRole('button', { name: /Viewing.*Lease agreement/i })).toBeInTheDocument()
   })
 
   it('exits through the sidebar control', async () => {

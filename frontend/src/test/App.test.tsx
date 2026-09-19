@@ -64,4 +64,5 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'That page took a wrong turn.' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /back to home/i })).toHaveAttribute('href', '/')
   })
+
 })
