@@ -50,7 +50,8 @@ npm install
 npm run dev
 ```
 
-Use Node.js 20.19 or newer for frontend tooling.
+Use Node.js 22.13 or newer for frontend tooling. This matches the current
+PDF-rendering dependency and the GitHub Actions runners.
 
 The Vite development server proxies `/api` to the backend by default. To use a
 deployed API instead, set `VITE_API_BASE_URL` (see `frontend/.env.example`).

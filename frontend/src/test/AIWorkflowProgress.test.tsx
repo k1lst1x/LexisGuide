@@ -1,9 +1,12 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AIWorkflowProgress } from '../components/AIWorkflowProgress'
 
 describe('AIWorkflowProgress', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
   it('renders the task workflow with in-progress, completed and pending badges', () => {
     render(
       <AIWorkflowProgress
@@ -73,5 +76,29 @@ describe('AIWorkflowProgress', () => {
     )
 
     expect(container.firstChild).toBeNull()
+  })
+
+  it('completes the workflow once and auto-closes after the configured delay', async () => {
+    vi.useFakeTimers()
+    const onComplete = vi.fn()
+    const onClose = vi.fn()
+    render(
+      <AIWorkflowProgress
+        isOpen={true}
+        onComplete={onComplete}
+        onClose={onClose}
+        autoCloseDelay={300}
+        speedMultiplier={10}
+      />
+    )
+
+    for (let step = 0; step < 6; step += 1) {
+      await vi.advanceTimersByTimeAsync(100)
+    }
+    expect(onComplete).toHaveBeenCalledOnce()
+    expect(screen.getByText('Execution Complete')).toBeInTheDocument()
+
+    await vi.advanceTimersByTimeAsync(300)
+    expect(onClose).toHaveBeenCalledOnce()
   })
 })

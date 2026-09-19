@@ -24,6 +24,18 @@ def test_current_user_rejects_missing_bearer_token() -> None:
     assert error.value.status_code == 401
 
 
+def test_settings_require_all_cognito_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    auth._settings.cache_clear()
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.delenv("COGNITO_USER_POOL_ID", raising=False)
+    monkeypatch.delenv("COGNITO_USER_POOL_CLIENT_ID", raising=False)
+
+    with pytest.raises(RuntimeError, match="AWS_REGION"):
+        auth._settings()
+
+    auth._settings.cache_clear()
+
+
 def test_current_user_returns_claims_from_valid_cognito_id_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

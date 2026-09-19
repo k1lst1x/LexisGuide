@@ -1,7 +1,7 @@
 "use client";
 
 import { GrainGradient } from "@paper-design/shaders-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { ReactNode } from "react";
 
 export type AuthSectionOneProps = {
@@ -177,10 +177,15 @@ function FieldInput({
   type?: string;
   onChange?: (val: string) => void;
 }) {
+  const inputId = useId();
+
   return (
     <div className="auth-field-group">
-      <label className="auth-field-label">{label}</label>
+      <label className="auth-field-label" htmlFor={inputId}>
+        {label}
+      </label>
       <input
+        id={inputId}
         type={type}
         value={value}
         onChange={(e) => onChange?.(e.target.value)}
