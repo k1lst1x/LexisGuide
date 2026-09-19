@@ -1,59 +1,59 @@
 import { useState } from 'react'
 
-const checks = [
-  { label: 'Appeal deadline', value: 'Unclear', tone: 'alert' },
-  { label: 'Appeal destination', value: 'Missing', tone: 'alert' },
-  { label: 'Consequences', value: 'Not explained', tone: 'alert' },
-  { label: 'Issuing agency', value: 'Identified', tone: 'good' },
+const features = [
+  { number: '01', title: 'Make every notice understandable', text: 'Turn dense government letters into a clear answer: what happened, what to do next, and when to do it.', icon: '✦' },
+  { number: '02', title: 'Stay anchored to evidence', text: 'Every finding points to the exact source span and rule that triggered it. No unexplained scores.', icon: '⌁' },
+  { number: '03', title: 'Move from review to action', text: 'Generate plain-language next steps, invite a collaborator, and preserve the full review history.', icon: '↗' },
 ]
 
-const steps = [
-  ['01', 'Upload', 'PDF, letter, screenshot, or public webpage'],
-  ['02', 'Extract', 'Agency, decision, dates, rights, legal basis'],
-  ['03', 'Lint', 'Rule-based + AI checks for clarity and contradictions'],
-  ['04', 'Guide', 'Plain-language next steps and consequences'],
-  ['05', 'Chain', 'Hash, evidence, versions, and reviewer actions'],
+const faqs = [
+  ['What is LexisGuide?', 'LexisGuide is an AI-assisted clarity and procedural fairness guide for government notices and shared agreements. It helps people understand documents and decide what to do next.'],
+  ['Does LexisGuide give legal advice?', 'No. LexisGuide provides informational decision support, not legal advice. People remain responsible for their documents, decisions, and deadlines.'],
+  ['Can I see why something was flagged?', 'Yes. Findings are linked to evidence spans in the source document and to the rule or check that produced the finding.'],
+  ['Can another person review with me?', 'Yes. A shared workspace keeps findings, discussion, revisions, and version history together so people can review the same document.'],
 ]
 
-function ArrowUpRight() { return <span className="arrow" aria-hidden="true">↗</span> }
+function Arrow() { return <span className="arrow" aria-hidden="true">↗</span> }
 
 function App() {
-  const [notice, setNotice] = useState('')
-  const startDemo = () => { document.querySelector('#workflow')?.scrollIntoView({ behavior: 'smooth' }); setNotice('Demo workspace ready — start with a document upload.') }
+  const [openFaq, setOpenFaq] = useState<number | null>(null)
+  const [toast, setToast] = useState('')
+  const start = () => { document.querySelector('#features')?.scrollIntoView({ behavior: 'smooth' }); setToast('Your review workspace is ready to explore.') }
 
-  return (
-    <div className="site-shell">
-      <div className="grain" />
-      <header className="nav container">
-        <a className="brand" href="#top" aria-label="LexisGuide home"><span className="brand-mark">L</span><span>LexisGuide</span></a>
-        <nav className="nav-links" aria-label="Main navigation"><a href="#workflow">How it works</a><a href="#audit">The audit</a><a href="#chain">Review chain</a></nav>
-        <button className="nav-cta" onClick={startDemo}>Try the demo <ArrowUpRight /></button>
-      </header>
+  return <div className="ordalie-inspired-shell">
+    <header className="site-nav container">
+      <a className="wordmark" href="#top"><span className="wordmark-symbol">L</span>LexisGuide</a>
+      <nav><a href="#features">Product</a><a href="#security">Trust</a><a href="#faq">FAQ</a></nav>
+      <button className="nav-button" onClick={start}>Try LexisGuide <Arrow /></button>
+    </header>
 
-      <main id="top">
-        <section className="hero container">
-          <div className="hero-copy reveal"><p className="eyebrow"><span className="eyebrow-dot" /> AI × LAW · CIVIC TECH · PROCEDURAL FAIRNESS</p><h1>A lighthouse for <em>government</em> documents.</h1><p className="hero-lede">LexisGuide makes confusing notices and shared agreements clear, actionable, and reviewable — with every finding linked back to the evidence.</p><div className="hero-actions"><button className="button button-dark" onClick={startDemo}>Analyze a document <ArrowUpRight /></button><a className="text-link" href="#story">See how it works <span>↓</span></a></div><p className="micro-copy">Decision support, not legal advice. Human decisions stay human.</p></div>
-          <div className="hero-visual reveal delay-1" aria-label="LexisGuide procedural clarity audit preview"><div className="orbit orbit-one" /><div className="orbit orbit-two" /><div className="audit-card"><div className="card-topline"><span>PROCEDURAL CLARITY</span><span className="live-dot">● LIVE AUDIT</span></div><div className="score-row"><div className="score">54<span>/100</span></div><div className="score-copy">Notice of Denial<br /><small>uploaded just now</small></div></div><div className="score-bar"><span /></div><div className="check-list">{checks.map((check) => <div className="check-row" key={check.label}><span className={`check-icon ${check.tone}`}>{check.tone === 'good' ? '✓' : '!'}</span><span>{check.label}</span><strong>{check.value}</strong></div>)}</div><div className="card-footer"><span>RULESET · US-BENEFITS-01</span><span>evidence linked ↗</span></div></div><div className="floating-tag tag-top"><span className="tag-icon">⌁</span> Evidence-linked findings</div><div className="floating-tag tag-bottom"><span className="tag-icon green">✓</span> Human-in-the-loop</div></div>
-        </section>
+    <main id="top">
+      <section className="hero container">
+        <div className="hero-kicker"><span /> AI × LAW · CIVIC TECH · PROCEDURAL FAIRNESS</div>
+        <h1>The clarity layer<br />for <i>legal documents.</i></h1>
+        <p className="hero-intro">Understand government notices and shared agreements instantly. Analyze, explain, and improve important documents with evidence you can verify.</p>
+        <div className="hero-actions"><button className="primary-button" onClick={start}>Explore the product <Arrow /></button><a href="#features" className="under-link">See what it does ↓</a></div>
+        <div className="hero-orbit"><div className="orbit-card orbit-card-main"><span className="orbit-icon">✦</span><strong>Notice of Denial</strong><small>3 issues found · 54/100</small></div><div className="orbit-card orbit-card-side"><span className="orbit-check">✓</span><strong>Evidence linked</strong><small>Rule + source span</small></div><div className="orbit-card orbit-card-bottom"><span>next step</span><b>Appeal by May 18</b></div><div className="orbit-ring ring-a" /><div className="orbit-ring ring-b" /></div>
+      </section>
 
-        <section className="ticker" aria-label="Product principles"><div className="ticker-track"><span>MAKE DUE PROCESS UNDERSTANDABLE</span><b>✳</b><span>REVIEWABLE</span><b>✳</b><span>VERIFIABLE</span><b>✳</b><span>MAKE DUE PROCESS UNDERSTANDABLE</span><b>✳</b><span>REVIEWABLE</span><b>✳</b></div></section>
+      <section className="proof-strip"><div className="container proof-inner"><span>BUILT FOR DOCUMENTS THAT SHAPE OUR LIVES</span><div className="proof-items"><b>RESIDENTS</b><b>LEGAL AID</b><b>PUBLIC SERVICE</b><b>SHARED AGREEMENTS</b></div></div></section>
 
-        <section className="problem container" id="story"><div className="section-label">/ THE PROBLEM</div><div className="problem-grid"><h2>Legally valid can still be <em>practically unusable.</em></h2><div><p className="body-copy">A person receives a denial or administrative notice. The document cites rules, but the deadline is vague, the appeal path is buried, and the consequences of doing nothing are unclear.</p><a className="text-link" href="#workflow">Turn confusion into a next step <ArrowUpRight /></a></div></div><div className="persona-grid"><div className="persona"><span className="persona-number">01</span><h3>Resident / Citizen</h3><p>“What happened? What must I do? By when? What if I do nothing?”</p></div><div className="persona"><span className="persona-number">02</span><h3>Lawyer / Legal Aid</h3><p>Fast issue spotting, source-linked findings, and a clean first-pass trail.</p></div><div className="persona"><span className="persona-number">03</span><h3>Agency / Public Service</h3><p>Catch ambiguous deadlines and confusing language before publication.</p></div></div></section>
+      <section className="intro-section container"><span className="section-kicker">/ A BETTER FIRST READ</span><div className="intro-grid"><h2>Legal clarity<br /><i>without the guesswork.</i></h2><div><p>Public notices can be legally valid and still practically unusable. LexisGuide turns hidden deadlines, missing appeal paths, and confusing clauses into structured, reviewable next steps.</p><a href="#workflow" className="under-link">Discover the workflow <Arrow /></a></div></div></section>
 
-        <section className="workflow-section" id="workflow"><div className="container"><div className="section-label light">/ THE WORKFLOW</div><div className="workflow-heading"><h2>One upload.<br /><em>Two outputs.</em></h2><p>A fairness audit and a practical next-step guide — grounded in the document you actually received.</p></div><div className="step-grid">{steps.map(([number, title, description], index) => <div className={`step ${index === 2 ? 'step-active' : ''}`} key={number}><span className="step-number">{number}</span><h3>{title}</h3><p>{description}</p>{index < 4 && <span className="step-arrow">→</span>}</div>)}</div></div></section>
+      <section className="feature-section" id="features"><div className="container"><span className="section-kicker light">/ ONE PLACE TO UNDERSTAND, REVIEW, IMPROVE</span><div className="feature-list">{features.map((feature) => <article className="feature-row" key={feature.number}><span className="feature-number">{feature.number}</span><div className="feature-icon">{feature.icon}</div><div><h3>{feature.title}</h3><p>{feature.text}</p></div><span className="feature-arrow">↗</span></article>)}</div></div></section>
 
-        <section className="audit-section container" id="audit"><div className="section-label">/ THE LINTER</div><div className="audit-heading"><h2>Not a black-box score.<br /><em>A trail you can follow.</em></h2><p>Every flagged issue links to the exact document evidence and the rule that triggered it. AI explains; deterministic rules keep the core checks honest.</p></div><div className="audit-demo"><div className="document-preview"><div className="doc-label">NOTICE OF DENIAL <span>PAGE 01</span></div><div className="doc-lines"><i /><i /><i className="short" /><mark>you may appeal this decision.</mark><i /><i className="short" /><mark className="missing">appeal instructions</mark><i /><i /></div><div className="document-stamp">LEXIS<br />GUIDE</div></div><div className="finding-panel"><div className="panel-header"><span>2 CRITICAL FINDINGS</span><span className="panel-time">● 14s ago</span></div><div className="finding finding-alert"><span className="check-icon alert">!</span><div><strong>Appeal deadline: unclear</strong><p>No explicit date or number of days found.</p><a href="#chain">View evidence span ↗</a></div></div><div className="finding finding-alert"><span className="check-icon alert">!</span><div><strong>Appeal destination: missing</strong><p>The notice does not say where to file.</p><a href="#chain">View evidence span ↗</a></div></div><button className="panel-button" onClick={startDemo}>Generate next-step guide <ArrowUpRight /></button></div></div></section>
+      <section className="workflow-section container" id="workflow"><div className="workflow-copy"><span className="section-kicker">/ FROM CONFUSION TO A NEXT STEP</span><h2>One upload.<br /><i>More certainty.</i></h2><p>LexisGuide extracts the facts, runs deterministic clarity checks, and gives each person a review trail they can follow.</p><button className="primary-button" onClick={start}>Analyze a document <Arrow /></button></div><div className="workflow-visual"><div className="workflow-header"><span>PROCEDURAL CLARITY</span><b>LIVE</b></div><div className="workflow-score"><strong>81</strong><span>/100<br /><small>after revision</small></span></div><div className="workflow-line"><i /><i /><i /><i className="orange-line" /></div><div className="workflow-meta"><span>✓ deadline added</span><span>✓ appeal path added</span><span>✓ plain language</span></div><div className="workflow-footer">v1 → v2 → v3 <span>review chain ↗</span></div></div></section>
 
-        <section className="chain-section" id="chain"><div className="container chain-grid"><div><div className="section-label light">/ THE TRUST LAYER</div><h2>Review history<br /><em>is part of the product.</em></h2><p>A provenance trail for the moments that matter: what was uploaded, which rule ran, what AI explained, and what a person decided.</p><button className="button button-green" onClick={() => setNotice('Review chain opened — every version stays connected.')}>Explore the review chain <ArrowUpRight /></button></div><div className="timeline"><div className="timeline-line" />{[['v1', '54/100', 'deadline unclear'], ['v2', '68/100', 'deadline added'], ['v3', '81/100', 'appeal path added'], ['v4', '89/100', 'language simplified']].map(([version, score, label], i) => <div className={`timeline-item ${i === 3 ? 'current' : ''}`} key={version}><span className="timeline-dot" /><span className="timeline-version">{version}</span><strong>{score}</strong><span>{label}</span></div>)}</div></div></section>
+      <section className="security-section" id="security"><div className="container security-grid"><div><span className="section-kicker light">/ PRIORITY TO TRUST</span><h2>Useful AI.<br /><i>Visible reasoning.</i></h2><p>LexisGuide helps people move faster without asking them to trust a black box. Human decisions stay human, and every meaningful change stays connected to its source.</p><button className="light-button" onClick={() => setToast('Review chain: document → evidence → rule → person → report.')}>See the review chain <Arrow /></button></div><div className="trust-cards"><div><span>01</span><b>Evidence-linked findings</b><small>Every flag leads back to the document.</small></div><div><span>02</span><b>Human-in-the-loop</b><small>Approve, override, revise, and decide.</small></div><div><span>03</span><b>Verifiable history</b><small>Versions, rules, and reviewer actions stay connected.</small></div></div></div></section>
 
-        <section className="workspace container"><div className="section-label">/ SHARED WORKSPACE</div><div className="workspace-heading"><h2>AI suggests.<br /><em>People decide.</em></h2><p>Invite another person into the same document, findings, conversation, and version history. No auto-accept. No auto-sign.</p></div><div className="workspace-card"><div className="workspace-top"><span>LEASE AGREEMENT WORKSPACE</span><span className="workspace-status">● 2 MEMBERS</span></div><div className="workspace-body"><div className="avatars"><span className="avatar tenant">T</span><span className="avatar landlord">L</span><div><strong>Tenant ↔ Landlord</strong><small>Both parties reviewing</small></div></div><div className="workspace-findings"><span>AI REVIEW · v1 · 62/100</span><p><b>!</b> Security deposit: ambiguous</p><p><b>!</b> Repair duty: unclear</p><p><b>!</b> Termination notice: missing</p></div><div className="chat"><span>WORKSPACE CHAT</span><p><b>TENANT</b> Can we clarify who handles repairs?</p><p><b>LANDLORD</b> Agreed. I’ll update clause 8.</p><div className="chat-input">Upload revised v2 <span>↗</span></div></div></div></div></section>
+      <section className="faq-section container" id="faq"><div className="faq-heading"><span className="section-kicker">/ QUESTIONS, ANSWERED</span><h2>Good questions<br /><i>deserve clear answers.</i></h2></div><div className="faq-list">{faqs.map(([question, answer], index) => <div className={`faq-item ${openFaq === index ? 'is-open' : ''}`} key={question}><button onClick={() => setOpenFaq(openFaq === index ? null : index)}><span><em>0{index + 1}</em>{question}</span><b>{openFaq === index ? '−' : '+'}</b></button>{openFaq === index && <p>{answer}</p>}</div>)}</div></section>
 
-        <section className="final-cta container"><p className="eyebrow"><span className="eyebrow-dot" /> LEXISGUIDE · LEXHACK 2026</p><h2>Government documents should not require a lawyer just to understand the <em>next step.</em></h2><button className="button button-dark" onClick={startDemo}>Start with a document <ArrowUpRight /></button></section>
-      </main>
-      <footer className="footer container"><a className="brand" href="#top"><span className="brand-mark">L</span><span>LexisGuide</span></a><span>AI-assisted clarity for the documents that shape our lives.</span><span>Decision support · Not legal advice</span></footer>
-      {notice && <button className="toast" onClick={() => setNotice('')}>{notice} <span>×</span></button>}
-    </div>
-  )
+      <section className="closing-section container"><span className="hero-kicker"><span /> LEXISGUIDE · DECISION SUPPORT, NOT LEGAL ADVICE</span><h2>Government documents should not require a lawyer just to understand the <i>next step.</i></h2><button className="primary-button" onClick={start}>Start with a document <Arrow /></button></section>
+    </main>
+
+    <footer className="site-footer container"><a className="wordmark" href="#top"><span className="wordmark-symbol">L</span>LexisGuide</a><span>Make due process understandable, reviewable, and verifiable.</span><span>© 2026 LexisGuide</span></footer>
+    {toast && <button className="toast" onClick={() => setToast('')}>{toast}<b>×</b></button>}
+  </div>
 }
 
 export default App
