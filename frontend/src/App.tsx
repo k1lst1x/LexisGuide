@@ -5,6 +5,7 @@ import { SplashScreen } from './SplashScreen'
 import { TransitionLoader } from './TransitionLoader'
 import { cognitoGetCurrentUser, cognitoSignOut } from './aws'
 import littlebirdTreesBg from '@/assets/littlebird_trees_bg.png'
+import { AIWorkflowProgress } from './components/AIWorkflowProgress'
 
 const WORKSPACE_KEY = 'lexisguide:workspace'
 const WORKSPACE_USER_KEY = 'lexisguide:workspace-user'
@@ -97,6 +98,7 @@ export function App() {
   const [currentUser, setCurrentUser] = useState<{ email: string; username: string } | null>(null)
   const [toast, setToast] = useState('')
   const [demoTab, setDemoTab] = useState<'linter' | 'audit' | 'guide' | 'chain'>('linter')
+  const [aiWorkflowOpen, setAiWorkflowOpen] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
 
   useScrollReveal()
@@ -316,8 +318,30 @@ export function App() {
                 🔗 Provenance Log
               </button>
             </div>
-            <div className="lb-demo-badge">
-              ● Active Rule Pack: v4.2 Civic Fairness
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                className="lb-btn-pill"
+                style={{
+                  fontSize: '12px',
+                  padding: '5px 12px',
+                  background: '#172554',
+                  color: '#93c5fd',
+                  border: '1px solid rgba(59, 130, 246, 0.35)',
+                  boxShadow: '0 0 10px rgba(59, 130, 246, 0.15)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onClick={() => setAiWorkflowOpen(true)}
+                title="Watch AI document linter & procedural audit execution"
+              >
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#60a5fa', boxShadow: '0 0 6px #3b82f6' }} />
+                Live AI Workflow ⚡
+              </button>
+              <div className="lb-demo-badge">
+                ● Active Rule Pack: v4.2 Civic Fairness
+              </div>
             </div>
           </div>
 
@@ -674,6 +698,13 @@ export function App() {
           {toast}
         </div>
       )}
+
+      {/* AI Workflow Progress Modal */}
+      <AIWorkflowProgress
+        isOpen={aiWorkflowOpen}
+        onClose={() => setAiWorkflowOpen(false)}
+        documentName="Notice of Supplemental Assistance Discontinuation"
+      />
 
       {/* Transition Loader */}
       <TransitionLoader visible={transitioning} message={transitionMsg} />

@@ -689,13 +689,14 @@ html, body {
 /* ───── 2. Hero Section ───── */
 .lb-hero {
   position: relative;
+  z-index: 1;
   width: 100%;
   padding: 80px 24px 60px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .lb-hero-glow {
@@ -713,16 +714,35 @@ html, body {
 
 .lb-hero-tree-bg {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
   width: 100%;
-  height: 100%;
+  height: calc(100% + 420px);
   object-fit: cover;
   object-position: bottom center;
   pointer-events: none;
   z-index: 1;
-  opacity: 0.85;
-  mask-image: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.45) 45%, rgba(0,0,0,0) 85%);
-  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.45) 45%, rgba(0,0,0,0) 85%);
+  opacity: 0.9;
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.45) 7%,
+    rgba(0, 0, 0, 0.85) 20%,
+    rgba(0, 0, 0, 0.92) 55%,
+    rgba(0, 0, 0, 0.75) 72%,
+    rgba(0, 0, 0, 0.35) 88%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.45) 7%,
+    rgba(0, 0, 0, 0.85) 20%,
+    rgba(0, 0, 0, 0.92) 55%,
+    rgba(0, 0, 0, 0.75) 72%,
+    rgba(0, 0, 0, 0.35) 88%,
+    rgba(0, 0, 0, 0) 100%
+  );
 }
 
 .lb-hero-content {
@@ -816,13 +836,18 @@ html, body {
 
 /* ───── 3. Product Demo Showcase ───── */
 .lb-demo-section {
+  position: relative;
+  z-index: 2;
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px 24px 100px;
+  background: transparent;
 }
 
 .lb-demo-card {
+  position: relative;
+  z-index: 3;
   width: 100%;
   background: #ffffff;
   border-radius: 24px;
@@ -1532,6 +1557,7 @@ html, body {
   .lb-navbar { padding: 0 20px; }
   .lb-nav-center { display: none; }
   .lb-hero-title { font-size: 40px; }
+  .lb-hero-tree-bg { height: calc(100% + 320px); }
   .lb-linter-grid { grid-template-columns: 1fr; }
   .lb-audit-view { grid-template-columns: 1fr; }
   .lb-features-grid { grid-template-columns: 1fr; }

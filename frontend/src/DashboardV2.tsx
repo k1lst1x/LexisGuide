@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+import { AIWorkflowProgress } from './components/AIWorkflowProgress'
 
 /* ───────── Types ───────── */
 type SampleDoc = {
@@ -478,10 +479,19 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [messageSearch, setMessageSearch] = useState('')
   const [messageNotice, setMessageNotice] = useState('')
   const [remediating, setRemediating] = useState(false)
+  const [aiWorkflowOpen, setAiWorkflowOpen] = useState(false)
+  const [aiWorkflowMode, setAiWorkflowMode] = useState<'document-audit' | 'remediation' | 'project-plan'>('document-audit')
+  const [aiWorkflowDocName, setAiWorkflowDocName] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const sectionTitleTimerRef = useRef<number | undefined>(undefined)
+
+  const triggerAiWorkflow = (docTitle: string = selectedDoc.title, mode: 'document-audit' | 'remediation' | 'project-plan' = 'document-audit') => {
+    setAiWorkflowMode(mode)
+    setAiWorkflowDocName(docTitle)
+    setAiWorkflowOpen(true)
+  }
 
   const setActiveNav = (section: NavItem) => {
     setActiveNavState(section)
@@ -525,11 +535,14 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
 
   const handleRemediate = () => {
     setRemediating(true)
+    setAiWorkflowMode('remediation')
+    setAiWorkflowDocName(selectedDoc.title)
+    setAiWorkflowOpen(true)
     setTimeout(() => {
       setSelectedDoc(documents[1] ?? documents[0])
       setActiveFinding((documents[1] ?? documents[0]).findings[0]?.id || null)
       setRemediating(false)
-    }, 1200)
+    }, 1400)
   }
 
   const addScannedDocument = async ({ id, title, type, text, hash }: { id: string; title: string; type: string; text: string; hash: string }) => {
@@ -570,6 +583,9 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     const file = event.target.files?.[0]
     if (!file) return
     setIsScanning(true)
+    setAiWorkflowMode('document-audit')
+    setAiWorkflowDocName(file.name)
+    setAiWorkflowOpen(true)
     setUploadMessage(`Reading ${file.name}…`)
     try {
       const extracted = await extractDocumentText(file)
@@ -594,6 +610,9 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     if (!text) return
     const title = pastedTitle.trim() || 'Pasted document'
     setIsScanning(true)
+    setAiWorkflowMode('document-audit')
+    setAiWorkflowDocName(title)
+    setAiWorkflowOpen(true)
     try {
       await addScannedDocument({
         id: `upload-pasted-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}-${text.length}`,
@@ -872,6 +891,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 </div>
                 <div className="d2-document-hero-actions">
                   {isDemoMode && <button className="d2-demo-open-btn" onClick={() => setTutorialOpen(true)}>How does this work?</button>}
+                  <button className="d2-paste-btn" onClick={() => triggerAiWorkflow(selectedDoc.title, 'document-audit')} title="Watch AI fairness & due process workflow execution">⚡ AI Workflow</button>
                   <button className="d2-paste-btn" onClick={() => setPasteDialogOpen(true)} disabled={isScanning}>Paste text</button>
                   <button className="d2-upload-btn d2-upload-btn-large" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>
                     <span>+</span>{isScanning ? 'Scanning document…' : 'Add document'}
@@ -941,7 +961,17 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 <section className="d2-document-reader-section">
                   <div className="d2-reader-toolbar">
                     <div><span className="d2-doc-type-tag">{documentKind(selectedDoc.type).label}</span><h2>{selectedDoc.title}</h2><p>{selectedDoc.agency} · {selectedDoc.date}</p></div>
-                    <div className="d2-scan-summary"><strong>{selectedDoc.findings.filter((finding) => finding.severity !== 'pass').length}</strong><span>items to review</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        className="d2-paste-btn"
+                        style={{ padding: '6px 11px', fontSize: '11.5px', background: '#1e293b', color: '#93c5fd', borderColor: 'rgba(59,130,246,0.3)', cursor: 'pointer' }}
+                        onClick={() => triggerAiWorkflow(selectedDoc.title, 'document-audit')}
+                        title="View real animated AI workflow execution"
+                      >
+                        ⚡ AI Workflow
+                      </button>
+                      <div className="d2-scan-summary"><strong>{selectedDoc.findings.filter((finding) => finding.severity !== 'pass').length}</strong><span>items to review</span></div>
+                    </div>
                   </div>
                   <div className="d2-reader-hint"><span className="d2-highlight-key" /> Highlighted text may need a closer look. Select it to see why.</div>
                   <div className="d2-paper d2-paper-scrollable">
@@ -1141,6 +1171,23 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
           {/* ═════ GUIDE (sub-panel available from overview/linter) ═════ */}
         </main>
       </div>
+
+      {createPortal(
+        <AIWorkflowProgress
+          isOpen={aiWorkflowOpen}
+          onClose={() => setAiWorkflowOpen(false)}
+          mode={aiWorkflowMode}
+          documentName={aiWorkflowDocName}
+          onComplete={() => {
+            if (aiWorkflowMode === 'remediation') {
+              setSelectedDoc(documents[1] ?? documents[0])
+              setActiveFinding((documents[1] ?? documents[0]).findings[0]?.id || null)
+              setRemediating(false)
+            }
+          }}
+        />,
+        document.body
+      )}
     </div>
   )
 }
