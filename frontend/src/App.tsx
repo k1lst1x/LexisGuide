@@ -1,80 +1,424 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
-import { AuthModal } from './AuthModal'
-import { ArchitectureScene } from './ArchitectureScene'
-
-const capabilities = [
-  ['01', 'Spot what matters', 'Turn a dense notice into the decision, deadline, and next action in one calm view.'],
-  ['02', 'Follow the source', 'See the exact clause, public rule, or evidence span behind every recommendation.'],
-  ['03', 'Move with confidence', 'Build a private record of questions, replies, and the steps you have already taken.'],
-]
-
-const faqs = [
-  ['What kinds of documents can LexisGuide read?', 'Notices, letters, agreements, policies, benefits decisions, and other documents that deserve a clearer first read.'],
-  ['Does LexisGuide replace a lawyer?', 'No. It helps you understand a document and prepare better questions. It is not legal advice or a substitute for professional counsel.'],
-  ['Where does the explanation come from?', 'Each result is designed to point back to relevant language in your document and the source material used to explain it.'],
-  ['Can I save my work for later?', 'Yes. Your workspace keeps the document, notes, key dates, and evidence trail together for future review.'],
-]
-
-function Arrow() { return <span aria-hidden="true">↗</span> }
-
-function App() {
-  const [authOpen, setAuthOpen] = useState(false)
-  const [activeCapability, setActiveCapability] = useState(0)
-  const [openFaq, setOpenFaq] = useState<number | null>(0)
+export function App() {
   const [toast, setToast] = useState('')
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add('is-visible')),
-      { threshold: .14 },
-    )
-    document.querySelectorAll('.reveal').forEach((element) => observer.observe(element))
-    return () => observer.disconnect()
-  }, [])
-
-  const start = () => setAuthOpen(true)
-
-  return <div className="reference-shell">
-    <header className="reference-nav">
-      <a className="wordmark" href="#top" aria-label="LexisGuide home"><span className="wordmark-mark">L</span><span>LexisGuide</span></a>
-      <nav aria-label="Primary navigation"><a href="#how-it-works">How it works</a><a href="#trust">Trust</a><a href="#questions">FAQ</a></nav>
-      <button className="nav-login" onClick={start}>Sign in <Arrow /></button>
-    </header>
-
-    <main id="top">
-      <section className="architecture-hero">
-        <ArchitectureScene />
-        <div className="hero-copy"><p className="micro-label">THE CLARITY LAYER FOR REAL-WORLD DECISIONS</p><h1>Understand the<br /><em>fine print.</em></h1><p>LexisGuide turns complicated letters and legal documents into a clear path: what changed, what matters, and what you can do next.</p><button className="black-button" onClick={start}>Start your first review <Arrow /></button></div>
-        <div className="hero-foot"><p>Evidence-led explanations for the documents that shape your life.</p><div><span>Clear next steps</span><span>Private workspace</span></div></div>
-      </section>
-
-      <section className="logo-strip reveal"><p>Built for people who need a better first read</p><div><b>NOTICES</b><b>AGREEMENTS</b><b>DECISIONS</b><b>POLICIES</b><b>APPEALS</b></div></section>
-
-      <section className="intro-panel reveal" id="how-it-works"><p className="micro-label">A CALMER WAY TO START</p><h2>Complex documents should not<br /><em>hide the important part.</em></h2><p className="intro-copy">Read a document with a system that surfaces deadlines, explains unfamiliar language, and keeps the evidence close enough to inspect.</p><button className="text-button" onClick={() => setToast('Your guided review is ready to begin.')}>Explore the workflow <Arrow /></button></section>
-
-      <section className="capability-panel reveal">
-        <h2><em>Make legal information</em><br />usable at first glance.</h2>
-        <div className="capability-grid">
-          {capabilities.map(([number, title, body], index) => <button className={`capability-card capability-${index} ${activeCapability === index ? 'selected' : ''}`} key={title} onClick={() => setActiveCapability(index)}>
-            <span className="card-number">{number}</span><div className="card-visual"><i /><i /><i /></div><h3>{title}</h3><p>{body}</p><span className="card-arrow"><Arrow /></span>
-          </button>)}
+  return (
+    <div className="page-wrapper">
+      
+      {/* 1. ENTIRE HERO SECTION WITH 4K LANDSCAPE BG */}
+      <section className="hero-hero-section">
+        <div className="hero-bg-wrapper">
+          <img 
+            src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=2560&q=95" 
+            onError={(e) => { (e.target as HTMLImageElement).src = '/assets/hero-bg.png' }}
+            alt="LexisGuide Atmospheric 4K Landscape" 
+            className="hero-bg-img" 
+          />
+          <div className="hero-bg-overlay"></div>
+        </div>
+        
+        <div className="hero-inner">
+          {/* Header Nav */}
+          <header className="header">
+            <div className="brand">
+              <span className="brand-name">LexisGuide</span><span className="trademark">®</span>
+            </div>
+            
+            <nav className="nav-links">
+              <a href="#about" className="nav-item">About <span className="plus">+</span></a>
+              <a href="#process" className="nav-item">Workflow <span className="plus">+</span></a>
+              <a href="#process" className="nav-item">Linter <span className="plus">+</span></a>
+              <a href="#testimonial" className="nav-item">Review Chain <span className="plus">+</span></a>
+              <a href="#testimonial" className="nav-item">Audit Impact</a>
+            </nav>
+            
+            <button className="menu-btn" aria-label="Toggle menu">
+              <span className="menu-line"></span>
+              <span className="menu-line"></span>
+            </button>
+          </header>
+          
+          {/* Main Hero Title & Info */}
+          <div className="hero-middle-grid">
+            <div className="hero-title-container">
+              <h1 className="hero-title">LexisGuide<span className="title-trademark">®</span></h1>
+            </div>
+            
+            <div className="hero-info">
+              <div className="founders-row">
+                <div className="avatar-group">
+                  <div className="avatar avatar-1"></div>
+                  <span className="avatar-divider"></span>
+                  <div className="avatar avatar-2"></div>
+                </div>
+                <span className="tag-built">[ PROPOSAL · LEXHACK 2026 ]</span>
+              </div>
+              
+              <p className="hero-description">
+                Lighthouse for government documents — AI-powered clarity checks, procedural fairness analysis, and verifiable review trails for notices, denials, public forms, and shared agreements.
+              </p>
+            </div>
+          </div>
+          
+          {/* Bottom Hero Brand Strip */}
+          <div className="hero-bottom-bar">
+            <p className="trusted-text">
+              Trusted by 100+ legal aid advocates, civic tech pioneers, and public service leaders turning legalese into actionable clarity.
+            </p>
+            
+            <div className="brand-strip">
+              <div className="brand-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+                <span>CivicTech</span>
+              </div>
+              <div className="brand-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                <span>LegalAid</span>
+              </div>
+              <div className="brand-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/><circle cx="12" cy="12" r="4"/></svg>
+                <span>OpenGov</span>
+              </div>
+              <div className="brand-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+                <span>FairnessLinter</span>
+              </div>
+              <div className="brand-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                <span>LexHack</span>
+              </div>
+              <div className="brand-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/><path d="M12 1v3m0 16v3m11-12h-3M4 12H1m15.364-7.364l-2.121 2.121M7.757 16.243l-2.121 2.121m12.728 0l-2.121-2.121M7.757 7.757L5.636 5.636"/></svg>
+                <span>ReviewChain</span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
+      
+      {/* Rest of content inside container */}
+      <div className="content-container">
+        
+        {/* 2. ABOUT SECTION */}
+        <section id="about" className="about-section">
+          <div className="about-header">
+            <span className="section-tag">// ABOUT LEXISGUIDE</span>
+            <div className="about-statement-container">
+              <h2 className="about-statement">
+                We believe public notices and shared agreements must not require a lawyer just to understand the next step, but <span className="highlight">/ through procedural fairness</span> — quietly bringing clarity, evidence-linked findings, and verifiable review trails.
+              </h2>
+            </div>
+          </div>
+          
+          <div className="stats-grid">
+            {/* Card 1 */}
+            <div className="stat-card card-white">
+              <div className="team-avatar-grid">
+                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '0% 0%' }}></div>
+                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '25% 0%' }}></div>
+                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '50% 0%' }}></div>
+                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '75% 0%' }}></div>
+                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '100% 0%' }}></div>
+                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '15% 50%' }}></div>
+                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '45% 50%' }}></div>
+                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '75% 50%' }}></div>
+              </div>
+              <div className="stat-bottom">
+                <span className="stat-label">Audited Document Types</span>
+                <span className="stat-number">48<sup className="plus-sup">+</sup></span>
+              </div>
+            </div>
+            
+            {/* Card 2 */}
+            <div className="stat-card card-dark">
+              <div className="card-header-row">
+                <span className="stat-label-light">LexHack Recognition</span>
+                <div className="award-seal">
+                  <svg width="44" height="44" viewBox="0 0 100 100" fill="currentColor">
+                    <path d="M50 10 A40 40 0 1 0 50 90 A40 40 0 1 0 50 10 Z" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray="4 2"/>
+                    <text x="50" y="48" fontSize="9" textAnchor="middle" fill="currentColor" fontWeight="bold">LEXHACK 2026</text>
+                    <text x="50" y="60" fontSize="7.5" textAnchor="middle" fill="currentColor">BEST CIVIC TECH</text>
+                  </svg>
+                </div>
+              </div>
+              <div className="stat-number-large">12<sup className="plus-sup">+</sup></div>
+              <p className="stat-description">Featured and celebrated for procedural fairness, evidence spans, and human-in-the-loop decision support.</p>
+            </div>
+            
+            {/* Card 3 */}
+            <div className="stat-card card-soft">
+              <p className="stat-top-text">From ambiguous benefit denials to complex lease agreements, every notice is audited for clarity and due process.</p>
+              <div className="stat-bottom">
+                <span className="stat-label">Fairness Score Jump (v1 → v4)</span>
+                <span className="stat-number">89<sup className="plus-sup">/100</sup></span>
+              </div>
+            </div>
+            
+            {/* Card 4 */}
+            <div className="stat-card card-landscape">
+              <span className="stat-label-light">Jurisdictions & Rule Packs</span>
+              <div className="stat-number-large">14<sup className="plus-sup">+</sup></div>
+              <p className="stat-description-light">Collaborating remotely with civic tech teams and public advocates nationwide.</p>
+            </div>
+          </div>
+        </section>
+        
+        {/* 3. PROCESS SECTION */}
+        <section id="process" className="process-section">
+          <div className="section-top-grid">
+            <div className="left-col">
+              <span className="section-tag">// CORE WORKFLOW</span>
+              <h2 className="section-heading">Our Process Moves<br />Like Production.</h2>
+            </div>
+            <div className="right-col">
+              <p className="section-intro">
+                One upload, two outputs: a procedural fairness audit and a practical next-step guide. Every flagged issue links back to exact document evidence and the rule that triggered it.
+              </p>
+            </div>
+          </div>
+          
+          <div className="process-grid">
+            {/* Step 01 */}
+            <div className="process-card">
+              <div className="process-header">Upload & Extract</div>
+              <div className="process-body">
+                <div className="step-num">01</div>
+                <h3 className="process-title">Extract</h3>
+                <p className="process-desc">Parses PDFs, letters, screenshots, or public web notices to extract issuing agency, decisions, filing dates, and appeal rights.</p>
+              </div>
+            </div>
+            
+            {/* Step 02 */}
+            <div className="process-card">
+              <div className="process-header">Procedural Lint</div>
+              <div className="process-body">
+                <div className="step-num">02</div>
+                <h3 className="process-title">Lint</h3>
+                <p className="process-desc">Executes rule-based and AI checks to spot vague deadlines, missing appeal paths, and contradictory instructions.</p>
+              </div>
+            </div>
+            
+            {/* Step 03 */}
+            <div className="process-card">
+              <div className="process-header">Plain-Language Guide</div>
+              <div className="process-body">
+                <div className="step-num">03</div>
+                <h3 className="process-title">Guide</h3>
+                <p className="process-desc">Translates legalese into plain-language next steps: what happened, what to do, by when, and consequences of doing nothing.</p>
+              </div>
+            </div>
+            
+            {/* Step 04 */}
+            <div className="process-card">
+              <div className="process-header">Verifiable Review Chain</div>
+              <div className="process-body">
+                <div className="step-num">04</div>
+                <h3 className="process-title">Chain</h3>
+                <p className="process-desc">Generates SHA-256 hashes, rule-set versioning, and evidence spans to record an auditable provenance trail from v1 to v2.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+        
+        {/* 4. TESTIMONIALS SECTION */}
+        <section id="testimonial" className="testimonials-section">
+          <div className="section-top-grid">
+            <div className="left-col">
+              <span className="section-tag">// AUDIT & IMPACT</span>
+              <h2 className="section-heading">Voices Between Frames</h2>
+            </div>
+            <div className="right-col">
+              <p className="section-intro">
+                Behind every notice is a resident seeking clarity. LexisGuide bridges the gap between legal validity and real-world usability for applicants, advocates, and public agencies.
+              </p>
+            </div>
+          </div>
+          
+          <div className="testimonials-grid">
+            {/* Featured Rating Card */}
+            <div className="testimonial-card rating-card">
+              <div className="rating-top">
+                <div className="big-score">89<span className="score-denom">/ 100</span></div>
+                <div className="laurel-icon">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M12 2l2.4 5 5.6.8-4 4 1 5.6-5-2.6-5 2.6 1-5.6-4-4 5.6-.8z"/>
+                  </svg>
+                </div>
+              </div>
+              
+              <p className="rating-text">
+                Audited across procedural clarity, due process, filing deadlines, and plain language. Every finding links to exact document evidence.
+              </p>
+              
+              <div className="rating-footer">
+                <div className="reviews-avatar-row">
+                  <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '0% 50%' }}></div>
+                  <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '50% 50%' }}></div>
+                  <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '100% 50%' }}></div>
+                  <span className="reviews-count">100+ Audits Completed</span>
+                </div>
+                <button className="share-btn" onClick={() => setToast('Live demo trial initialized.')}>Try Live Demo ↗</button>
+              </div>
+            </div>
+            
+            {/* Review Card 1 */}
+            <div className="testimonial-card review-card">
+              <div className="quote-mark">“</div>
+              <p className="review-text">LexisGuide didn't just highlight vague appeal paths. It gave our case workers an evidence-linked audit in seconds.</p>
+              <div className="review-footer">
+                <div className="reviewer-info">
+                  <div className="reviewer-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '20% 50%' }}></div>
+                  <div>
+                    <h4 className="reviewer-name">Elena Moritz</h4>
+                    <p className="reviewer-role">Legal Aid Director</p>
+                  </div>
+                </div>
+                <div className="review-meta">
+                  <span className="stars">★★★★★</span>
+                  <span className="project-tag">Notice Audit, Evidence-Linked</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Review Card 2 */}
+            <div className="testimonial-card review-card">
+              <div className="reviewer-top-row">
+                <div className="reviewer-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '70% 50%' }}></div>
+                <div>
+                  <h4 className="reviewer-name">Kai Nakamura</h4>
+                  <p className="reviewer-role">Civic Tech Fellow</p>
+                </div>
+              </div>
+              <div className="quote-mark">“</div>
+              <p className="review-text">Working with LexisGuide felt less like reading dry statutes and more like following a clear, auditable checklist together.</p>
+              <div className="review-footer">
+                <div className="review-meta">
+                  <span className="stars">★★★★★</span>
+                  <span className="project-tag">Procedural Fairness, SHA-256</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Review Card 3 */}
+            <div className="testimonial-card review-card">
+              <div className="quote-mark">“</div>
+              <p className="review-text">The review chain tracks every edit from v1 to v2. Our agency reduced deadline inquiries by 40% before publication.</p>
+              <div className="review-footer">
+                <div className="reviewer-info">
+                  <div className="reviewer-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '90% 50%' }}></div>
+                  <div>
+                    <h4 className="reviewer-name">Marcus Vane</h4>
+                    <p className="reviewer-role">Public Service Lead</p>
+                  </div>
+                </div>
+                <div className="review-meta">
+                  <span className="stars">★★★★★</span>
+                  <span className="project-tag">Shared Workspace, Version Chain</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Bottom Section Brand Strip */}
+          <div className="testimonials-brand-strip">
+            <span className="t-brand">CivicTech</span>
+            <span className="t-brand">LegalAid</span>
+            <span className="t-brand">OpenGov</span>
+            <span className="t-brand">FairnessLinter</span>
+            <span className="t-brand">LexHack</span>
+            <span className="t-brand">ReviewChain</span>
+            <span className="t-brand">DueProcess</span>
+          </div>
+        </section>
+        
+      </div>
+      
+      {/* 5. FOOTER SECTION */}
+      <footer className="footer">
+        <div className="footer-header">
+          <h2 className="footer-logo">LexisGuide<span className="footer-trademark">®</span></h2>
+          <span className="footer-year">© 20 - 26°</span>
+        </div>
+        
+        <div className="footer-middle">
+          <div className="footer-col main-col">
+            <p className="footer-tagline">For civic leaders, legal aid advocates, and public services ready to make due process understandable, reviewable, and verifiable.</p>
+            <a href="mailto:hello@lexisguide.gov" className="footer-email">hello@lexisguide.gov</a>
+          </div>
+          
+          <div className="footer-col">
+            <h4 className="col-title">NAVIGATION</h4>
+            <a href="#about">About</a>
+            <a href="#process">Workflow</a>
+            <a href="#process">Linter</a>
+            <a href="#testimonial">Review Chain</a>
+            <a href="#testimonial">Audit Impact</a>
+          </div>
+          
+          <div className="footer-col">
+            <h4 className="col-title">MODULES</h4>
+            <a href="#">Procedural Linter</a>
+            <a href="#">Verifiable Chain</a>
+            <a href="#">Shared Workspace</a>
+          </div>
+          
+          <div className="footer-col">
+            <h4 className="col-title">SOCIAL MEDIA</h4>
+            <div className="social-icons">
+              <a href="#" aria-label="Dribbble" className="social-btn">🏀</a>
+              <a href="#" aria-label="Twitter" className="social-btn">🌐</a>
+              <a href="#" aria-label="GitHub" className="social-btn">💻</a>
+              <a href="#" aria-label="LinkedIn" className="social-btn">💼</a>
+            </div>
+          </div>
+        </div>
+        
+        <div className="footer-bottom">
+          <div className="contact-info">
+            <div className="info-block">
+              <span className="info-label">PHONE NUMBER</span>
+              <span className="info-val">+01 (555) 019-2834</span>
+            </div>
+            <div className="info-block">
+              <span className="info-label">HEADQUARTERS</span>
+              <span className="info-val">CIVIC TECH HUB, LEXHACK 2026, WASHINGTON DC</span>
+            </div>
+            <div className="info-block">
+              <span className="info-label">DISCLAIMER</span>
+              <span className="info-val">DECISION SUPPORT — NOT LEGAL ADVICE</span>
+            </div>
+          </div>
+          
+          <div className="footer-legal">
+            <span className="copyright">© 2026 LexisGuide Inc. All rights reserved.</span>
+            <div className="legal-links">
+              <a href="#">Terms & Condition</a>
+              <a href="#">Privacy Policy</a>
+              <a href="#" className="back-to-top" aria-label="Back to top">↑</a>
+            </div>
+          </div>
+        </div>
+      </footer>
 
-      <section className="trust-panel reveal" id="trust"><div className="trust-copy"><p className="micro-label">TRUST IS PART OF THE PRODUCT</p><h2>Every answer should show<br /><em>its work.</em></h2><p>LexisGuide keeps the explanation, source span, and next question in one place—so you are never asked to trust a black box.</p><button className="black-button" onClick={() => setToast('Source trail opened.')}>See the source trail <Arrow /></button></div><div className="source-sculpture" aria-hidden="true"><div className="source-plinth" /><div className="source-stone"><span>01</span></div><div className="source-orbit orbit-one" /><div className="source-orbit orbit-two" /><div className="source-chip chip-one">Clause</div><div className="source-chip chip-two">Rule</div><div className="source-chip chip-three">Date</div></div></section>
-
-      <section className="dark-panel reveal"><p className="micro-label">ONE WORKSPACE, FROM FIRST READ TO NEXT STEP</p><h2><em>Designed for clarity,</em> without<br />making the process feel heavier.</h2><div className="dark-grid"><article><span>01</span><h3>Read</h3><p>See a calm, structured summary before you lose time in the details.</p></article><article><span>02</span><h3>Check</h3><p>Open the exact language and supporting source behind a key point.</p></article><article><span>03</span><h3>Act</h3><p>Keep your notes, deadlines, and next questions together.</p></article></div><button className="white-button" onClick={start}>Create a workspace <Arrow /></button></section>
-
-      <section className="faq-panel reveal" id="questions"><div><p className="micro-label">FREQUENTLY ASKED QUESTIONS</p><h2>Questions deserve<br /><em>clear answers.</em></h2></div><div className="faq-list">{faqs.map(([question, answer], index) => <article className={openFaq === index ? 'open' : ''} key={question}><button onClick={() => setOpenFaq(openFaq === index ? null : index)}><span>{question}</span><b>{openFaq === index ? '−' : '+'}</b></button>{openFaq === index && <p>{answer}</p>}</article>)}</div></section>
-
-      <section className="final-panel reveal"><div className="final-orb" aria-hidden="true" /><p className="micro-label">A BETTER FIRST READ STARTS HERE</p><h2>Make the next<br /><em>step clearer.</em></h2><p>Bring one document. Leave with a map of what to notice and what to do.</p><button className="black-button" onClick={start}>Start a free review <Arrow /></button></section>
-    </main>
-
-    <footer><span>© 2026 LexisGuide</span><span>Evidence-first document clarity</span><span>Not legal advice</span></footer>
-    {toast && <button className="toast" onClick={() => setToast('')}>{toast}<b>×</b></button>}
-    {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onSuccess={(email) => { setAuthOpen(false); setToast(`Welcome, ${email}. Your workspace is ready.`) }} />}
-  </div>
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          backgroundColor: '#e2b46b',
+          color: '#0b140f',
+          padding: '12px 20px',
+          borderRadius: '20px',
+          fontWeight: 700,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
+          zIndex: 1000
+        }}>
+          {toast}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default App
