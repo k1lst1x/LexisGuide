@@ -98,3 +98,57 @@ button:focus-visible { outline: 0; box-shadow: 0 0 0 3px rgba(255,100,47,.28), 0
 @media (prefers-reduced-motion: reduce) {
   button, button::before { transition: none !important; animation: none !important; }
 }
+
+/* Hero inspection tool: a glowing magnifying glass sweeps over the document. */
+.cursor-chip {
+  min-height: 34px;
+  padding: 8px 12px 8px 44px;
+  border: 1px solid rgba(255,157,122,.24);
+  border-radius: 999px;
+  background: rgba(18,10,8,.52);
+  backdrop-filter: blur(12px);
+  animation: chip-float 5s ease-in-out infinite;
+}
+.cursor-chip::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 7px;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--orange-hot);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(255,100,47,.08), 0 0 18px rgba(255,100,47,.8), inset 0 0 12px rgba(255,180,145,.35);
+  transform-origin: 18px 18px;
+  animation: magnifier-sweep 4.8s cubic-bezier(.45,.05,.55,.95) infinite;
+}
+.cursor-chip::after {
+  content: '';
+  position: absolute;
+  left: 29px;
+  top: 22px;
+  width: 11px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--orange-hot);
+  box-shadow: 0 0 12px rgba(255,100,47,.9);
+  transform: rotate(45deg);
+  transform-origin: left center;
+  animation: magnifier-handle 4.8s cubic-bezier(.45,.05,.55,.95) infinite;
+}
+@keyframes magnifier-sweep {
+  0%, 100% { transform: translate(0, 0) rotate(-18deg) scale(1); }
+  25% { transform: translate(12px, -10px) rotate(16deg) scale(1.12); }
+  52% { transform: translate(2px, 10px) rotate(42deg) scale(.92); }
+  76% { transform: translate(-10px, -4px) rotate(4deg) scale(1.06); }
+}
+@keyframes magnifier-handle {
+  0%, 100% { transform: rotate(45deg) scaleX(1); }
+  25% { transform: rotate(61deg) scaleX(1.16); }
+  52% { transform: rotate(87deg) scaleX(.9); }
+  76% { transform: rotate(49deg) scaleX(1.08); }
+}
+@keyframes chip-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
