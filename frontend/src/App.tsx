@@ -109,6 +109,7 @@ export function App() {
   const [splashDone, setSplashDone] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [dashOpen, setDashOpen] = useState(false)
+  const [sessionReady, setSessionReady] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
   const [transitionMsg, setTransitionMsg] = useState('')
   const [currentUser, setCurrentUser] = useState<{ email: string; username: string } | null>(null)
@@ -121,12 +122,18 @@ export function App() {
 
   // Check existing session on mount
   useEffect(() => {
-    cognitoGetCurrentUser().then((user) => {
-      if (user) {
+    let mounted = true
+    cognitoGetCurrentUser()
+      .then((user) => {
+        if (!mounted || !user) return
         setCurrentUser({ email: user.email, username: user.username })
-        setDashOpen(true)
-      }
-    })
+        if (window.localStorage.getItem('lexisguide:workspace') !== 'closed') setDashOpen(true)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setSessionReady(true)
+      })
+    return () => { mounted = false }
   }, [])
 
   // Parallax on scroll
@@ -148,6 +155,7 @@ export function App() {
     setAuthOpen(false)
     setCurrentUser({ email, username: email })
     setDashOpen(true)
+    window.localStorage.setItem('lexisguide:workspace', 'open')
     setToast(`✓ Authenticated as ${email} via AWS Cognito`)
   }
 
@@ -155,10 +163,13 @@ export function App() {
     await cognitoSignOut().catch(() => {})
     setCurrentUser(null)
     setDashOpen(false)
+    window.localStorage.removeItem('lexisguide:workspace')
+    window.localStorage.removeItem('lexisguide:last-section')
     setToast('Signed out of AWS session.')
   }
 
   const openDashboard = useCallback(() => {
+    window.localStorage.setItem('lexisguide:workspace', 'open')
     setTransitionMsg('Initializing Audit Workspace...')
     setTransitioning(true)
     setTimeout(() => {
@@ -168,6 +179,7 @@ export function App() {
   }, [])
 
   const closeDashboard = useCallback(() => {
+    window.localStorage.setItem('lexisguide:workspace', 'closed')
     setTransitionMsg('Returning to LexisGuide...')
     setTransitioning(true)
     setDashOpen(false)
@@ -177,6 +189,10 @@ export function App() {
   /* ───── SPLASH ───── */
   if (!splashDone) {
     return <SplashScreen onComplete={() => setSplashDone(true)} />
+  }
+
+  if (!sessionReady) {
+    return <TransitionLoader visible message="Restoring your workspace..." />
   }
 
   /* ───── AUTH PAGE ───── */

@@ -25,6 +25,8 @@ type SampleDoc = {
 
 type NavItem = 'overview' | 'linter' | 'documents' | 'chain' | 'team' | 'settings'
 
+const LAST_SECTION_KEY = 'lexisguide:last-section'
+
 /* ───────── Sample Data ───────── */
 const sampleDocs: SampleDoc[] = [
   {
@@ -304,7 +306,10 @@ function documentKind(type: string) {
 /* ───────── Main Dashboard V2 ───────── */
 export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => void; onSignOut?: () => void; userEmail?: string }) {
   const [collapsed, setCollapsed] = useState(true)
-  const [activeNav, setActiveNav] = useState<NavItem>('overview')
+  const [activeNav, setActiveNav] = useState<NavItem>(() => {
+    const savedSection = window.localStorage.getItem(LAST_SECTION_KEY)
+    return navItems.some((item) => item.key === savedSection) ? savedSection as NavItem : 'overview'
+  })
   const [documents, setDocuments] = useState<SampleDoc[]>(sampleDocs)
   const [selectedDoc, setSelectedDoc] = useState<SampleDoc>(sampleDocs[0])
   const [activeFinding, setActiveFinding] = useState<string | null>(sampleDocs[0].findings[0]?.id || null)
@@ -331,6 +336,10 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(LAST_SECTION_KEY, activeNav)
+  }, [activeNav])
 
   const handleRemediate = () => {
     setRemediating(true)
