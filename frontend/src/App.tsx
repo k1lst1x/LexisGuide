@@ -129,7 +129,7 @@ export function App() {
   const [transitionMsg, setTransitionMsg] = useState('')
   const [currentUser, setCurrentUser] = useState<{ email: string; username: string } | null>(null)
   const [toast, setToast] = useState('')
-  const [heroOffset, setHeroOffset] = useState(0)
+  const [demoTab, setDemoTab] = useState<'linter' | 'audit' | 'guide' | 'chain'>('linter')
   const contentRef = useRef<HTMLDivElement>(null)
 
   useScrollReveal()
@@ -160,13 +160,6 @@ export function App() {
         if (mounted) setSessionReady(true)
       })
     return () => { mounted = false }
-  }, [])
-
-  // Parallax on scroll
-  useEffect(() => {
-    const handleScroll = () => setHeroOffset(window.scrollY * 0.35)
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
   // Toast auto-dismiss
@@ -245,363 +238,474 @@ export function App() {
     )
   }
 
-  /* ───── LANDING PAGE ───── */
+  /* ───── LANDING PAGE (LITTLEBIRD-INSPIRED) ───── */
   return (
-    <div className="page-wrapper" ref={contentRef}>
+    <div className="lb-page-wrapper" ref={contentRef}>
       
-      {/* 1. GHIBLI HERO — FULL-BLEED LANDSCAPE */}
-      <section className="ghibli-hero">
-        <div className="ghibli-bg-wrap">
-          <img 
-            src="/ghibli_hero_bg.png" 
-            alt="Studio Ghibli Landscape" 
-            className="ghibli-bg-img" 
-            style={{ transform: `translateY(${heroOffset}px) scale(1.05)` }}
-          />
-          <div className="ghibli-bg-fade" />
+      {/* 1. STICKY NAVBAR */}
+      <header className="lb-navbar">
+        <div className="lb-nav-left">
+          <a href="#" className="lb-nav-logo">
+            LexisGuide
+            <span className="lb-logo-badge">✦</span>
+          </a>
         </div>
-        
-        {/* Floating glass navbar */}
-        <header className="ghibli-nav reveal" style={{ animationDelay: '0.1s' }}>
-          <span className="ghibli-nav-brand">LexisGuide</span>
-          <nav className="ghibli-nav-links">
-            <a href="#about">About</a>
-            <a href="#process">Workflow</a>
-            <button onClick={openDashboard}>Dashboard</button>
-            <a href="#testimonial">Impact</a>
-          </nav>
-          <div className="ghibli-nav-actions">
-            {currentUser ? (
-              <>
-                <span className="ghibli-nav-user">{currentUser.email}</span>
-                <button onClick={handleSignOut} className="ghibli-btn-ghost">Sign Out</button>
-              </>
-            ) : (
-              <button onClick={() => setAuthOpen(true)} className="ghibli-btn-solid" onMouseDown={addRipple}>
+
+        <nav className="lb-nav-center">
+          <a href="#demo" className="lb-nav-link">Product Demo</a>
+          <a href="#features" className="lb-nav-link">Capabilities</a>
+          <a href="#process" className="lb-nav-link">Workflow</a>
+          <a href="#trust" className="lb-nav-link">Impact</a>
+        </nav>
+
+        <div className="lb-nav-right">
+          {currentUser ? (
+            <>
+              <button onClick={openDashboard} className="lb-btn-pill" onMouseDown={addRipple}>
+                Open Dashboard ⚡
+              </button>
+              <button onClick={handleSignOut} className="lb-btn-outline">
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={openDashboard} className="lb-btn-outline" onMouseDown={addRipple}>
+                Try Demo
+              </button>
+              <button onClick={() => setAuthOpen(true)} className="lb-btn-pill" onMouseDown={addRipple}>
                 Sign In
               </button>
-            )}
-          </div>
-        </header>
-
-        {/* Centred hero content */}
-        <div className="ghibli-hero-content">
-          <h1 className="ghibli-title reveal" style={{ animationDelay: '0.25s' }}>
-            Clarity for every<br/>public document
-          </h1>
-          <p className="ghibli-subtitle reveal" style={{ animationDelay: '0.45s' }}>
-            AI-powered fairness analysis, plain-language checks, and verifiable review trails for government notices, denials, and agreements.
-          </p>
-          <div className="ghibli-cta-row reveal" style={{ animationDelay: '0.6s' }}>
-            <button 
-              onClick={openDashboard}
-              onMouseDown={addRipple}
-              className="ghibli-cta ripple-btn"
-            >
-              ✦ Open Linter Dashboard
-            </button>
-          </div>
+            </>
+          )}
         </div>
+      </header>
 
-        {/* Bottom trust strip */}
-        <div className="ghibli-trust reveal" style={{ animationDelay: '0.75s' }}>
-          <span className="ghibli-trust-label">Trusted by</span>
-          <div className="ghibli-trust-logos">
-            <span>CivicTech</span>
-            <span>LegalAid</span>
-            <span>OpenGov</span>
-            <span>LexHack 2026</span>
+      {/* 2. HERO SECTION */}
+      <section className="lb-hero">
+        <div className="lb-hero-glow" />
+        <img
+          src="/littlebird_trees_bg.png"
+          alt="Littlebird Nature Landscape"
+          className="lb-hero-tree-bg"
+        />
+        
+        <div className="lb-hero-content">
+          <div className="lb-hero-badge reveal">
+            <span className="lb-hero-badge-dot" />
+            ✦ Procedural Fairness & Plain-Language Audit System
+          </div>
+
+          <h1 className="lb-hero-title reveal" style={{ animationDelay: '0.15s' }}>
+            Bring total clarity to legal &<br />
+            <span className="lb-hero-title-italic">government documents.</span>
+          </h1>
+
+          <p className="lb-hero-subtitle reveal" style={{ animationDelay: '0.3s' }}>
+            LexisGuide automatically lints benefit denials, public notices, and shared agreements — highlighting missing due process, vague deadlines, and actionable citizen guides.
+          </p>
+
+          <div className="lb-hero-actions reveal" style={{ animationDelay: '0.45s' }}>
+            <button onClick={openDashboard} className="lb-btn-pill" onMouseDown={addRipple}>
+              Launch Linter Workspace ⚡
+            </button>
+            <a href="#demo" className="lb-btn-outline">
+              Explore Live Demo ↓
+            </a>
+          </div>
+
+          <div className="lb-trust-strip reveal" style={{ animationDelay: '0.6s' }}>
+            <span className="lb-trust-item">🔒 SHA-256 Verifiable Audit Trail</span>
+            <span className="lb-trust-item">🛡️ Procedural Due Process Standard</span>
+            <span className="lb-trust-item">⚡ Instant Evidence Mapping</span>
           </div>
         </div>
       </section>
-      
-      {/* Rest of content inside container */}
-      <div className="content-container">
-        
-        {/* 2. ABOUT SECTION */}
-        <section id="about" className="about-section">
-          <div className="about-header reveal">
-            <span className="section-tag">// ABOUT LEXISGUIDE</span>
-            <div className="about-statement-container">
-              <h2 className="about-statement">
-                We believe public notices and shared agreements must not require a lawyer just to understand the next step, but <span className="highlight">/ through procedural fairness</span> — quietly bringing clarity, evidence-linked findings, and verifiable review trails.
-              </h2>
-            </div>
-          </div>
-          
-          <div className="stats-grid">
-            {/* Card 1 */}
-            <div className="stat-card card-white tilt-card reveal" style={{ animationDelay: '0.1s' }}>
-              <div className="team-avatar-grid">
-                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '0% 0%' }}></div>
-                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '25% 0%' }}></div>
-                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '50% 0%' }}></div>
-                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '75% 0%' }}></div>
-                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '100% 0%' }}></div>
-                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '15% 50%' }}></div>
-                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '45% 50%' }}></div>
-                <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '75% 50%' }}></div>
-              </div>
-              <div className="stat-bottom">
-                <span className="stat-label">Audited Document Types</span>
-                <span className="stat-number"><AnimatedCounter target={48} suffix="+" /></span>
-              </div>
-            </div>
-            
-            {/* Card 2 */}
-            <div className="stat-card card-dark tilt-card reveal" style={{ animationDelay: '0.2s' }}>
-              <div className="card-header-row">
-                <span className="stat-label-light">LexHack Recognition</span>
-                <div className="award-seal">
-                  <svg width="44" height="44" viewBox="0 0 100 100" fill="currentColor">
-                    <path d="M50 10 A40 40 0 1 0 50 90 A40 40 0 1 0 50 10 Z" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray="4 2"/>
-                    <text x="50" y="48" fontSize="9" textAnchor="middle" fill="currentColor" fontWeight="bold">LEXHACK 2026</text>
-                    <text x="50" y="60" fontSize="7.5" textAnchor="middle" fill="currentColor">BEST CIVIC TECH</text>
-                  </svg>
-                </div>
-              </div>
-              <div className="stat-number-large"><AnimatedCounter target={12} suffix="+" /></div>
-              <p className="stat-description">Featured and celebrated for procedural fairness, evidence spans, and human-in-the-loop decision support.</p>
-            </div>
-            
-            {/* Card 3 */}
-            <div className="stat-card card-soft tilt-card reveal" style={{ animationDelay: '0.3s' }}>
-              <p className="stat-top-text">From ambiguous benefit denials to complex lease agreements, every notice is audited for clarity and due process.</p>
-              <div className="stat-bottom">
-                <span className="stat-label">Fairness Score Jump (v1 → v4)</span>
-                <span className="stat-number"><AnimatedCounter target={89} suffix="/100" /></span>
-              </div>
-            </div>
-            
-            {/* Card 4 */}
-            <div className="stat-card card-landscape tilt-card reveal" style={{ animationDelay: '0.4s' }}>
-              <span className="stat-label-light">Jurisdictions & Rule Packs</span>
-              <div className="stat-number-large"><AnimatedCounter target={14} suffix="+" /></div>
-              <p className="stat-description-light">Collaborating remotely with civic tech teams and public advocates nationwide.</p>
-            </div>
-          </div>
-        </section>
-        
-        {/* 3. PROCESS SECTION */}
-        <section id="process" className="process-section">
-          <div className="section-top-grid reveal">
-            <div className="left-col">
-              <span className="section-tag">// CORE WORKFLOW</span>
-              <h2 className="section-heading">Our Process Moves<br />Like Production.</h2>
-            </div>
-            <div className="right-col">
-              <p className="section-intro">
-                One upload, two outputs: a procedural fairness audit and a practical next-step guide. Every flagged issue links back to exact document evidence and the rule that triggered it.
-              </p>
-            </div>
-          </div>
-          
-          <div className="process-grid">
-            {[
-              { header: 'Upload & Extract', num: '01', title: 'Extract', desc: 'Parses PDFs, letters, screenshots, or public web notices to extract issuing agency, decisions, filing dates, and appeal rights.' },
-              { header: 'Procedural Lint', num: '02', title: 'Lint', desc: 'Executes rule-based and AI checks to spot vague deadlines, missing appeal paths, and contradictory instructions.' },
-              { header: 'Plain-Language Guide', num: '03', title: 'Guide', desc: 'Translates legalese into plain-language next steps: what happened, what to do, by when, and consequences of doing nothing.' },
-              { header: 'Verifiable Review Chain', num: '04', title: 'Chain', desc: 'Generates SHA-256 hashes, rule-set versioning, and evidence spans to record an auditable provenance trail from v1 to v2.' },
-            ].map((step, i) => (
-              <div
-                key={step.num}
-                className="process-card tilt-card reveal"
-                style={{ animationDelay: `${0.1 + i * 0.12}s`, cursor: 'pointer' }}
-                onClick={openDashboard}
-                onMouseDown={addRipple}
+
+      {/* 3. PRODUCT DEMO SHOWCASE */}
+      <section id="demo" className="lb-demo-section reveal">
+        <div className="lb-demo-card">
+          {/* Demo Navbar */}
+          <div className="lb-demo-navbar">
+            <div className="lb-demo-tabs">
+              <button
+                className={`lb-demo-tab ${demoTab === 'linter' ? 'active' : ''}`}
+                onClick={() => setDemoTab('linter')}
               >
-                <div className="process-header">{step.header}</div>
-                <div className="process-body">
-                  <div className="step-num">{step.num}</div>
-                  <h3 className="process-title">{step.title}</h3>
-                  <p className="process-desc">{step.desc}</p>
+                📋 Notice Linter
+              </button>
+              <button
+                className={`lb-demo-tab ${demoTab === 'audit' ? 'active' : ''}`}
+                onClick={() => setDemoTab('audit')}
+              >
+                ⚖️ Procedural Audit
+              </button>
+              <button
+                className={`lb-demo-tab ${demoTab === 'guide' ? 'active' : ''}`}
+                onClick={() => setDemoTab('guide')}
+              >
+                💡 Action Guide
+              </button>
+              <button
+                className={`lb-demo-tab ${demoTab === 'chain' ? 'active' : ''}`}
+                onClick={() => setDemoTab('chain')}
+              >
+                🔗 Provenance Log
+              </button>
+            </div>
+            <div className="lb-demo-badge">
+              ● Active Rule Pack: v4.2 Civic Fairness
+            </div>
+          </div>
+
+          {/* Demo Content */}
+          <div className="lb-demo-content">
+            {demoTab === 'linter' && (
+              <div className="lb-linter-grid">
+                {/* Document text view */}
+                <div className="lb-doc-preview">
+                  <div className="lb-doc-header">
+                    <div className="lb-doc-agency">Department of Human Services · Division of Benefits</div>
+                    <div className="lb-doc-title">Notice of Supplemental Assistance Discontinuation</div>
+                  </div>
+                  <p>
+                    Re: Case Ref #8942-B. Your application for supplemental support has been evaluated under State Administrative Code § 408.
+                  </p>
+                  <p style={{ marginTop: '12px' }}>
+                    <span className="lb-highlight-critical">CRITICAL FINDING:</span> Benefit payments will cease effective October 1, 2026. If you disagree with this determination, <span className="lb-highlight-critical">you may submit an appeal within a reasonable timeframe</span> to the regional office.
+                  </p>
+                  <p style={{ marginTop: '12px' }}>
+                    <span className="lb-highlight-warning">WARNING FINDING:</span> Failure to provide <span className="lb-highlight-warning">satisfactory verification of secondary household income</span> will result in permanent case closure.
+                  </p>
+                  <p style={{ marginTop: '12px' }}>
+                    <span className="lb-highlight-pass">PASSED:</span> Notice issued with valid issuing officer identifier (Agent ID #9042) and verified administrative hash.
+                  </p>
+                </div>
+
+                {/* Audit Findings */}
+                <div className="lb-findings-column">
+                  <div className="lb-finding-card">
+                    <div className="lb-finding-header">
+                      <span className="lb-tag-critical">Critical Due Process Flag</span>
+                      <span style={{ fontSize: '11px', color: '#8c897f', fontWeight: 600 }}>Rule DP-104</span>
+                    </div>
+                    <div className="lb-finding-title">Vague Filing Deadline</div>
+                    <div className="lb-finding-desc">
+                      The phrase "within a reasonable timeframe" fails statutory specificity requirements. Due process requires exact calendar date or fixed business day window.
+                    </div>
+                    <div className="lb-evidence-box">
+                      "you may submit an appeal within a reasonable timeframe"
+                    </div>
+                  </div>
+
+                  <div className="lb-finding-card">
+                    <div className="lb-finding-header">
+                      <span className="lb-tag-warning">Warning Flag</span>
+                      <span style={{ fontSize: '11px', color: '#8c897f', fontWeight: 600 }}>Rule PL-201</span>
+                    </div>
+                    <div className="lb-finding-title">Undefined Verification Standard</div>
+                    <div className="lb-finding-desc">
+                      Does not specify acceptable document types (e.g. W-2, pay stub, bank statement) needed to satisfy "satisfactory verification".
+                    </div>
+                  </div>
                 </div>
               </div>
-            ))}
+            )}
+
+            {demoTab === 'audit' && (
+              <div className="lb-audit-view">
+                <div className="lb-score-card">
+                  <div className="lb-score-ring">
+                    <div className="lb-score-number">54</div>
+                    <div className="lb-score-denom">/ 100</div>
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-serif)', fontSize: '18px', fontWeight: 600, color: '#191919' }}>
+                    Needs Improvement
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    3 Critical Procedural Flaws Detected
+                  </div>
+                </div>
+
+                <div className="lb-rubric-grid">
+                  <div className="lb-rubric-card">
+                    <div className="lb-rubric-header">
+                      <span>Procedural Due Process</span>
+                      <span style={{ color: '#d32f2f' }}>45%</span>
+                    </div>
+                    <div className="lb-meter-bar">
+                      <div className="lb-meter-fill" style={{ width: '45%', background: '#e53935' }} />
+                    </div>
+                  </div>
+
+                  <div className="lb-rubric-card">
+                    <div className="lb-rubric-header">
+                      <span>Timeline Specificity</span>
+                      <span style={{ color: '#d96b27' }}>30%</span>
+                    </div>
+                    <div className="lb-meter-bar">
+                      <div className="lb-meter-fill" style={{ width: '30%', background: '#d96b27' }} />
+                    </div>
+                  </div>
+
+                  <div className="lb-rubric-card">
+                    <div className="lb-rubric-header">
+                      <span>Plain Language Readability</span>
+                      <span style={{ color: '#2e7d32' }}>82%</span>
+                    </div>
+                    <div className="lb-meter-bar">
+                      <div className="lb-meter-fill" style={{ width: '82%', background: '#2e7d32' }} />
+                    </div>
+                  </div>
+
+                  <div className="lb-rubric-card">
+                    <div className="lb-rubric-header">
+                      <span>Contact & Appeal Rights</span>
+                      <span style={{ color: '#d96b27' }}>60%</span>
+                    </div>
+                    <div className="lb-meter-bar">
+                      <div className="lb-meter-fill" style={{ width: '60%', background: '#d96b27' }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {demoTab === 'guide' && (
+              <div className="lb-guide-view">
+                <div className="lb-guide-header">
+                  <div>
+                    <div className="lb-guide-title">Plain-Language Action Plan for Citizen</div>
+                    <div style={{ fontSize: '13px', color: '#2a4830', marginTop: '2px' }}>
+                      Generated automatically from Notice Ref #8942-B
+                    </div>
+                  </div>
+                  <button className="lb-btn-pill" style={{ padding: '8px 16px', fontSize: '12px' }} onClick={openDashboard}>
+                    Download Appeal Template ↗
+                  </button>
+                </div>
+
+                <div className="lb-guide-steps">
+                  <div className="lb-guide-step-item">
+                    <div className="lb-step-badge">1</div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '14.5px', color: '#191919' }}>
+                        File Appeal Notice Form DHS-4082
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        Submit your appeal within 30 days of notice postmark (Estimated deadline: October 12, 2026).
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="lb-guide-step-item">
+                    <div className="lb-step-badge">2</div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '14.5px', color: '#191919' }}>
+                        Gather Secondary Income Proof
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        Attach 2 recent paystubs or a signed affidavit confirming current monthly income.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="lb-guide-step-item">
+                    <div className="lb-step-badge">3</div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '14.5px', color: '#191919' }}>
+                        Request Hearing Continuation
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        Your benefits continue automatically during administrative review if appeal is filed within 10 days.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {demoTab === 'chain' && (
+              <div className="lb-chain-view">
+                <div style={{ fontSize: '12px', color: '#86efac', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '16px' }}>
+                  ✓ Cryptographic Provenance Verified
+                </div>
+                <div className="lb-chain-row">
+                  <span className="lb-chain-key">Document SHA-256 Hash:</span>
+                  <span className="lb-chain-val">e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</span>
+                </div>
+                <div className="lb-chain-row">
+                  <span className="lb-chain-key">Rule Pack Standard:</span>
+                  <span className="lb-chain-val">CIVIC-FAIRNESS-v4.2.1-RELEASE</span>
+                </div>
+                <div className="lb-chain-row">
+                  <span className="lb-chain-key">Audit Timestamp:</span>
+                  <span className="lb-chain-val">2026-09-19T13:51:22.000Z</span>
+                </div>
+                <div className="lb-chain-row">
+                  <span className="lb-chain-key">Review Chain Signature:</span>
+                  <span className="lb-chain-val">0x9f82...3a1c (Cognito Authenticated)</span>
+                </div>
+              </div>
+            )}
           </div>
-        </section>
-        
-        {/* 4. TESTIMONIALS SECTION */}
-        <section id="testimonial" className="testimonials-section">
-          <div className="section-top-grid reveal">
-            <div className="left-col">
-              <span className="section-tag">// AUDIT & IMPACT</span>
-              <h2 className="section-heading">Voices Between Frames</h2>
+        </div>
+      </section>
+
+      {/* 4. FLOATING FEATURE CARDS (LITTLEBIRD STYLE) */}
+      <section id="features" className="lb-features-section">
+        <div className="lb-section-header reveal">
+          <span className="lb-section-tag">Core Capabilities</span>
+          <h2 className="lb-section-title">
+            Built for total fairness.<br />Backed by verifiable evidence.
+          </h2>
+        </div>
+
+        <div className="lb-features-grid">
+          <div className="lb-feature-card tilt-card reveal" style={{ animationDelay: '0.1s' }}>
+            <div className="lb-feature-icon">🔍</div>
+            <h3 className="lb-feature-title">Instant Notice Extraction</h3>
+            <p className="lb-feature-desc">
+              Parses PDFs, scanned notices, and agency letters automatically — extracting issuing authority, effective dates, filing deadlines, and statutory references.
+            </p>
+          </div>
+
+          <div className="lb-feature-card tilt-card reveal" style={{ animationDelay: '0.2s' }}>
+            <div className="lb-feature-icon">⚖️</div>
+            <h3 className="lb-feature-title">Procedural Due Process Linter</h3>
+            <p className="lb-feature-desc">
+              Evaluates document text against 40+ statutory rule packs to catch ambiguous deadlines, missing appeal forms, and procedural due process violations.
+            </p>
+          </div>
+
+          <div className="lb-feature-card tilt-card reveal" style={{ animationDelay: '0.3s' }}>
+            <div className="lb-feature-icon">🔗</div>
+            <h3 className="lb-feature-title">Cryptographic Review Chain</h3>
+            <p className="lb-feature-desc">
+              Generates immutable SHA-256 hashes and evidence spans to record a verifiable provenance trail between citizens, advocates, and public agencies.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. PROCESS SECTION */}
+      <section id="process" className="lb-process-section">
+        <div className="lb-process-container">
+          <div className="lb-section-header reveal">
+            <span className="lb-section-tag">Production Workflow</span>
+            <h2 className="lb-section-title">One Upload. Two Auditable Outputs.</h2>
+          </div>
+
+          <div className="lb-process-grid">
+            <div className="lb-process-card tilt-card reveal" style={{ animationDelay: '0.1s' }}>
+              <div className="lb-process-num">01</div>
+              <h4 className="lb-process-name">Extract & Parse</h4>
+              <p className="lb-process-text">
+                Optical character parsing extracts agency details, decisions, dates, and statutory appeal paths.
+              </p>
             </div>
-            <div className="right-col">
-              <p className="section-intro">
-                Behind every notice is a resident seeking clarity. LexisGuide bridges the gap between legal validity and real-world usability for applicants, advocates, and public agencies.
+
+            <div className="lb-process-card tilt-card reveal" style={{ animationDelay: '0.2s' }}>
+              <div className="lb-process-num">02</div>
+              <h4 className="lb-process-name">Execute Linter</h4>
+              <p className="lb-process-text">
+                Rule engine scans text for vague wording, missing form links, and procedural due process gaps.
+              </p>
+            </div>
+
+            <div className="lb-process-card tilt-card reveal" style={{ animationDelay: '0.3s' }}>
+              <div className="lb-process-num">03</div>
+              <h4 className="lb-process-name">Action Guide</h4>
+              <p className="lb-process-text">
+                Translates legalese into a bulleted action checklist with clear filing steps and deadline countdowns.
+              </p>
+            </div>
+
+            <div className="lb-process-card tilt-card reveal" style={{ animationDelay: '0.4s' }}>
+              <div className="lb-process-num">04</div>
+              <h4 className="lb-process-name">Provenance Trail</h4>
+              <p className="lb-process-text">
+                Cryptographic hash logs verify that both advocate and agency reference the exact same document version.
               </p>
             </div>
           </div>
-          
-          <div className="testimonials-grid">
-            {/* Featured Rating Card */}
-            <div className="testimonial-card rating-card tilt-card reveal" style={{ animationDelay: '0.1s' }}>
-              <div className="rating-top">
-                <div className="big-score"><AnimatedCounter target={89} suffix="" /><span className="score-denom">/ 100</span></div>
-                <div className="laurel-icon">
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M12 2l2.4 5 5.6.8-4 4 1 5.6-5-2.6-5 2.6 1-5.6-4-4 5.6-.8z"/>
-                  </svg>
-                </div>
+        </div>
+      </section>
+
+      {/* 6. TESTIMONIALS / TRUST */}
+      <section id="trust" className="lb-trust-section">
+        <div className="lb-quote-card tilt-card reveal">
+          <div className="lb-quote-stars">★★★★★</div>
+          <p className="lb-quote-text">
+            "LexisGuide transformed our legal aid intake. We audit notices in seconds, highlighting vague appeal paths with 100% evidence linkage."
+          </p>
+          <div className="lb-quote-author">
+            <div className="lb-author-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '20% 50%' }} />
+            <div>
+              <div className="lb-author-name">Elena Moritz</div>
+              <div className="lb-author-role">Legal Aid Director · CivicTech Fellow</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 7. CTA BANNER */}
+      <section className="lb-cta-section">
+        <div className="lb-cta-card reveal">
+          <h2 className="lb-cta-title">
+            Ready to bring total clarity to<br />your public documents?
+          </h2>
+          <p className="lb-cta-subtitle">
+            Join legal aid advocates, civic leaders, and public agencies using LexisGuide for procedural fairness.
+          </p>
+          <button className="lb-cta-btn-green" onClick={openDashboard} onMouseDown={addRipple}>
+            Launch Linter Workspace ⚡
+          </button>
+        </div>
+      </section>
+
+      {/* 8. FOOTER */}
+      <footer className="lb-footer">
+        <div className="lb-footer-container">
+          <div className="lb-footer-top">
+            <div style={{ maxWidth: '360px' }}>
+              <div style={{ fontFamily: 'var(--font-serif)', fontSize: '24px', fontWeight: 700, color: '#191919', marginBottom: '12px' }}>
+                LexisGuide
               </div>
-              
-              <p className="rating-text">
-                Audited across procedural clarity, due process, filing deadlines, and plain language. Every finding links to exact document evidence.
+              <p style={{ fontSize: '13.5px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+                Lighthouse for public documents and shared agreements. Ensuring procedural fairness, evidence-linked findings, and verifiable review trails.
               </p>
-              
-              <div className="rating-footer">
-                <div className="reviews-avatar-row">
-                  <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '0% 50%' }}></div>
-                  <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '50% 50%' }}></div>
-                  <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '100% 50%' }}></div>
-                  <span className="reviews-count">100+ Audits Completed</span>
-                </div>
-                <button className="share-btn" onClick={openDashboard} onMouseDown={addRipple}>Open Live Dashboard ⚡</button>
-              </div>
             </div>
-            
-            {/* Review Card 1 */}
-            <div className="testimonial-card review-card tilt-card reveal" style={{ animationDelay: '0.2s' }}>
-              <div className="quote-mark">"</div>
-              <p className="review-text">LexisGuide didn't just highlight vague appeal paths. It gave our case workers an evidence-linked audit in seconds.</p>
-              <div className="review-footer">
-                <div className="reviewer-info">
-                  <div className="reviewer-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '20% 50%' }}></div>
-                  <div>
-                    <h4 className="reviewer-name">Elena Moritz</h4>
-                    <p className="reviewer-role">Legal Aid Director</p>
-                  </div>
-                </div>
-                <div className="review-meta">
-                  <span className="stars">★★★★★</span>
-                  <span className="project-tag">Notice Audit, Evidence-Linked</span>
-                </div>
-              </div>
+
+            <div className="lb-footer-col">
+              <span className="lb-footer-title">Platform</span>
+              <a href="#demo" className="lb-footer-link">Notice Linter</a>
+              <a href="#demo" className="lb-footer-link">Procedural Audit</a>
+              <a href="#demo" className="lb-footer-link">Citizen Guide</a>
+              <a href="#demo" className="lb-footer-link">Provenance Log</a>
             </div>
-            
-            {/* Review Card 2 */}
-            <div className="testimonial-card review-card tilt-card reveal" style={{ animationDelay: '0.3s' }}>
-              <div className="reviewer-top-row">
-                <div className="reviewer-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '70% 50%' }}></div>
-                <div>
-                  <h4 className="reviewer-name">Kai Nakamura</h4>
-                  <p className="reviewer-role">Civic Tech Fellow</p>
-                </div>
-              </div>
-              <div className="quote-mark">"</div>
-              <p className="review-text">Working with LexisGuide felt less like reading dry statutes and more like following a clear, auditable checklist together.</p>
-              <div className="review-footer">
-                <div className="review-meta">
-                  <span className="stars">★★★★★</span>
-                  <span className="project-tag">Procedural Fairness, SHA-256</span>
-                </div>
-              </div>
-            </div>
-            
-            {/* Review Card 3 */}
-            <div className="testimonial-card review-card tilt-card reveal" style={{ animationDelay: '0.4s' }}>
-              <div className="quote-mark">"</div>
-              <p className="review-text">The review chain tracks every edit from v1 to v2. Our agency reduced deadline inquiries by 40% before publication.</p>
-              <div className="review-footer">
-                <div className="reviewer-info">
-                  <div className="reviewer-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '90% 50%' }}></div>
-                  <div>
-                    <h4 className="reviewer-name">Marcus Vane</h4>
-                    <p className="reviewer-role">Public Service Lead</p>
-                  </div>
-                </div>
-                <div className="review-meta">
-                  <span className="stars">★★★★★</span>
-                  <span className="project-tag">Shared Workspace, Version Chain</span>
-                </div>
-              </div>
+
+            <div className="lb-footer-col">
+              <span className="lb-footer-title">Governance</span>
+              <a href="#" className="lb-footer-link">Rule Packs</a>
+              <a href="#" className="lb-footer-link">Due Process Standard</a>
+              <a href="#" className="lb-footer-link">LexHack 2026</a>
+              <a href="#" className="lb-footer-link">API & SDK</a>
             </div>
           </div>
-          
-          {/* Bottom Section Brand Strip */}
-          <div className="testimonials-brand-strip reveal">
-            <span className="t-brand">CivicTech</span>
-            <span className="t-brand">LegalAid</span>
-            <span className="t-brand">OpenGov</span>
-            <span className="t-brand">FairnessLinter</span>
-            <span className="t-brand">LexHack</span>
-            <span className="t-brand">ReviewChain</span>
-            <span className="t-brand">DueProcess</span>
-          </div>
-        </section>
-        
-      </div>
-      
-      {/* 5. FOOTER SECTION */}
-      <footer className="footer reveal">
-        <div className="footer-header">
-          <h2 className="footer-logo">LexisGuide</h2>
-          <span className="footer-year">© 20 - 26°</span>
-        </div>
-        
-        <div className="footer-middle">
-          <div className="footer-col main-col">
-            <p className="footer-tagline">For civic leaders, legal aid advocates, and public services ready to make due process understandable, reviewable, and verifiable.</p>
-            <a href="mailto:hello@lexisguide.gov" className="footer-email">hello@lexisguide.gov</a>
-          </div>
-          
-          <div className="footer-col">
-            <h4 className="col-title">NAVIGATION</h4>
-            <a href="#about">About</a>
-            <a href="#process">Workflow</a>
-            <a href="#process">Linter</a>
-            <a href="#testimonial">Review Chain</a>
-            <a href="#testimonial">Audit Impact</a>
-          </div>
-          
-          <div className="footer-col">
-            <h4 className="col-title">MODULES</h4>
-            <button onClick={openDashboard} style={{ background: 'none', border: 'none', color: '#9ab0a0', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}>Procedural Linter ⚡</button>
-            <button onClick={openDashboard} style={{ background: 'none', border: 'none', color: '#9ab0a0', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}>Verifiable Chain ⚡</button>
-            <button onClick={openDashboard} style={{ background: 'none', border: 'none', color: '#9ab0a0', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}>Shared Workspace ⚡</button>
-          </div>
-          
-          <div className="footer-col">
-            <h4 className="col-title">SOCIAL MEDIA</h4>
-            <div className="social-icons">
-              <a href="#" aria-label="Dribbble" className="social-btn">🏀</a>
-              <a href="#" aria-label="Twitter" className="social-btn">🌐</a>
-              <a href="#" aria-label="GitHub" className="social-btn">💻</a>
-              <a href="#" aria-label="LinkedIn" className="social-btn">💼</a>
-            </div>
-          </div>
-        </div>
-        
-        <div className="footer-bottom">
-          <div className="contact-info">
-            <div className="info-block">
-              <span className="info-label">PHONE NUMBER</span>
-              <span className="info-val">+01 (555) 019-2834</span>
-            </div>
-            <div className="info-block">
-              <span className="info-label">HEADQUARTERS</span>
-              <span className="info-val">CIVIC TECH HUB, LEXHACK 2026, WASHINGTON DC</span>
-            </div>
-            <div className="info-block">
-              <span className="info-label">DISCLAIMER</span>
-              <span className="info-val">DECISION SUPPORT — NOT LEGAL ADVICE</span>
-            </div>
-          </div>
-          
-          <div className="footer-legal">
-            <span className="copyright">© 2026 LexisGuide Inc. All rights reserved.</span>
-            <div className="legal-links">
-              <a href="#">Terms & Condition</a>
-              <a href="#">Privacy Policy</a>
-              <a href="#" className="back-to-top" aria-label="Back to top">↑</a>
+
+          <div className="lb-footer-bottom">
+            <span>© 2026 LexisGuide Inc. All rights reserved. Decision support — not formal legal representation.</span>
+            <div style={{ display: 'flex', gap: '20px' }}>
+              <a href="#" className="lb-footer-link">Privacy</a>
+              <a href="#" className="lb-footer-link">Terms</a>
+              <a href="#" className="lb-footer-link">Security</a>
             </div>
           </div>
         </div>
       </footer>
 
-      {/* Toast */}
+      {/* Toast Notification */}
       {toast && (
         <div className="toast-notification">
           {toast}

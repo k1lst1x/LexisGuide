@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import BarLoader from '@/components/ui/bar-loader'
 
 type Props = { onComplete: () => void }
 
@@ -284,6 +285,16 @@ export function SplashScreen({ onComplete }: Props) {
           <span className="terminal-msg">{statusMsg}</span>
           <span className="terminal-cursor" />
         </div>
+
+        {/* Animated BarLoader */}
+        <BarLoader
+          bars={10}
+          barWidth={7}
+          barHeight={44}
+          color="bg-[#325238]"
+          speed={1.2}
+          className="my-3"
+        />
 
         {/* Bottom flat progress bar */}
         <div className="splash-bar-track">

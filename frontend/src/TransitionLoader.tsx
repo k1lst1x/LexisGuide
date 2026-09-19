@@ -1,3 +1,5 @@
+import BarLoader from '@/components/ui/bar-loader'
+
 type Props = {
   visible: boolean
   message?: string
@@ -8,19 +10,16 @@ export function TransitionLoader({ visible, message = 'Loading workspace...' }: 
 
   return (
     <div className="transition-overlay">
-      <div className="transition-content">
-        <div className="transition-spinner-wrap">
-          <div className="transition-ring-outer" />
-          <div className="transition-dots">
-            <span className="t-dot" style={{ animationDelay: '0s' }} />
-            <span className="t-dot" style={{ animationDelay: '0.15s' }} />
-            <span className="t-dot" style={{ animationDelay: '0.3s' }} />
-          </div>
-        </div>
-        <p className="transition-msg">{message}</p>
-        <div className="transition-bar-track">
-          <div className="transition-bar-fill" />
-        </div>
+      <div className="transition-content flex flex-col items-center gap-6">
+        <BarLoader
+          bars={10}
+          barWidth={8}
+          barHeight={64}
+          color="bg-[#325238]"
+          speed={1.2}
+          className="my-2"
+        />
+        <p className="transition-msg font-serif text-lg text-[#191919]">{message}</p>
       </div>
     </div>
   )
