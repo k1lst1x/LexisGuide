@@ -24,7 +24,7 @@ function App() {
     <header className="site-nav container">
       <a className="wordmark" href="#top"><span className="wordmark-symbol">L</span>LexisGuide</a>
       <nav><a href="#features">Product</a><a href="#security">Trust</a><a href="#faq">FAQ</a></nav>
-      <button className="nav-button" onClick={start}>Try LexisGuide <Arrow /></button>
+      <button className="nav-button" onClick={start}>Login <Arrow /></button>
     </header>
 
     <main id="top">
@@ -33,7 +33,7 @@ function App() {
         <h1>The clarity layer<br />for <i>legal documents.</i></h1>
         <p className="hero-intro">Understand government notices and shared agreements instantly. Analyze, explain, and improve important documents with evidence you can verify.</p>
         <div className="hero-actions"><button className="primary-button" onClick={start}>Explore the product <Arrow /></button><a href="#features" className="under-link">See what it does ↓</a></div>
-        <div className="hero-orbit"><div className="orbit-card orbit-card-main"><span className="orbit-icon">✦</span><strong>Notice of Denial</strong><small>3 issues found · 54/100</small></div><div className="orbit-card orbit-card-side"><span className="orbit-check">✓</span><strong>Evidence linked</strong><small>Rule + source span</small></div><div className="orbit-card orbit-card-bottom"><span>next step</span><b>Appeal by May 18</b></div><div className="orbit-ring ring-a" /><div className="orbit-ring ring-b" /></div>
+        <div className="hero-orbit"><div className="ribbon-field"><span className="ribbon ribbon-one" /><span className="ribbon ribbon-two" /><span className="ribbon ribbon-three" /><span className="ribbon ribbon-four" /></div><div className="orbit-card orbit-card-main"><span className="orbit-icon">✦</span><strong>Notice of Denial</strong><small>3 issues found · 54/100</small></div><div className="orbit-card orbit-card-side"><span className="orbit-check">✓</span><strong>Evidence linked</strong><small>Rule + source span</small></div><div className="orbit-card orbit-card-bottom"><span>next step</span><b>Appeal by May 18</b></div><div className="orbit-ring ring-a" /><div className="orbit-ring ring-b" /></div>
       </section>
 
       <section className="proof-strip"><div className="container proof-inner"><span>BUILT FOR DOCUMENTS THAT SHAPE OUR LIVES</span><div className="proof-items"><b>RESIDENTS</b><b>LEGAL AID</b><b>PUBLIC SERVICE</b><b>SHARED AGREEMENTS</b></div></div></section>
