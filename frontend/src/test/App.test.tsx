@@ -19,6 +19,8 @@ vi.mock('../SplashScreen', () => ({
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
+    window.history.pushState({}, '', '/')
   })
 
   it('restores an existing Cognito session and signs the user out', async () => {
@@ -39,5 +41,27 @@ describe('App', () => {
 
     expect(authMocks.cognitoSignOut).toHaveBeenCalledOnce()
     expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
+  })
+
+  it('restores the last workspace even when local sign-in has no Cognito session', async () => {
+    const user = userEvent.setup()
+    authMocks.cognitoGetCurrentUser.mockResolvedValue(null)
+    window.localStorage.setItem('lexisguide:workspace', 'open')
+    window.localStorage.setItem('lexisguide:workspace-user', JSON.stringify({ email: 'saved@example.com', username: 'saved@example.com' }))
+    window.localStorage.setItem('lexisguide:last-section', 'documents')
+
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: 'Complete splash' }))
+
+    expect(await screen.findByRole('heading', { name: 'Documents' })).toBeInTheDocument()
+  })
+
+  it('shows a helpful not-found page for an unknown route', () => {
+    window.history.pushState({}, '', '/missing-page')
+
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'That page took a wrong turn.' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /back to home/i })).toHaveAttribute('href', '/')
   })
 })

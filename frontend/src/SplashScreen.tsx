@@ -10,11 +10,7 @@ function useGlitchReveal(text: string, startDelay = 200) {
   const [phase, setPhase] = useState<'waiting' | 'glitching' | 'done'>('waiting')
 
   useEffect(() => {
-    let timeout: ReturnType<typeof setTimeout>
-    let interval: ReturnType<typeof setInterval>
-    let iteration = 0
-
-    timeout = setTimeout(() => {
+    const timeout: ReturnType<typeof setTimeout> = setTimeout(() => {
       setPhase('glitching')
       interval = setInterval(() => {
         setDisplayed(
@@ -35,6 +31,8 @@ function useGlitchReveal(text: string, startDelay = 200) {
         iteration += 0.7
       }, 40)
     }, startDelay)
+    let interval: ReturnType<typeof setInterval>
+    let iteration = 0
 
     return () => {
       clearTimeout(timeout)

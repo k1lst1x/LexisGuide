@@ -3,7 +3,22 @@ import AuthSectionOne from '@/components/ui/auth-section-1'
 import { DashboardV2 } from './DashboardV2'
 import { SplashScreen } from './SplashScreen'
 import { TransitionLoader } from './TransitionLoader'
+import { NotFoundPage } from './NotFoundPage'
 import { cognitoGetCurrentUser, cognitoSignOut } from './aws'
+
+const WORKSPACE_KEY = 'lexisguide:workspace'
+const WORKSPACE_USER_KEY = 'lexisguide:workspace-user'
+
+function readWorkspaceUser() {
+  try {
+    const value = window.localStorage.getItem(WORKSPACE_USER_KEY)
+    if (!value) return null
+    const user = JSON.parse(value) as { email?: unknown; username?: unknown }
+    return typeof user.email === 'string' && typeof user.username === 'string' ? { email: user.email, username: user.username } : null
+  } catch {
+    return null
+  }
+}
 
 /* ───── Scroll reveal hook ───── */
 function useScrollReveal() {
@@ -120,14 +135,25 @@ export function App() {
   useScrollReveal()
   useTilt(contentRef)
 
+  const isUnknownPath = !['/', '/dashboard'].includes(window.location.pathname)
+
   // Check existing session on mount
   useEffect(() => {
     let mounted = true
+    const wantsWorkspace = window.location.pathname === '/dashboard' || window.localStorage.getItem(WORKSPACE_KEY) === 'open'
+    const savedUser = readWorkspaceUser()
     cognitoGetCurrentUser()
       .then((user) => {
-        if (!mounted || !user) return
-        setCurrentUser({ email: user.email, username: user.username })
-        if (window.localStorage.getItem('lexisguide:workspace') !== 'closed') setDashOpen(true)
+        if (!mounted) return
+        if (user) {
+          const restoredUser = { email: user.email, username: user.username }
+          setCurrentUser(restoredUser)
+          window.localStorage.setItem(WORKSPACE_USER_KEY, JSON.stringify(restoredUser))
+          if (window.localStorage.getItem(WORKSPACE_KEY) !== 'closed') setDashOpen(true)
+        } else if (savedUser) {
+          setCurrentUser(savedUser)
+        }
+        if (!user && wantsWorkspace) setDashOpen(true)
       })
       .catch(() => {})
       .finally(() => {
@@ -155,7 +181,8 @@ export function App() {
     setAuthOpen(false)
     setCurrentUser({ email, username: email })
     setDashOpen(true)
-    window.localStorage.setItem('lexisguide:workspace', 'open')
+    window.localStorage.setItem(WORKSPACE_KEY, 'open')
+    window.localStorage.setItem(WORKSPACE_USER_KEY, JSON.stringify({ email, username: email }))
     setToast(`✓ Authenticated as ${email} via AWS Cognito`)
   }
 
@@ -163,13 +190,14 @@ export function App() {
     await cognitoSignOut().catch(() => {})
     setCurrentUser(null)
     setDashOpen(false)
-    window.localStorage.removeItem('lexisguide:workspace')
+    window.localStorage.removeItem(WORKSPACE_KEY)
+    window.localStorage.removeItem(WORKSPACE_USER_KEY)
     window.localStorage.removeItem('lexisguide:last-section')
     setToast('Signed out of AWS session.')
   }
 
   const openDashboard = useCallback(() => {
-    window.localStorage.setItem('lexisguide:workspace', 'open')
+    window.localStorage.setItem(WORKSPACE_KEY, 'open')
     setTransitionMsg('Initializing Audit Workspace...')
     setTransitioning(true)
     setTimeout(() => {
@@ -179,12 +207,14 @@ export function App() {
   }, [])
 
   const closeDashboard = useCallback(() => {
-    window.localStorage.setItem('lexisguide:workspace', 'closed')
+    window.localStorage.setItem(WORKSPACE_KEY, 'closed')
     setTransitionMsg('Returning to LexisGuide...')
     setTransitioning(true)
     setDashOpen(false)
     setTimeout(() => setTransitioning(false), 800)
   }, [])
+
+  if (isUnknownPath) return <NotFoundPage />
 
   /* ───── SPLASH ───── */
   if (!splashDone) {
