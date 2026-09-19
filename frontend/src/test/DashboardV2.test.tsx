@@ -48,6 +48,17 @@ describe('DashboardV2', () => {
     expect(screen.getByRole('button', { name: /Sign Out & Exit/ })).toBeInTheDocument()
   })
 
+  it('shows interactive workspace activity time in Profile', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Profile' }))
+    expect(screen.getByRole('heading', { name: 'Time in review' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Thu: 74 minutes in the workspace' }))
+    expect(screen.getByText('Thu minutes')).toBeInTheDocument()
+  })
+
   it('explains a highlighted document issue in plain language', async () => {
     const user = userEvent.setup()
     render(<DashboardV2 onClose={vi.fn()} />)

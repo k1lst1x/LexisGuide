@@ -362,6 +362,36 @@ function ScoreGauge({ score }: { score: number }) {
   )
 }
 
+const profileActivity = [
+  { label: 'Mon', minutes: 42 },
+  { label: 'Tue', minutes: 68 },
+  { label: 'Wed', minutes: 31 },
+  { label: 'Thu', minutes: 74 },
+  { label: 'Fri', minutes: 56 },
+  { label: 'Sat', minutes: 18 },
+  { label: 'Sun', minutes: 37 },
+]
+
+function ActivityTimeChart() {
+  const [activeDay, setActiveDay] = useState<number | null>(null)
+  const maxMinutes = Math.max(...profileActivity.map((day) => day.minutes))
+  const displayedActivity = activeDay === null ? profileActivity.reduce((total, day) => total + day.minutes, 0) : profileActivity[activeDay].minutes
+
+  return <section className="d2-settings-card d2-settings-activity" aria-labelledby="activity-time-title">
+    <div className="d2-activity-card-head"><div><span className="d2-eyebrow"><span className="d2-ai-sparkle" aria-hidden="true">✦</span> WORKSPACE ACTIVITY</span><h3 id="activity-time-title">Time in review</h3><p>Time spent reading, checking, and resolving document findings.</p></div><div className="d2-activity-total"><strong>{displayedActivity}</strong><span>{activeDay === null ? 'min this week' : `${profileActivity[activeDay].label} minutes`}</span></div></div>
+    <div className="d2-activity-chart" role="group" aria-label="Weekly activity time">
+      {profileActivity.map((day, index) => {
+        const isActive = activeDay === index
+        const isMuted = activeDay !== null && !isActive
+        return <button key={day.label} className={`d2-activity-bar ${isActive ? 'd2-activity-bar-active' : ''} ${isMuted ? 'd2-activity-bar-muted' : ''}`} style={{ '--activity-height': `${Math.round((day.minutes / maxMinutes) * 100)}%` } as React.CSSProperties} onMouseEnter={() => setActiveDay(index)} onFocus={() => setActiveDay(index)} onClick={() => setActiveDay(index)} aria-label={`${day.label}: ${day.minutes} minutes in the workspace`}>
+          <span className="d2-activity-tooltip">{day.minutes} min</span><i /><em>{day.label.slice(0, 1)}</em>
+        </button>
+      })}
+    </div>
+    <div className="d2-activity-foot"><span><i /> Analysis activity is private to this workspace</span><button type="button" onClick={() => setActiveDay(null)}>Show weekly total</button></div>
+  </section>
+}
+
 function DocumentText({ document, onSelectFinding }: { document: SampleDoc; onSelectFinding: (id: string) => void }) {
   const flagged = document.findings.filter((finding) => finding.severity !== 'pass' && finding.evidence)
   const escaped = flagged.map((finding) => finding.evidence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
@@ -1055,7 +1085,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
               </div>
 
               <div className="d2-settings-grid">
-                <div className="d2-settings-card">
+                <div className="d2-settings-card d2-settings-profile">
                   <h3>Profile</h3>
                   <div className="d2-settings-field">
                     <label>Email</label>
@@ -1067,7 +1097,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   </div>
                 </div>
 
-                <div className="d2-settings-card">
+                <div className="d2-settings-card d2-settings-preferences">
                   <h3>Audit Preferences</h3>
                   <div className="d2-settings-field">
                     <label>Default Rule Pack</label>
@@ -1087,7 +1117,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   </div>
                 </div>
 
-                <div className="d2-settings-card">
+                <div className="d2-settings-card d2-settings-notifications">
                   <h3>Notifications</h3>
                   <div className="d2-toggle-row">
                     <span>Email notifications for new findings</span>
@@ -1102,6 +1132,8 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                     <div className="d2-toggle d2-toggle-on"><div className="d2-toggle-knob" /></div>
                   </div>
                 </div>
+
+                <ActivityTimeChart />
               </div>
             </div>
           )}
