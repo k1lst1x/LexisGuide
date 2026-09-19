@@ -28,7 +28,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Configure GitHub Pages
         id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
