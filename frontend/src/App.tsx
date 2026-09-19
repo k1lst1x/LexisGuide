@@ -205,9 +205,8 @@ export function App() {
       <section className="hero-hero-section">
         <div className="hero-bg-wrapper">
           <img 
-            src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=2560&q=95" 
-            onError={(e) => { (e.target as HTMLImageElement).src = '/assets/hero-bg.png' }}
-            alt="LexisGuide Atmospheric 4K Landscape" 
+            src="/ghibli_hero_bg.jpg" 
+            alt="Studio Ghibli Hero Landscape" 
             className="hero-bg-img" 
             style={{ transform: `translateY(${heroOffset}px) scale(1.08)` }}
           />
