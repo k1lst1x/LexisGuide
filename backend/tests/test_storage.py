@@ -46,6 +46,16 @@ def test_profile_storage_uses_users_partition_key(table: FakeTable) -> None:
     assert table.put_requests == [{"Item": profile}]
 
 
+def test_table_requires_runtime_table_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    storage._table.cache_clear()
+    monkeypatch.delenv("USER_DATA_TABLE", raising=False)
+
+    with pytest.raises(RuntimeError, match="USER_DATA_TABLE"):
+        storage._table()
+
+    storage._table.cache_clear()
+
+
 def test_record_storage_uses_users_partition_key(table: FakeTable) -> None:
     record = storage.save_record("user-123", "record-456", {"type": "document", "title": "Notice"})
 

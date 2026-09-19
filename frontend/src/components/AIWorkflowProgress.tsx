@@ -237,6 +237,10 @@ export function AIWorkflowProgress({
   const completionCalledRef = useRef(false)
 
   const resetForMode = useCallback((targetMode: string) => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
     setCurrentMode(targetMode)
     const baseTasks = customTasks && targetMode === mode ? customTasks : PRESETS[targetMode] || PRESETS['document-audit']
     setTasks(JSON.parse(JSON.stringify(baseTasks)))
@@ -246,6 +250,14 @@ export function AIWorkflowProgress({
     setElapsedMs(0)
     completionCalledRef.current = false
   }, [customTasks, mode])
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current)
+      }
+    }
+  }, [])
 
   // Reset or initialize state when dialog opens or initial mode changes
   useEffect(() => {
@@ -342,7 +354,6 @@ export function AIWorkflowProgress({
 
     return () => {
       window.clearTimeout(timeout)
-      if (timerRef.current) window.clearTimeout(timerRef.current)
     }
   }, [isOpen, activeStep, isFinished, speedMultiplier, autoCloseDelay, onComplete, onClose])
 

@@ -12,6 +12,12 @@ def test_analyze_rejects_empty_document(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_analyze_rejects_documents_above_the_contract_limit(client: TestClient) -> None:
+    response = client.post("/api/v1/analyze", json={"document_text": "a" * 100_001})
+
+    assert response.status_code == 422
+
+
 def test_analyze_returns_legal_disclaimer(client: TestClient) -> None:
     response = client.post("/api/v1/analyze", json={"document_text": "Example agreement."})
 
@@ -79,6 +85,15 @@ def test_profile_update_persists_authenticated_users_data(
     }
 
 
+@pytest.mark.parametrize("display_name", ["", "a" * 121])
+def test_profile_update_validates_display_name_length(
+    authenticated_client: TestClient, display_name: str
+) -> None:
+    response = authenticated_client.put("/api/v1/me", json={"display_name": display_name})
+
+    assert response.status_code == 422
+
+
 def test_records_are_scoped_to_authenticated_user(
     authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -135,3 +150,12 @@ def test_create_record_generates_id_and_validates_type(
         "/api/v1/me/records", json={"type": "unknown", "title": "Invalid"}
     )
     assert invalid_response.status_code == 422
+
+
+@pytest.mark.parametrize("title", ["", "a" * 201])
+def test_create_record_validates_title_length(authenticated_client: TestClient, title: str) -> None:
+    response = authenticated_client.post(
+        "/api/v1/me/records", json={"type": "document", "title": title}
+    )
+
+    assert response.status_code == 422

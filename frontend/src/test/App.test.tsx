@@ -15,6 +15,9 @@ vi.mock('../SplashScreen', () => ({
     <button onClick={onComplete}>Complete splash</button>
   ),
 }))
+vi.mock('@paper-design/shaders-react', () => ({
+  GrainGradient: () => <div data-testid="grain-gradient" />,
+}))
 
 describe('App', () => {
   beforeEach(() => {
@@ -65,6 +68,23 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Complete splash' }))
 
     expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
+  })
+
+  it('opens the local workspace after a valid email sign-in', async () => {
+    const user = userEvent.setup()
+    authMocks.cognitoGetCurrentUser.mockResolvedValue(null)
+
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: 'Complete splash' }))
+    await user.click(await screen.findByRole('button', { name: 'Sign In' }))
+    await user.click(screen.getByRole('button', { name: 'Submit' }))
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(window.localStorage.getItem('lexisguide:workspace')).toBe('open')
+    expect(JSON.parse(window.localStorage.getItem('lexisguide:workspace-user') ?? '{}')).toEqual({
+      email: 'user@lexisguide.gov',
+      username: 'user@lexisguide.gov',
+    })
   })
 
 })
