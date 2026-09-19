@@ -141,3 +141,38 @@ button:focus-visible { outline: 0; box-shadow: 0 0 0 3px rgba(255,100,47,.28), 0
 .light-theme .auth-modal input { color: #211b17; background: rgba(255,255,255,.72); border-color: rgba(43,31,23,.16); }
 .light-theme .social-auth button { color: #3f332c; background: rgba(43,31,23,.05); border-color: rgba(43,31,23,.14); }
 
+/* Replace the abstract document hero with a law-native 3D evidence composition. */
+.scene::before, .scene::after, .scene .scene-halo, .scene .orbit, .scene .document-3d, .scene .node, .scene .cursor-chip { display: none; }
+.legal-visual { position: absolute; inset: 0; z-index: 5; perspective: 1200px; transform-style: preserve-3d; pointer-events: none; }
+.legal-sigil { position: absolute; left: 43%; top: 20%; display: grid; place-items: center; width: 190px; height: 190px; border: 1px solid rgba(255,177,145,.6); border-radius: 50%; color: #fff3ed; background: radial-gradient(circle at 35% 25%, rgba(255,185,156,.38), rgba(255,100,47,.12) 35%, rgba(27,9,4,.66) 72%); box-shadow: 0 0 0 14px rgba(255,100,47,.05), 0 0 75px rgba(255,100,47,.36), inset 0 0 50px rgba(255,170,135,.24); transform: rotateX(12deg) rotateY(-22deg) rotateZ(-7deg); animation: legal-sigil-float 6s ease-in-out infinite; }
+.legal-sigil::before, .legal-sigil::after { content: ''; position: absolute; border: 1px solid rgba(255,208,189,.33); border-radius: 50%; }
+.legal-sigil::before { inset: 17px; }
+.legal-sigil::after { inset: 30px; transform: rotate(45deg) scaleX(.6); }
+.legal-sigil span { position: relative; z-index: 1; font: 500 86px/.8 'Instrument Serif'; text-shadow: 0 0 24px rgba(255,172,140,.7); }
+.legal-sigil small { position: absolute; bottom: 27px; color: #f2c5b1; font: 8px 'DM Mono'; letter-spacing: .2em; }
+.legal-scales { position: absolute; left: 29%; top: 26%; width: 330px; height: 300px; transform-style: preserve-3d; transform: rotateY(-25deg) rotateX(8deg); animation: scales-drift 8s ease-in-out infinite; }
+.scale-beam { position: absolute; left: 20px; top: 39px; width: 280px; height: 12px; border-radius: 999px; background: linear-gradient(90deg, #ffd6c4, #ff642f 45%, #6f2410); box-shadow: 0 0 20px rgba(255,100,47,.55), 0 10px 18px rgba(0,0,0,.35); transform: rotate(-5deg); }
+.scale-chain { position: absolute; left: 156px; top: 12px; width: 8px; height: 260px; border-left: 1px dashed rgba(255,190,160,.62); border-right: 1px dashed rgba(255,190,160,.62); opacity: .75; }
+.scale-pan { position: absolute; top: 89px; display: grid; place-items: center; width: 105px; height: 54px; border: 2px solid rgba(255,208,189,.72); border-top: 0; border-radius: 0 0 55px 55px; background: linear-gradient(145deg, rgba(255,170,133,.35), rgba(81,22,10,.7)); box-shadow: 0 18px 22px rgba(0,0,0,.35), inset 0 0 20px rgba(255,150,109,.16); }
+.scale-pan::before { content: ''; position: absolute; top: -2px; width: 4px; height: 34px; background: #ffb49a; }
+.scale-pan b { margin-top: 18px; color: #ffe5d9; font: 9px 'DM Mono'; letter-spacing: .12em; }
+.scale-pan i { position: absolute; left: -17px; right: -17px; bottom: -11px; height: 2px; background: #ff8b60; box-shadow: 0 0 15px #ff642f; }
+.scale-pan-left { left: -4px; transform: rotate(4deg); animation: pan-left 4.8s ease-in-out infinite; }
+.scale-pan-right { right: -4px; transform: rotate(-4deg); animation: pan-right 4.8s ease-in-out infinite; }
+.legal-card { position: absolute; display: grid; gap: 8px; width: 170px; padding: 18px; color: #332019; background: linear-gradient(145deg, #fff8ef, #efc4ae); border: 1px solid rgba(255,255,255,.8); border-radius: 18px; box-shadow: 22px 28px 35px rgba(0,0,0,.28), inset 0 0 25px rgba(255,255,255,.5); transform-style: preserve-3d; }
+.legal-card small { color: #a75a3c; font: 8px 'DM Mono'; letter-spacing: .14em; }
+.legal-card b { font: 500 26px 'Instrument Serif'; letter-spacing: -.02em; }
+.legal-card span { color: #855845; font: 9px 'DM Mono'; }
+.legal-card-front { right: 5%; top: 17%; transform: rotateY(-18deg) rotateZ(7deg); animation: evidence-card-front 7s ease-in-out infinite; }
+.legal-card-back { left: 8%; bottom: 10%; transform: rotateY(20deg) rotateZ(-8deg); animation: evidence-card-back 8s ease-in-out infinite; }
+.legal-scan-line { position: absolute; left: 18%; top: 12%; width: 68%; height: 1px; background: linear-gradient(90deg, transparent, #ffb79c, transparent); box-shadow: 0 0 18px #ff642f; animation: legal-scan 5s ease-in-out infinite; }
+.light-theme .legal-card { color: #332019; }
+@keyframes legal-sigil-float { 0%, 100% { transform: rotateX(12deg) rotateY(-22deg) rotateZ(-7deg) translate3d(0, 0, 0); } 50% { transform: rotateX(18deg) rotateY(-8deg) rotateZ(2deg) translate3d(10px, -18px, 38px); } }
+@keyframes scales-drift { 0%, 100% { transform: rotateY(-25deg) rotateX(8deg) translate3d(0, 0, 0); } 50% { transform: rotateY(-8deg) rotateX(14deg) translate3d(-12px, -10px, 35px); } }
+@keyframes pan-left { 50% { transform: rotate(-5deg) translateY(15px); } }
+@keyframes pan-right { 50% { transform: rotate(5deg) translateY(-15px); } }
+@keyframes evidence-card-front { 0%, 100% { transform: rotateY(-18deg) rotateZ(7deg) translate3d(0, 0, 0); } 50% { transform: rotateY(-5deg) rotateZ(3deg) translate3d(-20px, -20px, 35px); } }
+@keyframes evidence-card-back { 0%, 100% { transform: rotateY(20deg) rotateZ(-8deg) translate3d(0, 0, 0); } 50% { transform: rotateY(5deg) rotateZ(-3deg) translate3d(18px, -14px, 30px); } }
+@keyframes legal-scan { 0%, 15% { transform: translateY(0) scaleX(.5); opacity: 0; } 35% { opacity: 1; } 78% { transform: translateY(560px) scaleX(1); opacity: 1; } 100% { transform: translateY(560px) scaleX(.5); opacity: 0; } }
+@media (max-width: 800px) { .legal-sigil { left: 42%; top: 15%; width: 145px; height: 145px; }.legal-sigil span { font-size: 65px; }.legal-scales { left: 18%; top: 25%; transform: scale(.78) rotateY(-25deg) rotateX(8deg); transform-origin: top left; }.legal-card-front { right: -2%; top: 11%; transform: scale(.8) rotateY(-18deg) rotateZ(7deg); }.legal-card-back { left: 5%; bottom: 3%; transform: scale(.8) rotateY(20deg) rotateZ(-8deg); } }
+

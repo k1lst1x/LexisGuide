@@ -78,6 +78,15 @@ function App() {
     onScroll()
     return () => { revealObserver.disconnect(); window.removeEventListener('scroll', onScroll) }
   }, [])
+  useEffect(() => {
+    const scene = document.querySelector('.scene')
+    if (!scene) return
+    const visual = document.createElement('div')
+    visual.className = 'legal-visual'
+    visual.innerHTML = '<div class="legal-sigil"><span>§</span><small>LEXISGUIDE</small></div><div class="legal-scales"><span class="scale-beam"></span><span class="scale-chain"></span><span class="scale-pan scale-pan-left"><b>FACT</b><i></i></span><span class="scale-pan scale-pan-right"><b>LAW</b><i></i></span></div><div class="legal-card legal-card-front"><small>CASE / 001</small><b>NOTICE</b><span>evidence linked</span></div><div class="legal-card legal-card-back"><small>RULE / 014</small><b>§ 204.1</b><span>verified source</span></div><div class="legal-scan-line"></div>'
+    scene.appendChild(visual)
+    return () => visual.remove()
+  }, [])
   const go = (message: string) => { document.querySelector('#experience')?.scrollIntoView({ behavior: 'smooth' }); setToast(message) }
 
   if (userEmail) return <Dashboard email={userEmail} onSignOut={() => { setUserEmail(''); setToast('Signed out of your local workspace.') }} />
