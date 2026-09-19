@@ -169,12 +169,51 @@ button:focus-visible { outline: 0; box-shadow: 0 0 0 3px rgba(255,100,47,.28), 0
   aspect-ratio: 1;
   border: 4px solid rgba(255,236,224,.82);
   border-radius: 50%;
-  background: radial-gradient(circle at 32% 25%, rgba(255,255,255,.3), rgba(255,132,91,.11) 28%, rgba(30,10,5,.08) 64%, rgba(255,100,47,.18));
+  background: radial-gradient(circle at 32% 25%, rgba(255,255,255,.14), rgba(255,132,91,.05) 28%, rgba(30,10,5,.02) 64%, rgba(255,100,47,.1));
   box-shadow: 0 0 0 8px rgba(255,100,47,.08), 0 0 28px rgba(255,100,47,.75), inset 0 0 32px rgba(255,195,167,.38), inset -20px -25px 45px rgba(255,83,37,.25);
   backdrop-filter: blur(2px) saturate(1.35);
   transform: translate(-50%, -50%) translateZ(80px) rotate(-18deg);
   transform-style: preserve-3d;
   animation: hero-lens-sweep 7.5s cubic-bezier(.45,.05,.55,.95) infinite;
+}
+.magnifier-viewport {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 50%;
+  width: clamp(190px, 17vw, 290px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) translateZ(86px) rotate(-18deg);
+  transform-style: preserve-3d;
+  box-shadow: inset 0 0 34px rgba(255,255,255,.24), inset 0 -24px 45px rgba(255,100,47,.16);
+  animation: hero-lens-sweep 7.5s cubic-bezier(.45,.05,.55,.95) infinite;
+}
+.magnified-document-face {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 350px;
+  height: 455px;
+  margin: 0;
+  transform: translate(-50%, -50%) scale(1.72);
+  transform-origin: center center;
+  filter: saturate(1.12) contrast(1.05);
+}
+.magnified-document-face::after { animation: none; }
+.magnifier-viewport::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 28%, rgba(255,255,255,.42) 44%, transparent 57%);
+  transform: translateX(-130%);
+  animation: lens-reflection 4.2s ease-in-out infinite;
+}
+@keyframes lens-reflection {
+  0%, 35% { transform: translateX(-130%); }
+  65%, 100% { transform: translateX(130%); }
 }
 .halo-one::after {
   content: '';

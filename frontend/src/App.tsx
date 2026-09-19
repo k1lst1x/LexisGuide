@@ -74,6 +74,18 @@ function App() {
     onScroll()
     return () => { revealObserver.disconnect(); window.removeEventListener('scroll', onScroll) }
   }, [])
+  useEffect(() => {
+    const lens = document.querySelector('.halo-one')
+    const documentFace = document.querySelector('.document-face')
+    if (!lens || !documentFace) return
+    const viewport = document.createElement('div')
+    viewport.className = 'magnifier-viewport'
+    const magnifiedFace = documentFace.cloneNode(true) as HTMLElement
+    magnifiedFace.classList.add('magnified-document-face')
+    viewport.appendChild(magnifiedFace)
+    lens.appendChild(viewport)
+    return () => viewport.remove()
+  }, [])
   const go = (message: string) => { document.querySelector('#experience')?.scrollIntoView({ behavior: 'smooth' }); setToast(message) }
 
   if (userEmail) return <Dashboard email={userEmail} onSignOut={() => { setUserEmail(''); setToast('Signed out of your local workspace.') }} />
