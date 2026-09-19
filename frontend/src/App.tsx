@@ -3,7 +3,6 @@ import AuthSectionOne from '@/components/ui/auth-section-1'
 import { DashboardV2 } from './DashboardV2'
 import { SplashScreen } from './SplashScreen'
 import { TransitionLoader } from './TransitionLoader'
-import { NotFoundPage } from './NotFoundPage'
 import { cognitoGetCurrentUser, cognitoSignOut } from './aws'
 
 const WORKSPACE_KEY = 'lexisguide:workspace'
@@ -135,12 +134,10 @@ export function App() {
   useScrollReveal()
   useTilt(contentRef)
 
-  const isUnknownPath = !['/', '/dashboard'].includes(window.location.pathname)
-
   // Check existing session on mount
   useEffect(() => {
     let mounted = true
-    const wantsWorkspace = window.location.pathname === '/dashboard' || window.localStorage.getItem(WORKSPACE_KEY) === 'open'
+    const wantsWorkspace = window.location.pathname.endsWith('/dashboard') || window.location.hash === '#dashboard' || window.localStorage.getItem(WORKSPACE_KEY) === 'open'
     const savedUser = readWorkspaceUser()
     cognitoGetCurrentUser()
       .then((user) => {
@@ -206,8 +203,6 @@ export function App() {
     setDashOpen(false)
     setTimeout(() => setTransitioning(false), 800)
   }, [])
-
-  if (isUnknownPath) return <NotFoundPage />
 
   /* ───── SPLASH ───── */
   if (!splashDone) {
