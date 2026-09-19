@@ -336,6 +336,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
                 key={item.key}
                 className={`d2-nav-btn ${activeNav === item.key ? 'd2-nav-active' : ''}`}
                 onClick={() => setActiveNav(item.key)}
+                aria-label={item.label}
                 title={item.label}
               >
                 <span className="d2-nav-icon">{icons[item.key]}</span>

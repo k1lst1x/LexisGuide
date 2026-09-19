@@ -33,7 +33,15 @@ def save_record(user_id: str, record_id: str, record: dict[str, Any]) -> dict[st
 
 
 def list_records(user_id: str) -> list[dict[str, Any]]:
-    response = _table().query(
-        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("RECORD#")
-    )
-    return response.get("Items", [])
+    records: list[dict[str, Any]] = []
+    query_args: dict[str, Any] = {
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("RECORD#")
+    }
+
+    while True:
+        response = _table().query(**query_args)
+        records.extend(response.get("Items", []))
+        last_evaluated_key = response.get("LastEvaluatedKey")
+        if last_evaluated_key is None:
+            return records
+        query_args["ExclusiveStartKey"] = last_evaluated_key

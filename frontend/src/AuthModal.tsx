@@ -14,6 +14,10 @@ type Props = {
   onSuccess: (email: string) => void
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
 export function AuthModal({ onClose, onSuccess }: Props) {
   const [mode, setMode] = useState<'signIn' | 'signUp' | 'confirm' | 'forgotPw' | 'resetPw'>('signIn')
   const [email, setEmail] = useState('')
@@ -60,8 +64,8 @@ export function AuthModal({ onClose, onSuccess }: Props) {
         setMode('signIn')
         setErrorMsg('')
       }
-    } catch (err: any) {
-      const msg = err.message || 'Authentication error. Please try again.'
+    } catch (error: unknown) {
+      const msg = getErrorMessage(error, 'Authentication error. Please try again.')
       setErrorMsg(msg)
       triggerShake()
     } finally {
@@ -74,8 +78,8 @@ export function AuthModal({ onClose, onSuccess }: Props) {
     setLoading(true)
     try {
       await cognitoGoogleSignIn()
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Google sign-in failed. Ensure Google is configured in Cognito.')
+    } catch (error: unknown) {
+      setErrorMsg(getErrorMessage(error, 'Google sign-in failed. Ensure Google is configured in Cognito.'))
       triggerShake()
       setLoading(false)
     }
@@ -86,8 +90,8 @@ export function AuthModal({ onClose, onSuccess }: Props) {
     setLoading(true)
     try {
       await cognitoAppleSignIn()
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Apple sign-in failed. Ensure Apple is configured in Cognito.')
+    } catch (error: unknown) {
+      setErrorMsg(getErrorMessage(error, 'Apple sign-in failed. Ensure Apple is configured in Cognito.'))
       triggerShake()
       setLoading(false)
     }

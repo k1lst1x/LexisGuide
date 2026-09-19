@@ -1,0 +1,137 @@
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.api.v1 import routes
+
+
+def test_analyze_rejects_empty_document(client: TestClient) -> None:
+    response = client.post("/api/v1/analyze", json={"document_text": ""})
+
+    assert response.status_code == 422
+
+
+def test_analyze_returns_legal_disclaimer(client: TestClient) -> None:
+    response = client.post("/api/v1/analyze", json={"document_text": "Example agreement."})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "findings": [],
+        "disclaimer": "LexisGuide provides general information, not legal advice.",
+    }
+
+
+def test_protected_routes_reject_requests_without_a_bearer_token(client: TestClient) -> None:
+    response = client.get("/api/v1/me")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Missing bearer token."}
+
+
+def test_local_frontend_origin_receives_cors_headers(client: TestClient) -> None:
+    response = client.options(
+        "/api/v1/analyze",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_profile_defaults_to_token_name_when_not_stored(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(routes, "get_profile", lambda _: None)
+
+    response = authenticated_client.get("/api/v1/me")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "sub": "user-123",
+        "email": "person@example.com",
+        "display_name": "Person",
+    }
+
+
+def test_profile_update_persists_authenticated_users_data(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_put_profile(user_id: str, profile: dict[str, Any]) -> dict[str, Any]:
+        captured["user_id"] = user_id
+        captured["profile"] = profile
+        return {"PK": "USER#user-123", "SK": "PROFILE", **profile}
+
+    monkeypatch.setattr(routes, "put_profile", fake_put_profile)
+
+    response = authenticated_client.put("/api/v1/me", json={"display_name": "Ada Lovelace"})
+
+    assert response.status_code == 200
+    assert response.json()["display_name"] == "Ada Lovelace"
+    assert captured == {
+        "user_id": "user-123",
+        "profile": {"display_name": "Ada Lovelace", "email": "person@example.com"},
+    }
+
+
+def test_records_are_scoped_to_authenticated_user(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_list_records(user_id: str) -> list[dict[str, Any]]:
+        captured["user_id"] = user_id
+        return [
+            {
+                "SK": "RECORD#record-id",
+                "type": "document",
+                "title": "Agreement",
+                "payload": {"pages": 3},
+            }
+        ]
+
+    monkeypatch.setattr(routes, "list_records", fake_list_records)
+
+    response = authenticated_client.get("/api/v1/me/records")
+
+    assert response.status_code == 200
+    assert captured == {"user_id": "user-123"}
+    assert response.json() == [
+        {"id": "record-id", "type": "document", "title": "Agreement", "payload": {"pages": 3}}
+    ]
+
+
+def test_create_record_generates_id_and_validates_type(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_save_record(user_id: str, record_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        captured.update(user_id=user_id, record_id=record_id, record=record)
+        return record
+
+    monkeypatch.setattr(routes, "save_record", fake_save_record)
+
+    response = authenticated_client.post(
+        "/api/v1/me/records",
+        json={"type": "review", "title": "Initial review", "payload": {"score": 85}},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["id"] == captured["record_id"]
+    assert captured["user_id"] == "user-123"
+    assert captured["record"] == {
+        "type": "review",
+        "title": "Initial review",
+        "payload": {"score": 85},
+    }
+
+    invalid_response = authenticated_client.post(
+        "/api/v1/me/records", json={"type": "unknown", "title": "Invalid"}
+    )
+    assert invalid_response.status_code == 422

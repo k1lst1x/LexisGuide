@@ -31,6 +31,8 @@ jobs:
         run: pip install -e '.[dev]'
       - name: Lint
         run: ruff check .
+      - name: Check formatting
+        run: ruff format --check .
       - name: Test
         run: pytest
 
@@ -53,5 +55,27 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Test
+        run: npm test
       - name: Build
         run: npm run build
+
+  infrastructure:
+    name: Infrastructure checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.6.6'
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+      - name: Initialize providers without state backend
+        run: terraform init -backend=false
+      - name: Validate configuration
+        run: terraform validate

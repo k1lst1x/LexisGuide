@@ -13,20 +13,27 @@ provider "aws" {
 }
 
 resource "aws_dynamodb_table" "user_data" {
-  name         = "\${var.project_name}-user-data"
+  name         = "${var.project_name}-user-data"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "PK"
   range_key    = "SK"
 
-  attribute { name = "PK" type = "S" }
-  attribute { name = "SK" type = "S" }
+  attribute {
+    name = "PK"
+    type = "S"
+  }
+
+  attribute {
+    name = "SK"
+    type = "S"
+  }
   point_in_time_recovery { enabled = true }
   server_side_encryption { enabled = true }
 }
 
 resource "aws_cognito_user_pool" "main" {
-  name                     = "\${var.project_name}-users"
-  username_attributes      = ["email"]
+  name                = "${var.project_name}-users"
+  username_attributes = ["email"]
 
   password_policy {
     minimum_length    = 12
@@ -78,7 +85,7 @@ resource "aws_cognito_identity_provider" "apple" {
 }
 
 resource "aws_cognito_user_pool_client" "web" {
-  name                                 = "\${var.project_name}-web"
+  name                                 = "${var.project_name}-web"
   user_pool_id                         = aws_cognito_user_pool.main.id
   generate_secret                      = false
   allowed_oauth_flows_user_pool_client = true
