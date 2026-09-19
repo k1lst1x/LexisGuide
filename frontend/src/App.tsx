@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { AuthModal } from './AuthModal'
+import AuthSectionOne from '@/components/ui/auth-section-1'
 import { DashboardV2 } from './DashboardV2'
 import { SplashScreen } from './SplashScreen'
 import { TransitionLoader } from './TransitionLoader'
@@ -175,6 +175,16 @@ export function App() {
   /* ───── SPLASH ───── */
   if (!splashDone) {
     return <SplashScreen onComplete={() => setSplashDone(true)} />
+  }
+
+  /* ───── AUTH PAGE ───── */
+  if (authOpen) {
+    return (
+      <AuthSectionOne
+        onSuccess={handleAuthSuccess}
+        onCancel={() => setAuthOpen(false)}
+      />
+    )
   }
 
   /* ───── DASHBOARD ───── */
@@ -663,14 +673,6 @@ export function App() {
         <div className="toast-notification">
           {toast}
         </div>
-      )}
-
-      {/* Auth Modal */}
-      {authOpen && (
-        <AuthModal 
-          onClose={() => setAuthOpen(false)} 
-          onSuccess={handleAuthSuccess} 
-        />
       )}
 
       {/* Transition Loader */}
