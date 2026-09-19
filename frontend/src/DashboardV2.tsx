@@ -399,6 +399,8 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const criticalPercent = (criticalCount / findingTotal) * 100
   const warningPercent = (warningCount / findingTotal) * 100
   const isDemoMode = !documents.some((document) => document.id.startsWith('upload-'))
+  const workspaceAverage = Math.round(documents.reduce((total, document) => total + document.score, 0) / Math.max(documents.length, 1))
+  const highestScore = Math.max(...documents.map((document) => document.score))
 
   const breadcrumbMap: Record<NavItem, string> = {
     overview: 'Dashboard',
@@ -541,16 +543,14 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   <div className="d2-health-progress"><span>Review coverage</span><div><i style={{ width: `${Math.max(selectedDoc.score, 12)}%` }} /></div><strong>{selectedDoc.score}%</strong></div>
                 </section>
 
-                <section className="d2-overview-panel d2-trend-panel">
-                  <div className="d2-panel-heading"><div><span className="d2-eyebrow">REVIEW PROGRESS</span><h2>Health trend</h2></div><span className="d2-trend-positive">+{Math.max(0, selectedDoc.score - 54)} pts</span></div>
-                  <svg className="d2-trend-chart" viewBox="0 0 480 175" preserveAspectRatio="none" aria-label="Document health trend" role="img">
-                    <defs><linearGradient id="d2TrendFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#818cf8" stopOpacity=".32"/><stop offset="1" stopColor="#818cf8" stopOpacity="0"/></linearGradient></defs>
-                    <path className="d2-chart-grid" d="M0 35H480M0 87H480M0 140H480" />
-                    <path d="M0 143 C45 132 58 112 95 118 S145 138 181 100 S234 114 270 76 S325 93 360 54 S430 63 480 25 L480 175 L0 175Z" fill="url(#d2TrendFill)" />
-                    <path className="d2-chart-line" d="M0 143 C45 132 58 112 95 118 S145 138 181 100 S234 114 270 76 S325 93 360 54 S430 63 480 25" />
-                    <circle cx="480" cy="25" r="5" className="d2-chart-point" />
-                  </svg>
-                  <div className="d2-chart-axis"><span>Uploaded</span><span>Checked</span><span>Reviewed</span><span>Today</span></div>
+                <section className="d2-overview-panel d2-rating-chart-panel">
+                  <div className="d2-panel-heading"><div><span className="d2-eyebrow">DOCUMENT RATINGS</span><h2>Compare your document scores</h2></div><span className="d2-rating-average">Avg. {workspaceAverage}</span></div>
+                  <div key={selectedDoc.id} className="d2-rating-bars" role="img" aria-label="Ratings by document">
+                    {documents.slice(0, 5).map((document) => <button key={document.id} className={`d2-rating-bar ${selectedDoc.id === document.id ? 'd2-rating-bar-active' : ''}`} onClick={() => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id ?? null) }} aria-label={`${document.title}: ${document.score} out of 100`}>
+                      <span className="d2-rating-bar-value">{document.score}</span><span className="d2-rating-bar-track"><i style={{ height: `${document.score}%` }} /></span><span className="d2-rating-bar-label">{document.title.replace('Notice of ', '').split(' ').slice(0, 2).join(' ')}</span>
+                    </button>)}
+                  </div>
+                  <div className="d2-rating-chart-footer"><span>Each bar is a document’s current review score.</span><strong>Best: {highestScore}/100</strong></div>
                 </section>
               </div>
 
@@ -563,13 +563,15 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   </div>
                 </section>
 
-                <section className="d2-overview-panel d2-balance-panel">
-                  <div className="d2-panel-heading"><div><span className="d2-eyebrow">ISSUE BREAKDOWN</span><h2>Review balance</h2></div></div>
-                  <div className="d2-balance-content">
-                    <div className="d2-radar-wrap"><svg viewBox="0 0 200 180" className="d2-radar" aria-label="Review balance chart" role="img"><polygon points="100,12 174,66 145,154 55,154 26,66" className="d2-radar-grid"/><polygon points="100,42 148,76 130,134 70,134 52,76" className="d2-radar-grid"/><polygon points={`100,${24 + criticalCount * 10} ${158 - warningCount * 8},78 ${135 - passCount * 9},137 ${65 + warningCount * 8},137 ${42 + criticalCount * 9},78`} className="d2-radar-data"/></svg></div>
-                    <div className="d2-balance-legend"><span><i className="d2-legend-critical" />Priority <strong>{criticalCount}</strong></span><span><i className="d2-legend-warning" />Review <strong>{warningCount}</strong></span><span><i className="d2-legend-pass" />Checked <strong>{passCount}</strong></span></div>
+                <section key={`rating-factors-${selectedDoc.id}`} className="d2-overview-panel d2-rating-factors-panel">
+                  <div className="d2-panel-heading"><div><span className="d2-eyebrow">RATING FACTORS</span><h2>What affected this score</h2></div><strong className="d2-rating-large">{selectedDoc.score}</strong></div>
+                  <p className="d2-rating-factors-copy">The score reflects the findings in <b>{selectedDoc.title}</b>.</p>
+                  <div className="d2-rating-factor-list">
+                    <div><span><i className="d2-legend-critical" />High-priority concerns <b>{criticalCount}</b></span><em><i className="d2-factor-critical" style={{ width: `${criticalPercent}%` }} /></em></div>
+                    <div><span><i className="d2-legend-warning" />Items to review <b>{warningCount}</b></span><em><i className="d2-factor-warning" style={{ width: `${warningPercent}%` }} /></em></div>
+                    <div><span><i className="d2-legend-pass" />Checks completed <b>{passCount}</b></span><em><i className="d2-factor-pass" style={{ width: `${checkedPercent}%` }} /></em></div>
                   </div>
-                  <button className="d2-balance-action" onClick={() => setActiveNav('documents')}>Read highlighted passages</button>
+                  <button className="d2-balance-action" onClick={() => setActiveNav('documents')}>Read the highlighted passages</button>
                 </section>
               </div>
             </div>
