@@ -345,10 +345,11 @@ function DocumentPicker({ documents, selectedDocument, onSelect }: { documents: 
 /* ───────── Main Dashboard V2 ───────── */
 export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => void; onSignOut?: () => void; userEmail?: string }) {
   const [collapsed, setCollapsed] = useState(true)
-  const [activeNav, setActiveNav] = useState<NavItem>(() => {
+  const [activeNav, setActiveNavState] = useState<NavItem>(() => {
     const savedSection = window.localStorage.getItem(LAST_SECTION_KEY)
     return navItems.some((item) => item.key === savedSection) ? savedSection as NavItem : 'overview'
   })
+  const [sectionTitleExpanded, setSectionTitleExpanded] = useState(true)
   const [documents, setDocuments] = useState<SampleDoc[]>(sampleDocs)
   const [selectedDoc, setSelectedDoc] = useState<SampleDoc>(sampleDocs[0])
   const [activeFinding, setActiveFinding] = useState<string | null>(sampleDocs[0].findings[0]?.id || null)
@@ -368,6 +369,14 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
+  const sectionTitleTimerRef = useRef<number | undefined>(undefined)
+
+  const setActiveNav = (section: NavItem) => {
+    setActiveNavState(section)
+    setSectionTitleExpanded(true)
+    if (sectionTitleTimerRef.current) window.clearTimeout(sectionTitleTimerRef.current)
+    sectionTitleTimerRef.current = window.setTimeout(() => setSectionTitleExpanded(false), 1200)
+  }
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -394,6 +403,13 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   useEffect(() => {
     window.localStorage.setItem(LAST_SECTION_KEY, activeNav)
   }, [activeNav])
+
+  useEffect(() => {
+    sectionTitleTimerRef.current = window.setTimeout(() => setSectionTitleExpanded(false), 1200)
+    return () => {
+      if (sectionTitleTimerRef.current) window.clearTimeout(sectionTitleTimerRef.current)
+    }
+  }, [])
 
   const handleRemediate = () => {
     setRemediating(true)
@@ -422,7 +438,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     const findings = scanUploadedText(text)
     const uploaded: SampleDoc = {
       ...sampleDocs[0],
-      id: `upload-${Date.now()}`,
+      id: `upload-${file.name}-${file.lastModified}-${file.size}`,
       title: file.name.replace(/\.[^/.]+$/, '') || 'Uploaded document',
       type: 'Uploaded document',
       version: 'Quick scan complete',
@@ -475,7 +491,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   }
 
   return (
-    <div className="d2-root">
+    <div className={`d2-root ${sectionTitleExpanded ? 'd2-section-title-expanded' : 'd2-section-title-compact'}`}>
       {/* ───── Sidebar ───── */}
       <aside className={`d2-sidebar ${collapsed ? 'd2-sidebar-collapsed' : ''}`}>
         <div className="d2-sidebar-top">

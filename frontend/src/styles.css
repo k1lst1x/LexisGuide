@@ -1886,6 +1886,9 @@ html, body {
 
 /* ─── Top Bar ─── */
 .d2-topbar {
+  position: relative;
+  z-index: 60;
+  overflow: visible;
   height: 70px;
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
@@ -2021,6 +2024,7 @@ html, body {
 
 .d2-user-menu-anchor {
   position: relative;
+  z-index: 1;
 }
 
 .d2-avatar-btn {
@@ -2050,14 +2054,14 @@ html, body {
 
 .d2-user-dropdown {
   position: absolute;
-  top: 44px;
+  top: calc(100% + 10px);
   right: 0;
   width: 220px;
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.12);
-  z-index: 100;
+  z-index: 70;
   overflow: hidden;
   animation: fadeIn 0.2s ease;
 }
@@ -2124,7 +2128,21 @@ html, body {
   color: #1a1d23;
   letter-spacing: -0.045em;
   line-height: 1.02;
+  transition: font-size .72s cubic-bezier(.22,1,.36,1), letter-spacing .72s cubic-bezier(.22,1,.36,1), opacity .48s ease, transform .72s cubic-bezier(.22,1,.36,1);
 }
+
+/* Section names introduce the page, then settle into a compact working header. */
+.d2-page-header, .d2-reference-heading { transition: min-height .72s cubic-bezier(.22,1,.36,1), padding .72s cubic-bezier(.22,1,.36,1), gap .72s cubic-bezier(.22,1,.36,1); }
+.d2-section-header-copy p, .d2-reference-heading p { transition: max-height .62s cubic-bezier(.22,1,.36,1), opacity .42s ease .06s, margin .62s cubic-bezier(.22,1,.36,1); }
+.d2-root.d2-section-title-expanded .d2-page-title { animation: d2-section-title-arrive .72s cubic-bezier(.22,1,.36,1) both; }
+@keyframes d2-section-title-arrive { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.d2-root.d2-section-title-compact .d2-page-header { min-height: 50px; padding-top: 0; padding-bottom: 0; align-items: center; }
+.d2-root.d2-section-title-compact .d2-page-title { font-size: clamp(21px, 1.85vw, 27px); letter-spacing: -.035em; }
+.d2-root.d2-section-title-compact .d2-section-header-copy .d2-eyebrow { margin-bottom: 2px; font-size: 8px; }
+.d2-root.d2-section-title-compact .d2-section-header-copy p { max-height: 0; margin-top: 0; margin-bottom: 0; opacity: 0; overflow: hidden; }
+.d2-root.d2-section-title-compact .d2-reference-heading { align-items: center; gap: 16px; }
+.d2-root.d2-section-title-compact .d2-reference-heading .d2-page-title { font-size: clamp(21px, 1.8vw, 27px); }
+.d2-root.d2-section-title-compact .d2-reference-heading p { max-height: 0; margin-top: 0; margin-bottom: 0; opacity: 0; overflow: hidden; }
 
 .d2-section-header-copy .d2-eyebrow {
   margin-bottom: 8px;
@@ -2512,7 +2530,7 @@ html, body {
 .d2-avatar-btn:hover .d2-avatar-circle { transform: translateY(-2px) scale(1.07); }
 
 @media (prefers-reduced-motion: reduce) {
-  .d2-root, .d2-sidebar, .d2-topbar, .d2-reference-heading, .d2-documents-hero, .d2-linter-grid, .d2-chain-timeline, .d2-team-layout, .d2-settings-grid, .d2-document-workspace, .d2-overview-panel, .d2-nav-btn, .d2-upload-btn, .d2-library-item, .d2-finding-card, .d2-action-btn, .d2-doc-select, .d2-document-picker-trigger, .d2-document-picker-chevron, .d2-document-picker-menu, .d2-document-picker-option, .d2-message-workspace, .d2-message-rail, .d2-message-thread, .d2-message-info, .d2-message-notice, .d2-message-search-overlay, .d2-message-search-panel, .d2-message-thread .d2-chat-msg, .d2-avatar-circle, .d2-balance-action, .d2-icon-btn, .d2-page, .d2-document-insights > div, .d2-risk-ring, .d2-mix-bar i, .d2-chart-line, .d2-chart-point, .d2-topbar-location-dot { transition: none !important; animation: none !important; }
+  .d2-root, .d2-sidebar, .d2-topbar, .d2-reference-heading, .d2-page-header, .d2-page-title, .d2-section-header-copy p, .d2-documents-hero, .d2-linter-grid, .d2-chain-timeline, .d2-team-layout, .d2-settings-grid, .d2-document-workspace, .d2-overview-panel, .d2-nav-btn, .d2-upload-btn, .d2-library-item, .d2-finding-card, .d2-action-btn, .d2-doc-select, .d2-document-picker-trigger, .d2-document-picker-chevron, .d2-document-picker-menu, .d2-document-picker-option, .d2-message-workspace, .d2-message-rail, .d2-message-thread, .d2-message-info, .d2-message-notice, .d2-message-search-overlay, .d2-message-search-panel, .d2-message-thread .d2-chat-msg, .d2-avatar-circle, .d2-balance-action, .d2-icon-btn, .d2-page, .d2-document-insights > div, .d2-risk-ring, .d2-mix-bar i, .d2-chart-line, .d2-chart-point, .d2-topbar-location-dot { transition: none !important; animation: none !important; }
   .d2-overview-panel:hover, .d2-nav-btn:hover, .d2-finding-table-row:hover, .d2-health-stats > div:hover, .d2-balance-action:hover, .d2-icon-btn:hover { transform: none; }
 }
 
@@ -3447,6 +3465,20 @@ html, body {
 
 @media (max-width: 780px) {
   .d2-message-workspace { grid-template-columns: 1fr; min-height: auto; }
+}
+
+/* Keep every Messages control in the dashboard viewport; only the thread scrolls. */
+.d2-content:has(.d2-messages-page) { display: flex; overflow: hidden; }
+.d2-messages-page { flex: 1; min-height: 0; height: 100%; gap: 16px; }
+.d2-messages-page .d2-page-header, .d2-messages-page .d2-message-notice { flex: 0 0 auto; }
+.d2-messages-page .d2-message-workspace { flex: 1 1 auto; min-height: 0; height: auto; }
+.d2-messages-page .d2-message-thread { min-height: 0; }
+.d2-messages-page .d2-message-thread .d2-chat-messages { min-height: 0; }
+
+@media (max-width: 780px) {
+  .d2-content:has(.d2-messages-page) { display: block; overflow: auto; }
+  .d2-messages-page { height: auto; }
+  .d2-messages-page .d2-message-workspace { min-height: auto; }
 }
 
 /* ─── Settings ─── */

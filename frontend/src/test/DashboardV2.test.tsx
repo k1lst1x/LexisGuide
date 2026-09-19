@@ -38,6 +38,16 @@ describe('DashboardV2', () => {
     expect(screen.getByPlaceholderText('Search chats, people, or documents...')).toBeInTheDocument()
   })
 
+  it('shows the complete account menu above the workspace', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} userEmail="user@lexisguide.gov" />)
+
+    await user.click(screen.getByRole('button', { name: 'Account menu' }))
+
+    expect(screen.getAllByText('user@lexisguide.gov')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: /Sign Out & Exit/ })).toBeInTheDocument()
+  })
+
   it('explains a highlighted document issue in plain language', async () => {
     const user = userEvent.setup()
     render(<DashboardV2 onClose={vi.fn()} />)
