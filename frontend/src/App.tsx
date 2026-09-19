@@ -1,5 +1,8 @@
 import { useEffect, useState, type CSSProperties } from 'react'
+import { getCurrentUser } from 'aws-amplify/auth'
 
+import { AuthModal } from './AuthModal'
+import { authConfigured } from './aws'
 const principles = [
   ['01', 'Read the signal', 'Extract the decision, deadline, appeal path, and consequence from every important document.'],
   ['02', 'See the proof', 'Every issue is anchored to evidence, a rule, and a human-readable explanation.'],
@@ -14,9 +17,15 @@ function App() {
   const [progress, setProgress] = useState(0)
   const [heroDepth, setHeroDepth] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
   useEffect(() => {
     const timer = window.setTimeout(() => setIsLoading(false), 1850)
     return () => window.clearTimeout(timer)
+  }, [])
+  useEffect(() => {
+    if (!authConfigured) return
+    getCurrentUser().then((user) => setUserEmail(user.signInDetails?.loginId ?? user.username)).catch(() => undefined)
   }, [])
   useEffect(() => {
     const revealObserver = new IntersectionObserver((entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add('in-view')), { threshold: 0.14 })
@@ -36,13 +45,13 @@ function App() {
     <header className="floating-nav">
       <a className="brand" href="#top"><span className="brand-orb">L</span><span>LEXIS<span className="orange">GUIDE</span></span></a>
       <nav><a href="#experience">Experience</a><a href="#principles">Principles</a><a href="#trust">Trust layer</a></nav>
-      <button onClick={() => go('Workspace initialized — ready for your first document.')}>Enter workspace <Arrow /></button>
+      <button onClick={() => userEmail ? go('Your private workspace is ready.') : setAuthOpen(true)}>{userEmail ? 'Open workspace' : 'Sign in'} <Arrow /></button>
     </header>
 
     <main id="top">
       <section className="hero3d">
         <div className="hero-noise" /><div className="hero-grid" />
-        <div className="hero-copy3d" style={{ transform: `translateY(${heroDepth * -64}px) scale(${1 - heroDepth * .08})`, opacity: 1 - heroDepth * .55 }}><p className="eyebrow"><span /> AI × LAW · PROCEDURAL FAIRNESS</p><h1>Make the<br /><i>complex</i> clear.</h1><p className="hero-deck">A living clarity layer for the documents that shape your life. Find the signal, follow the evidence, and know your next step.</p><div className="hero-buttons"><button className="orange-button" onClick={() => go('Demo mode engaged — scroll through the experience.')}>Enter the experience <Arrow /></button><a href="#experience">Scroll to explore <span className="scroll-arrow">↓</span></a></div></div>
+        <div className="hero-copy3d" style={{ transform: `translateY(${heroDepth * -64}px) scale(${1 - heroDepth * .08})`, opacity: 1 - heroDepth * .55 }}><p className="eyebrow"><span /> AI × LAW · PROCEDURAL FAIRNESS</p><h1>Make the<br /><i>complex</i> clear.</h1><p className="hero-deck">A living clarity layer for the documents that shape your life. Find the signal, follow the evidence, and know your next step.</p><div className="hero-buttons"><button className="orange-button" onClick={() => userEmail ? go('Your private workspace is ready.') : setAuthOpen(true)}>{userEmail ? 'Open workspace' : 'Create secure workspace'} <Arrow /></button><a href="#experience">Scroll to explore <span className="scroll-arrow">↓</span></a></div></div>
         <div className="scene scene-enter" style={{ '--scene-scale': 1 + heroDepth * .42, '--scene-y': `${-heroDepth * 150}px`, opacity: 1 - heroDepth * .42 } as CSSProperties} aria-label="Animated 3D LexisGuide document experience"><div className="scene-glow" /><div className="scene-halo halo-one" /><div className="scene-halo halo-two" /><div className="orbit orbit-large" /><div className="orbit orbit-small" /><div className="document-3d"><div className="document-edge" /><div className="document-face"><span className="doc-kicker">LEXISGUIDE / 001</span><div className="doc-seal">L</div><h2>Notice<br /><span>decoded.</span></h2><div className="doc-rule" /><p>Procedural clarity<br /><strong>81 / 100</strong></p><div className="doc-lines"><i /><i /><i className="short" /></div></div></div><div className="node node-a"><b>01</b><span>deadline</span></div><div className="node node-b"><b>02</b><span>appeal path</span></div><div className="node node-c"><b>03</b><span>evidence</span></div><div className="cursor-chip">evidence, in motion <span>↗</span></div></div>
         <div className="hero-bottom"><span>SCROLL TO EXPLORE</span><span className="hero-line" /><span>01 / 04</span></div>
       </section>
@@ -57,6 +66,7 @@ function App() {
     </main>
     <footer className="footer3d"><a className="brand" href="#top"><span className="brand-orb">L</span><span>LEXIS<span className="orange">GUIDE</span></span></a><span>AI-assisted clarity for real-world decisions.</span><span>Not legal advice.</span></footer>
     {toast && <button className="toast3d" onClick={() => setToast('')}>{toast}<b>×</b></button>}
+    {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onSuccess={(email) => { setUserEmail(email); setAuthOpen(false); setToast('Signed in — your private workspace is ready.') }} />}
   </div>
 }
 

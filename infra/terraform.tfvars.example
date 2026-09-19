@@ -1,0 +1,10 @@
+aws_region            = "us-east-1"
+cognito_domain_prefix = "lexisguide-your-unique-domain"
+callback_urls         = ["http://localhost:5173/auth/callback", "https://your-domain.com/auth/callback"]
+logout_urls           = ["http://localhost:5173", "https://your-domain.com"]
+google_client_id      = ""
+google_client_secret  = ""
+apple_client_id       = ""
+apple_team_id         = ""
+apple_key_id          = ""
+apple_private_key     = ""
