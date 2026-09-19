@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { AuthModal } from './AuthModal'
+import { ArchitectureScene } from './ArchitectureScene'
 
 const capabilities = [
   ['01', 'Spot what matters', 'Turn a dense notice into the decision, deadline, and next action in one calm view.'],
@@ -43,14 +44,7 @@ function App() {
 
     <main id="top">
       <section className="architecture-hero">
-        <div className="architecture-scene" aria-hidden="true">
-          <div className="scene-sun" />
-          <div className="scene-wall scene-wall-left" /><div className="scene-wall scene-wall-back" />
-          <div className="scene-roof" /><div className="scene-floor" />
-          <div className="scene-column column-a" /><div className="scene-column column-b" /><div className="scene-column column-c" />
-          <div className="scene-garden"><i /><i /><i /><i /><i /><i /></div>
-          <div className="clarity-orb"><span>§</span><small>CLARITY</small></div>
-        </div>
+        <ArchitectureScene />
         <div className="hero-copy"><p className="micro-label">THE CLARITY LAYER FOR REAL-WORLD DECISIONS</p><h1>Understand the<br /><em>fine print.</em></h1><p>LexisGuide turns complicated letters and legal documents into a clear path: what changed, what matters, and what you can do next.</p><button className="black-button" onClick={start}>Start your first review <Arrow /></button></div>
         <div className="hero-foot"><p>Evidence-led explanations for the documents that shape your life.</p><div><span>Clear next steps</span><span>Private workspace</span></div></div>
       </section>
