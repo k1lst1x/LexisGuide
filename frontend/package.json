@@ -15,10 +15,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@paper-design/shaders-react": "^0.0.81",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/three": "^0.186.0",
     "aws-amplify": "^6.20.0",
+    "lucide-react": "^1.47.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3",
     "three": "^0.186.0"
   },
   "devDependencies": {
