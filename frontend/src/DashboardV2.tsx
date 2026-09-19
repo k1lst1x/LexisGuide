@@ -651,7 +651,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
                   <h3>Workspace Members</h3>
                   <div className="d2-member-list">
                     <div className="d2-member">
-                      <div className="d2-member-avatar" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>E</div>
+                      <div className="d2-member-avatar" style={{ background: 'linear-gradient(135deg, #ff6b00, #ea580c)' }}>E</div>
                       <div><strong>Elena Moritz</strong><p>Legal Aid Director</p></div>
                       <span className="d2-online-dot" />
                     </div>
@@ -662,7 +662,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
                     </div>
                     {userEmail && (
                       <div className="d2-member">
-                        <div className="d2-member-avatar" style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>{userEmail[0].toUpperCase()}</div>
+                        <div className="d2-member-avatar" style={{ background: 'linear-gradient(135deg, #f97316, #ff8c00)' }}>{userEmail[0].toUpperCase()}</div>
                         <div><strong>You</strong><p>{userEmail}</p></div>
                         <span className="d2-online-dot" />
                       </div>

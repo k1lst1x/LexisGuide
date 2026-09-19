@@ -6,24 +6,31 @@ export function SplashScreen({ onComplete }: Props) {
   const [exiting, setExiting] = useState(false)
 
   useEffect(() => {
+    // 1 second total duration: 600ms display + 400ms exit transition
     const timer = setTimeout(() => {
       setExiting(true)
-      setTimeout(onComplete, 600)
-    }, 2200)
+      setTimeout(onComplete, 400)
+    }, 600)
     return () => clearTimeout(timer)
   }, [onComplete])
 
   return (
     <div className={`splash-screen ${exiting ? 'splash-exit' : ''}`}>
-      {/* Ambient glow */}
-      <div className="splash-glow splash-glow-1" />
-      <div className="splash-glow splash-glow-2" />
+      {/* Dynamic ambient orange glows */}
+      <div className="splash-glow splash-glow-orange-1" />
+      <div className="splash-glow splash-glow-orange-2" />
 
-      {/* Big animated dots */}
-      <div className="splash-dots-container">
-        <span className="splash-big-dot" style={{ animationDelay: '0s' }}>.</span>
-        <span className="splash-big-dot" style={{ animationDelay: '0.3s' }}>.</span>
-        <span className="splash-big-dot" style={{ animationDelay: '0.6s' }}>.</span>
+      {/* Center glowing orb behind dots */}
+      <div className="splash-center-orb" />
+
+      {/* Animated big dots with orange gradient text */}
+      <div className="splash-content">
+        <div className="splash-dots-container">
+          <span className="splash-big-dot splash-dot-1">.</span>
+          <span className="splash-big-dot splash-dot-2">.</span>
+          <span className="splash-big-dot splash-dot-3">.</span>
+        </div>
+        <div className="splash-sparkle-ring" />
       </div>
     </div>
   )

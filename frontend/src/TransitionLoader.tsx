@@ -9,10 +9,13 @@ export function TransitionLoader({ visible, message = 'Loading workspace...' }: 
   return (
     <div className="transition-overlay">
       <div className="transition-content">
-        <div className="transition-dots">
-          <span className="t-dot" style={{ animationDelay: '0s' }} />
-          <span className="t-dot" style={{ animationDelay: '0.15s' }} />
-          <span className="t-dot" style={{ animationDelay: '0.3s' }} />
+        <div className="transition-spinner-wrap">
+          <div className="transition-ring-outer" />
+          <div className="transition-dots">
+            <span className="t-dot" style={{ animationDelay: '0s' }} />
+            <span className="t-dot" style={{ animationDelay: '0.15s' }} />
+            <span className="t-dot" style={{ animationDelay: '0.3s' }} />
+          </div>
         </div>
         <p className="transition-msg">{message}</p>
         <div className="transition-bar-track">
