@@ -58,10 +58,14 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [authOpen, setAuthOpen] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => window.localStorage.getItem('lexisguide-theme') === 'dark' ? 'dark' : 'light')
   useEffect(() => {
     const timer = window.setTimeout(() => setIsLoading(false), 1850)
     return () => window.clearTimeout(timer)
   }, [])
+  useEffect(() => {
+    window.localStorage.setItem('lexisguide-theme', theme)
+  }, [theme])
   useEffect(() => {
     const revealObserver = new IntersectionObserver((entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add('in-view')), { threshold: 0.14 })
     document.querySelectorAll('.reveal-on-scroll').forEach((element) => revealObserver.observe(element))
@@ -78,11 +82,11 @@ function App() {
 
   if (userEmail) return <Dashboard email={userEmail} onSignOut={() => { setUserEmail(''); setToast('Signed out of your local workspace.') }} />
 
-  return <div className="experience-shell">{isLoading && <div className="loading-screen" aria-hidden="true"><div className="loader-grid" /><div className="loader-content"><p>INITIALIZING CLARITY LAYER</p><div className="loader-wordmark"><span>LEXIS</span><i>GUIDE</i></div><div className="loader-orbit"><span /><b>L</b></div><small>01 / 01</small></div></div>}<div className="scroll-progress" style={{ transform: `scaleX(${progress})` }} />
+  return <div className={`experience-shell ${theme}-theme`}>{isLoading && <div className="loading-screen" aria-hidden="true"><div className="loader-grid" /><div className="loader-content"><p>INITIALIZING CLARITY LAYER</p><div className="loader-wordmark"><span>LEXIS</span><i>GUIDE</i></div><div className="loader-orbit"><span /><b>L</b></div><small>01 / 01</small></div></div>}<div className="scroll-progress" style={{ transform: `scaleX(${progress})` }} />
     <header className="floating-nav">
       <a className="brand" href="#top"><span className="brand-orb">L</span><span>LEXIS<span className="orange">GUIDE</span></span></a>
       <nav><a href="#experience">Experience</a><a href="#principles">Principles</a><a href="#trust">Trust layer</a></nav>
-      <button onClick={() => setAuthOpen(true)}>Sign in <Arrow /></button>
+      <div className="nav-actions"><button className="theme-toggle" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`} aria-pressed={theme === 'dark'}><span className="theme-toggle-orb">{theme === 'light' ? '☼' : '◐'}</span><span>{theme === 'light' ? 'Bright' : 'Dark'}</span></button><button onClick={() => setAuthOpen(true)}>Sign in <Arrow /></button></div>
     </header>
 
     <main id="top">

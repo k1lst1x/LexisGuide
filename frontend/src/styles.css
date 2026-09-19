@@ -101,3 +101,43 @@ button:focus-visible { outline: 0; box-shadow: 0 0 0 3px rgba(255,100,47,.28), 0
   button, button::before { transition: none !important; animation: none !important; }
 }
 
+/* Bright mode and the shared theme switcher. Bright is the default on first visit. */
+.nav-actions { display: flex; align-items: center; gap: 9px; }
+.theme-toggle { display: inline-flex; align-items: center; gap: 7px; padding: 9px 12px !important; color: #d7cec7 !important; background: rgba(255,255,255,.07) !important; border: 1px solid rgba(255,255,255,.14) !important; font: 10px 'DM Mono' !important; letter-spacing: .04em; }
+.theme-toggle-orb { display: grid; place-items: center; width: 19px; height: 19px; color: var(--orange-hot); background: rgba(255,100,47,.13); border-radius: 50%; font-size: 13px; }
+.experience-shell { min-height: 100vh; transition: background .55s ease, color .55s ease; }
+.light-theme { --black: #f7f4ef; --panel: #fffdfa; --white: #211b17; --muted: #746a62; --line: rgba(43,31,23,.14); color: var(--white); background: #f7f4ef; }
+.light-theme .floating-nav { background: rgba(255,253,249,.78); border-color: rgba(43,31,23,.13); box-shadow: 0 16px 40px rgba(67,41,22,.12); }
+.light-theme .floating-nav nav { color: #776d65; }
+.light-theme .floating-nav nav a:hover { color: #211b17; }
+.light-theme .theme-toggle { color: #51463e !important; background: rgba(43,31,23,.06) !important; border-color: rgba(43,31,23,.14) !important; }
+.light-theme .hero3d { background: radial-gradient(ellipse at 76% 48%, #ffd6c3 0%, #fff5ed 25%, #f8f5f0 60%, #f3eee8 100%); }
+.light-theme .hero3d::after { opacity: .18; }
+.light-theme .hero-grid { opacity: .1; background-image: linear-gradient(rgba(75,48,32,.16) 1px, transparent 1px), linear-gradient(90deg, rgba(75,48,32,.16) 1px, transparent 1px); }
+.light-theme .hero-noise { opacity: .06; }
+.light-theme .hero-deck, .light-theme .statement-body { color: #756a62; }
+.light-theme .hero-buttons a, .light-theme .hero-bottom { color: #887b71; }
+.light-theme .hero-line { background: rgba(74,48,34,.18); }
+.light-theme .statement { background: #fffdfa; }
+.light-theme .principles { background: #f2eee8; }
+.light-theme .principle-nav button { color: #857970; border-color: rgba(43,31,23,.13); }
+.light-theme .principle-nav button b { color: #8f8178; }
+.light-theme .principle-nav button.active { color: #211b17; background: rgba(255,100,47,.1); }
+.light-theme .stage-card { color: #2b211b; background: rgba(255,253,249,.78); border-color: rgba(43,31,23,.14); box-shadow: 20px 25px 80px rgba(67,41,22,.16); }
+.light-theme .stage-card p { color: #756a62; }
+.light-theme .stage-meter { background: rgba(75,48,32,.14); }
+.light-theme .stage-card small { color: #8a7b70; }
+.light-theme .trust3d { background: radial-gradient(circle at 80% 52%, #ffd3be, #fff6ef 28%, #f2ece6 65%); }
+.light-theme .trust-content > p:not(.eyebrow) { color: #756a62; }
+.light-theme .chain-node { color: #4f4138; }
+.light-theme .chain-node span { color: var(--orange); background: rgba(255,253,249,.75); }
+.light-theme .glass-button { color: #4b3d34; background: rgba(255,255,255,.58); border-color: rgba(43,31,23,.18); }
+.light-theme .closing3d { background: #f5efe9; }
+.light-theme .closing3d > p:not(.eyebrow) { color: #756a62; }
+.light-theme .footer3d { color: #85786e; background: #f7f4ef; }
+.light-theme .toast3d { color: #fff; }
+.light-theme .auth-modal { background: linear-gradient(145deg, #fff7f0, #fffdfa 65%); color: #211b17; border-color: rgba(43,31,23,.14); box-shadow: 30px 35px 100px rgba(67,41,22,.2), inset 0 0 80px rgba(255,100,47,.08); }
+.light-theme .auth-copy, .light-theme .auth-modal label { color: #756a62; }
+.light-theme .auth-modal input { color: #211b17; background: rgba(255,255,255,.72); border-color: rgba(43,31,23,.16); }
+.light-theme .social-auth button { color: #3f332c; background: rgba(43,31,23,.05); border-color: rgba(43,31,23,.14); }
+
