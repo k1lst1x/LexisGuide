@@ -46,3 +46,16 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 25px
 
 .webgl-architecture { position: absolute; z-index: 1; inset: 0; overflow: hidden; background: linear-gradient(118deg, #c9b4a5 0%, #b39b8b 49%, #8a7569 100%); }
 .webgl-architecture canvas { display: block; width: 100%; height: 100%; }
+
+/* Full-page scroll story. */
+.reference-shell { min-height: 100svh; }
+.architecture-hero { min-height: calc(100svh - 70px); }
+.architecture-hero, .intro-panel, .capability-panel, .trust-panel, .dark-panel, .faq-panel, .final-panel { scroll-snap-align: start; }
+.intro-panel, .capability-panel, .trust-panel, .dark-panel, .faq-panel, .final-panel { min-height: min(900px, 92svh); display: grid; align-content: center; }
+.capability-panel { align-content: center; }
+.trust-panel { align-items: center; }
+.dark-panel { align-content: center; }
+.faq-panel { align-items: center; }
+.final-panel { min-height: 78svh; }
+@media (min-width: 900px) { html { scroll-snap-type: y proximity; }.reference-nav { position: sticky; top: 0; }.architecture-hero .hero-copy { padding-top: min(19vh, 150px); } }
+@media (max-width: 850px) { .architecture-hero { min-height: calc(100svh - 59px); }.intro-panel, .capability-panel, .trust-panel, .dark-panel, .faq-panel { min-height: auto; }.final-panel { min-height: 68svh; } }
