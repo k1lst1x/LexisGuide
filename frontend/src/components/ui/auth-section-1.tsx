@@ -1,5 +1,6 @@
 "use client";
 
+import { GrainGradient } from "@paper-design/shaders-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -33,14 +34,14 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
       )}
 
       <div className="auth-grid-card">
-        {/* Left Column — Form */}
+        {/* Left Column — Auth Form Fields */}
         <div className="auth-form-side">
           <div className="auth-form-inner">
             <div className="auth-header-block">
               <div className="auth-brand-badge">LexisGuide Auth</div>
               <h1 className="auth-heading">Create an account</h1>
               <p className="auth-subheading">
-                Brainstorm in chat, audit in real-time
+                Brainstorm in chat, build in cowork
               </p>
             </div>
 
@@ -123,28 +124,40 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
           </div>
         </div>
 
-        {/* Right Column — Hero Banner */}
-        <div className="auth-banner-side">
-          <div className="auth-banner-bg-glow1" />
-          <div className="auth-banner-bg-glow2" />
+        {/* Right Column — Grain Gradient Shader Banner */}
+        <div className="relative flex min-h-[720px] overflow-hidden rounded-r-2xl bg-black p-8 text-white sm:p-12 lg:min-h-0">
+          <GrainGradient
+            speed={1}
+            scale={1}
+            rotation={0}
+            offsetX={0}
+            offsetY={0}
+            softness={0.5}
+            intensity={0.5}
+            noise={0.25}
+            shape="corners"
+            frame={2854.5}
+            colors={["#FFFFFF", "#FC7819", "#FC7819", "#FFFFFF"]}
+            colorBack="#00000000"
+            className="absolute inset-0 bg-black"
+          />
 
-          <div className="auth-banner-content">
-            <div className="auth-banner-top">
-              <span className="auth-tag">VERIFIABLE PROCEDURAL FAIRNESS</span>
-              <h2 className="auth-banner-title">
-                Think fast,<br />Build faster.
-              </h2>
-              <p className="auth-banner-desc">
-                Audit government notices, housing grants, and shared agreements with real-time plain-language linter feedback.
-              </p>
-            </div>
+          <div className="relative z-10 flex h-full w-full flex-col justify-between">
+            <h2 className="max-w-[620px] pt-0 text-5xl font-medium tracking-[-0.05em] text-white sm:text-6xl lg:pt-16 lg:text-[64px] lg:leading-[0.98] xl:text-[70px]">
+              Think fast,
+              <br />
+              Build faster
+            </h2>
 
-            <div className="auth-banner-footer">
-              <a href="#" className="auth-app-download">
-                <WindowsIcon />
-                <span>Download Windows Client App</span>
-              </a>
-            </div>
+            <a
+              href="#"
+              className="mb-0 inline-flex h-12 max-w-full items-center gap-3 rounded-[10px] border border-white/25 px-5 text-base font-medium text-white/85 backdrop-blur-sm transition-colors hover:border-white/45 hover:text-white xl:mb-12 xl:px-6 xl:text-xl"
+            >
+              <WindowsIcon className="size-5 shrink-0 xl:size-7" />
+              <span className="truncate whitespace-nowrap">
+                Download the windows app
+              </span>
+            </a>
           </div>
         </div>
       </div>
@@ -225,9 +238,9 @@ function AppleIcon() {
   );
 }
 
-function WindowsIcon() {
+function WindowsIcon({ className }: { className?: string }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
       <path d="M3 4.7 10.7 3.6v7.7H3V4.7Zm8.8-1.25L21 2.1v9.2h-9.2V3.45ZM3 12.7h7.7v7.7L3 19.3v-6.6Zm8.8 0H21v9.2l-9.2-1.3v-7.9Z" />
     </svg>
   );
