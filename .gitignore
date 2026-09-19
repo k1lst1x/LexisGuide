@@ -175,6 +175,17 @@ dist/
 .env.*
 !.env.example
 
+# Terraform local secrets and generated artifacts
+*.tfvars
+*.tfvars.json
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+crash.*.log
+*.tfplan
+tfplan
+
 # Editors and operating systems
 .DS_Store
 .idea/
