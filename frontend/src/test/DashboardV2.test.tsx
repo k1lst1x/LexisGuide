@@ -60,6 +60,23 @@ describe('DashboardV2', () => {
     expect(screen.getByText('Recommended next step')).toBeInTheDocument()
   })
 
+  it('scans pasted text and opens the full document in the reader', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+    const closeTutorial = screen.queryByRole('button', { name: 'Close tutorial' })
+    if (closeTutorial) await user.click(closeTutorial)
+    await user.click(screen.getByRole('button', { name: 'Paste text' }))
+
+    await user.type(screen.getByLabelText('Document name'), 'My rental renewal')
+    await user.type(screen.getByLabelText('Document text'), 'Either party may terminate this agreement.')
+    await user.click(screen.getByRole('button', { name: 'Scan and add' }))
+
+    expect(await screen.findAllByText('My rental renewal')).toHaveLength(2)
+    expect(screen.getByText('Notice period is missing')).toBeInTheDocument()
+  })
+
   it('uses the document picker to switch the overview context', async () => {
     const user = userEvent.setup()
     render(<DashboardV2 onClose={vi.fn()} />)

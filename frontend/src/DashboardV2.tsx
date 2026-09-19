@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 
 /* ───────── Types ───────── */
 type SampleDoc = {
@@ -250,6 +251,81 @@ function scanUploadedText(text: string): SampleDoc['findings'] {
   return findings.length ? findings : [{ id: 'upload-clear', title: 'No common risk phrases found', severity: 'pass', category: 'Initial scan', explanation: 'The quick scan did not find one of its common risk patterns. Read the full document and seek advice for an important decision.', evidence: 'No matching language found in this quick text scan.', rule: 'This is a limited automated check, not legal advice.' }]
 }
 
+type ExtractedDocument = {
+  text: string
+  type: string
+}
+
+const readableTextExtensions = new Set(['txt', 'md', 'csv', 'tsv', 'json', 'xml', 'yaml', 'yml', 'log'])
+
+function cleanExtractedText(text: string) {
+  return text.replaceAll(String.fromCharCode(0), '').replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+function fileExtension(file: File) {
+  return file.name.split('.').pop()?.toLowerCase() ?? ''
+}
+
+function fileTitle(file: File) {
+  return file.name.replace(/\.[^/.]+$/, '') || 'Uploaded document'
+}
+
+function looksLikeReadableText(text: string) {
+  if (!text) return false
+  const readableCharacters = [...text].filter((character) => character === '\n' || character === '\t' || (character >= ' ' && character <= '~')).length
+  return readableCharacters / text.length > .72
+}
+
+async function extractDocumentText(file: File): Promise<ExtractedDocument> {
+  const extension = fileExtension(file)
+
+  if (file.type === 'application/pdf' || extension === 'pdf') {
+    const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+    const pdf = await getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
+    const pages: string[] = []
+
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber)
+      const content = await page.getTextContent()
+      pages.push(content.items.map((item) => 'str' in item ? item.str : '').filter(Boolean).join(' '))
+    }
+
+    const text = cleanExtractedText(pages.join('\n\n'))
+    if (!text) throw new Error('No selectable text was found in this PDF. If it is a scanned document, paste its text below to review it.')
+    return { text, type: 'PDF document' }
+  }
+
+  if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || extension === 'docx') {
+    const mammoth = await import('mammoth')
+    const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
+    const text = cleanExtractedText(result.value)
+    if (!text) throw new Error('No readable text was found in this Word document. Try pasting the document text instead.')
+    return { text, type: 'Word document' }
+  }
+
+  const rawText = await file.text()
+  if (file.type === 'text/html' || extension === 'html' || extension === 'htm') {
+    const text = cleanExtractedText(new DOMParser().parseFromString(rawText, 'text/html').body.textContent ?? '')
+    if (!text) throw new Error('No readable text was found in this webpage file.')
+    return { text, type: 'Web document' }
+  }
+
+  if (file.type === 'application/rtf' || extension === 'rtf') {
+    const text = cleanExtractedText(rawText.replace(/\\par[d]?/g, '\n').replace(/\\[a-z]+-?\d* ?/gi, '').replace(/[{}]/g, ''))
+    if (!text) throw new Error('No readable text was found in this RTF document.')
+    return { text, type: 'Rich text document' }
+  }
+
+  if (!readableTextExtensions.has(extension) && !file.type.startsWith('text/') && !looksLikeReadableText(rawText)) {
+    throw new Error('This file cannot be read as text in the browser yet. Add a PDF, DOCX, RTF, webpage, or text file—or paste the document text to review it.')
+  }
+
+  const text = cleanExtractedText(rawText)
+  if (!text) throw new Error('This file does not contain readable text. If it is a scan or image, paste the document text to review it.')
+  return { text, type: extension ? `${extension.toUpperCase()} document` : 'Uploaded document' }
+}
+
 /* ───────── Animated Score Gauge ───────── */
 function ScoreGauge({ score }: { score: number }) {
   const [animated, setAnimated] = useState(0)
@@ -356,7 +432,11 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [activeFinding, setActiveFinding] = useState<string | null>(sampleDocs[0].findings[0]?.id || null)
   const [isScanning, setIsScanning] = useState(false)
   const [uploadMessage, setUploadMessage] = useState('')
+  const [pasteDialogOpen, setPasteDialogOpen] = useState(false)
+  const [pastedTitle, setPastedTitle] = useState('')
+  const [pastedText, setPastedText] = useState('')
   const [tutorialStep, setTutorialStep] = useState(0)
+  const [tutorialStripOpen, setTutorialStripOpen] = useState(true)
   const [tutorialOpen, setTutorialOpen] = useState(true)
   const [comments, setComments] = useState<Array<{ user: string; text: string; time: string }>>([
     { user: 'Elena Moritz (Legal Aid)', text: 'The appeal deadline is completely missing in v1. We should add a 30-day requirement.', time: '10:14 AM' },
@@ -421,17 +501,13 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     }, 1200)
   }
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    setIsScanning(true)
-    setUploadMessage(`Sending ${file.name} for a quick scan…`)
-    const text = await file.text()
+  const addScannedDocument = async ({ id, title, type, text, hash }: { id: string; title: string; type: string; text: string; hash: string }) => {
+    setUploadMessage(`Scanning ${title}…`)
     try {
       await fetch('/api/v1/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ document_text: text || file.name }),
+        body: JSON.stringify({ document_text: text.slice(0, 100000) }),
       })
     } catch {
       // The local quick scan remains available when the API is offline.
@@ -439,26 +515,68 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     const findings = scanUploadedText(text)
     const uploaded: SampleDoc = {
       ...sampleDocs[0],
-      id: `upload-${file.name}-${file.lastModified}-${file.size}`,
-      title: file.name.replace(/\.[^/.]+$/, '') || 'Uploaded document',
-      type: 'Uploaded document',
+      id,
+      title,
+      type,
       version: 'Quick scan complete',
       score: findings.some((finding) => finding.severity === 'warning') ? 62 : 86,
       status: findings.some((finding) => finding.severity === 'warning') ? 'Review recommended' : 'No common risks found',
       date: new Date().toLocaleDateString(),
-      hash: `local-${file.size}-${file.lastModified}`,
-      text: text || 'No readable text was found. Upload a .txt, .md, or .csv document for a text scan.',
+      hash,
+      text,
       findings,
     }
     setDocuments((current) => [uploaded, ...current])
     setSelectedDoc(uploaded)
     setActiveFinding(uploaded.findings[0]?.id || null)
-    setIsScanning(false)
-    setUploadMessage(`${file.name} scanned. Click a highlight to see why it needs attention.`)
+    setUploadMessage(`${title} is ready. Select a highlighted passage to see why it needs attention.`)
     setTutorialStep(3)
     setTutorialOpen(false)
     setActiveNav('documents')
-    event.target.value = ''
+  }
+
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setIsScanning(true)
+    setUploadMessage(`Reading ${file.name}…`)
+    try {
+      const extracted = await extractDocumentText(file)
+      await addScannedDocument({
+        id: `upload-${file.name}-${file.lastModified}-${file.size}`,
+        title: fileTitle(file),
+        type: extracted.type,
+        text: extracted.text,
+        hash: `local-${file.size}-${file.lastModified}`,
+      })
+    } catch (error) {
+      setUploadMessage(error instanceof Error ? error.message : 'We could not read this file. Try pasting its text instead.')
+    } finally {
+      setIsScanning(false)
+      event.target.value = ''
+    }
+  }
+
+  const handlePastedDocument = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const text = cleanExtractedText(pastedText)
+    if (!text) return
+    const title = pastedTitle.trim() || 'Pasted document'
+    setIsScanning(true)
+    try {
+      await addScannedDocument({
+        id: `upload-pasted-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}-${text.length}`,
+        title,
+        type: 'Pasted document',
+        text,
+        hash: `local-pasted-${text.length}`,
+      })
+      setPasteDialogOpen(false)
+      setPastedTitle('')
+      setPastedText('')
+    } finally {
+      setIsScanning(false)
+    }
   }
 
   const handleAddComment = (e: React.FormEvent) => {
@@ -711,26 +829,31 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
           {/* ═════ DOCUMENTS ═════ */}
           {activeNav === 'documents' && (
             <div className="d2-page d2-documents-page">
-              <input ref={uploadInputRef} type="file" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv" onChange={handleUpload} hidden />
+              <input ref={uploadInputRef} type="file" accept="*/*" onChange={handleUpload} hidden />
               <div className="d2-documents-hero">
                 <div>
                   <span className="d2-eyebrow">DOCUMENT REVIEW</span>
                   <h1>Documents</h1>
-                  <p>Understand a document before you agree. Upload a text document for a quick scan, then select a highlighted passage to see what it could mean for you.</p>
+                  <p>Understand a document before you agree. Add a PDF, Word, webpage, or text file—or paste its contents—then select a highlighted passage to see what it could mean for you.</p>
                 </div>
-                <div className="d2-document-hero-actions">{isDemoMode && <button className="d2-demo-open-btn" onClick={() => setTutorialOpen(true)}>How does this work?</button>}<button className="d2-upload-btn d2-upload-btn-large" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>
-                  <span>+</span>{isScanning ? 'Scanning document…' : 'Add document'}
-                </button></div>
+                <div className="d2-document-hero-actions">
+                  {isDemoMode && <button className="d2-demo-open-btn" onClick={() => setTutorialOpen(true)}>How does this work?</button>}
+                  <button className="d2-paste-btn" onClick={() => setPasteDialogOpen(true)} disabled={isScanning}>Paste text</button>
+                  <button className="d2-upload-btn d2-upload-btn-large" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>
+                    <span>+</span>{isScanning ? 'Scanning document…' : 'Add document'}
+                  </button>
+                </div>
               </div>
 
               {uploadMessage && <div className="d2-upload-status" role="status">{uploadMessage}</div>}
 
-              {isDemoMode && <section className="d2-demo-tutorial" aria-label="Document review tutorial">
+              {isDemoMode && tutorialStripOpen && <section className="d2-demo-tutorial" aria-label="Document review tutorial">
+                <button className="d2-demo-strip-close" onClick={() => setTutorialStripOpen(false)} aria-label="Close tutorial tips" title="Close tutorial tips">×</button>
                 <div className="d2-demo-intro"><span className="d2-demo-badge">DEMO MODE</span><div><h2>Try it with a sample document</h2><p>Learn how LexisGuide works before adding a personal file. Nothing in these samples belongs to you.</p></div></div>
                 <div className="d2-demo-steps">
                   <button className={`d2-demo-step ${tutorialStep === 1 ? 'd2-demo-step-active' : ''}`} onClick={() => { setSelectedDoc(sampleDocs[2]); setActiveFinding(sampleDocs[2].findings[0]?.id ?? null); setTutorialStep(1) }}><span>1</span><div><strong>Choose a sample</strong><small>Open a housing, benefit, or agreement example.</small></div></button>
                   <button className={`d2-demo-step ${tutorialStep === 2 ? 'd2-demo-step-active' : ''}`} onClick={() => { setSelectedDoc(sampleDocs[0]); setActiveFinding('f-1'); setTutorialStep(2) }}><span>2</span><div><strong>Select a highlight</strong><small>See a plain-language explanation and next step.</small></div></button>
-                  <button className={`d2-demo-step ${tutorialStep === 3 ? 'd2-demo-step-active' : ''}`} onClick={() => { setTutorialStep(3); uploadInputRef.current?.click() }}><span>3</span><div><strong>Add your document</strong><small>Run the same quick scan on a text file.</small></div></button>
+                  <button className={`d2-demo-step ${tutorialStep === 3 ? 'd2-demo-step-active' : ''}`} onClick={() => { setTutorialStep(3); uploadInputRef.current?.click() }}><span>3</span><div><strong>Add your document</strong><small>Upload a file or paste its text for the same quick scan.</small></div></button>
                 </div>
               </section>}
 
@@ -777,8 +900,8 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                       </button>
                     })}
                   </div>
-                  <button className="d2-library-add" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>+ Add another document</button>
-                  <p className="d2-library-note">{isDemoMode ? 'These examples are here to help you practice. Add your own text file when you are ready.' : 'Text files (.txt, .md, .csv) are scanned in this demo. Your document stays in this browser for the quick scan.'}</p>
+                  <div className="d2-library-actions"><button className="d2-library-add" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>+ Add another document</button><button className="d2-library-paste" onClick={() => setPasteDialogOpen(true)} disabled={isScanning}>Paste document text</button></div>
+                  <p className="d2-library-note">{isDemoMode ? 'These examples are here to help you practice. Add a PDF, Word, text file, or pasted content when you are ready.' : 'PDF, Word, webpage, rich-text, and readable text files can be opened here. Your document stays in this browser for the quick scan.'}</p>
                 </aside>
 
                 <section className="d2-document-reader-section">
@@ -813,10 +936,21 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   <div className="d2-demo-modal-steps">
                     <button onClick={() => { setSelectedDoc(sampleDocs[2]); setActiveFinding(sampleDocs[2].findings[0]?.id ?? null); setTutorialStep(1); setTutorialOpen(false) }}><span className="d2-demo-modal-number">01</span><span className="d2-demo-modal-icon">⌂</span><strong>Explore a sample</strong><small>Open a practice housing agreement with realistic review flags.</small><em>Start exploring →</em></button>
                     <button onClick={() => { setSelectedDoc(sampleDocs[0]); setActiveFinding('f-1'); setTutorialStep(2); setTutorialOpen(false) }}><span className="d2-demo-modal-number">02</span><span className="d2-demo-modal-icon">!</span><strong>See an issue explained</strong><small>Jump to a highlighted sentence and read what it could mean for you.</small><em>Show an example →</em></button>
-                    <button onClick={() => { setTutorialStep(3); setTutorialOpen(false); uploadInputRef.current?.click() }}><span className="d2-demo-modal-number">03</span><span className="d2-demo-modal-icon">+</span><strong>Scan your own file</strong><small>Add a text document when you are ready to begin your own review.</small><em>Add a document →</em></button>
+                    <button onClick={() => { setTutorialStep(3); setTutorialOpen(false); uploadInputRef.current?.click() }}><span className="d2-demo-modal-number">03</span><span className="d2-demo-modal-icon">+</span><strong>Scan your own file</strong><small>Add a file or paste copied text when you are ready to begin your own review.</small><em>Add a document →</em></button>
                   </div>
                   <p className="d2-demo-modal-footnote">Practice documents only. Automated flags are prompts to review—not proof of fraud or legal advice.</p>
                 </section>
+              </div>, document.body)}
+              {pasteDialogOpen && createPortal(<div className="d2-import-overlay" role="dialog" aria-modal="true" aria-labelledby="paste-document-title">
+                <form className="d2-import-modal" onSubmit={handlePastedDocument}>
+                  <button type="button" className="d2-demo-close" onClick={() => setPasteDialogOpen(false)} aria-label="Close paste document">×</button>
+                  <span className="d2-import-kicker">ADD DOCUMENT TEXT</span>
+                  <h2 id="paste-document-title">Paste a document to review</h2>
+                  <p>Use this for a scanned image, a protected file, or any document you can copy. We will place the full text in the reader and flag common phrases that deserve a closer look.</p>
+                  <label htmlFor="pasted-document-title">Document name <input id="pasted-document-title" value={pastedTitle} onChange={(event) => setPastedTitle(event.target.value)} placeholder="For example: Apartment lease renewal" /></label>
+                  <label htmlFor="pasted-document-text">Document text <textarea id="pasted-document-text" value={pastedText} onChange={(event) => setPastedText(event.target.value)} placeholder="Paste the complete document text here…" required /></label>
+                  <div className="d2-import-actions"><button type="button" onClick={() => setPasteDialogOpen(false)}>Cancel</button><button type="submit" disabled={isScanning || !pastedText.trim()}>{isScanning ? 'Scanning…' : 'Scan and add'}</button></div>
+                </form>
               </div>, document.body)}
             </div>
           )}

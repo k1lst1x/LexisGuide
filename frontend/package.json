@@ -20,6 +20,8 @@
     "@types/three": "^0.186.0",
     "aws-amplify": "^6.20.0",
     "lucide-react": "^1.47.0",
+    "mammoth": "^1.12.3",
+    "pdfjs-dist": "^6.3.289",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tailwindcss": "^4.3.3",
