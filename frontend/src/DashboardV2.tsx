@@ -666,7 +666,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 </div>
               </section>}
 
-              <section className="d2-document-insights" aria-label="Document scan summary">
+              <section key={selectedDoc.id} className="d2-document-insights" aria-label="Document scan summary">
                 <div className="d2-insight-risk">
                   <div>
                     <span className="d2-eyebrow">SCAN SUMMARY</span>
