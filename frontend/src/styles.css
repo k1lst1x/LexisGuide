@@ -547,273 +547,275 @@ html, body {
 }
 
 /* ================= 1. ENTIRE HERO SECTION WITH 4K LANDSCAPE BG ================= */
-.hero-hero-section {
+/* ═══════════════════════════════════════════════════════
+   GHIBLI HERO — FULL-BLEED LANDSCAPE
+   ═══════════════════════════════════════════════════════ */
+
+.ghibli-hero {
   position: relative;
   width: 100%;
-  min-height: 94vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  color: #ffffff;
   overflow: hidden;
 }
 
-.hero-bg-wrapper {
+/* ── Background Image ── */
+.ghibli-bg-wrap {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 0;
   overflow: hidden;
 }
 
-.hero-bg-img {
+.ghibli-bg-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 38%;
+  object-position: center 55%;
   display: block;
-  image-rendering: high-quality;
-  filter: contrast(1.08) brightness(0.9) saturate(1.1);
+  filter: saturate(1.15) brightness(1.02);
   will-change: transform;
   transition: transform 0.1s linear;
 }
 
-.hero-bg-overlay {
+.ghibli-bg-fade {
   position: absolute;
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(10, 20, 14, 0.55) 0%,
-    rgba(10, 20, 14, 0.25) 45%,
-    rgba(12, 21, 16, 0.95) 100%
+    rgba(0, 0, 0, 0.18) 0%,
+    rgba(0, 0, 0, 0.05) 35%,
+    rgba(0, 0, 0, 0.08) 60%,
+    rgba(0, 0, 0, 0.50) 100%
   );
 }
 
-.hero-inner {
+/* ── Glass Navbar ── */
+.ghibli-nav {
   position: relative;
-  z-index: 2;
-  width: 100%;
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 40px clamp(24px, 5vw, 80px) 44px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  flex: 1;
-  gap: 60px;
-}
-
-/* Header Nav Overlay */
-.header {
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
+  padding: 16px clamp(20px, 4vw, 60px);
+  margin: 20px clamp(16px, 3vw, 48px) 0;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
-.brand {
-  font-size: 24px;
+.ghibli-nav-brand {
+  font-size: 20px;
   font-weight: 800;
-  letter-spacing: -0.02em;
   color: #ffffff;
-  display: flex;
-  align-items: flex-start;
-  text-shadow: 0 1px 8px rgba(0,0,0,0.5);
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
 }
 
-.trademark {
-  font-size: 12px;
-  font-weight: 700;
-  margin-left: 2px;
-  transform: translateY(-2px);
-  color: var(--accent-gold);
-}
-
-.nav-links {
+.ghibli-nav-links {
   display: flex;
   align-items: center;
-  gap: 44px;
+  gap: 32px;
 }
 
-.nav-item {
-  text-decoration: none;
-  font-size: 14.5px;
+.ghibli-nav-links a,
+.ghibli-nav-links button {
+  font-size: 14px;
   font-weight: 600;
-  color: rgba(240, 244, 241, 0.95);
-  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
-  transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  transition: color 0.2s, transform 0.2s;
+  padding: 0;
 }
 
-.nav-item:hover {
-  color: var(--accent-gold);
+.ghibli-nav-links a:hover,
+.ghibli-nav-links button:hover {
+  color: #ffffff;
   transform: translateY(-1px);
 }
 
-.nav-item .plus {
-  font-weight: 400;
-  color: var(--accent-gold);
-  font-size: 14px;
-  margin-left: 2px;
-}
-
-.menu-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  width: 40px;
-  height: 20px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-end;
-  padding: 2px 0;
-}
-
-.menu-line {
-  display: block;
-  width: 100%;
-  height: 2px;
-  background-color: #ffffff;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
-  border-radius: 2px;
-}
-
-.menu-line:last-child {
-  width: 75%;
-}
-
-/* Hero Content Grid */
-.hero-middle-grid {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  width: 100%;
-  margin-top: 20px;
-}
-
-.hero-title-container {
-  flex: 1;
-}
-
-.hero-title {
-  font-size: clamp(88px, 11vw, 160px);
-  font-weight: 700;
-  line-height: 0.92;
-  letter-spacing: -0.04em;
-  color: #ffffff;
-  text-shadow: 0 4px 30px rgba(0,0,0,0.5);
-}
-
-.title-trademark {
-  font-size: 0.38em;
-  font-weight: 500;
-  position: relative;
-  top: -0.5em;
-  margin-left: 4px;
-  color: var(--accent-gold);
-}
-
-.hero-info {
-  width: 400px;
-  padding-top: 16px;
-}
-
-.founders-row {
+.ghibli-nav-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 20px;
+  gap: 12px;
 }
 
-.avatar-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background-size: cover;
-  background-position: center;
-  border: 1.5px solid rgba(226, 180, 107, 0.8);
-}
-
-.avatar-1 {
-  background-image: url('/assets/avatars.png');
-  background-position: 10% 50%;
-}
-
-.avatar-2 {
-  background-image: url('/assets/avatars.png');
-  background-position: 90% 50%;
-}
-
-.avatar-divider {
-  width: 24px;
-  height: 1px;
-  background-color: var(--accent-gold);
-}
-
-.tag-built {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 11px;
+.ghibli-nav-user {
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.07em;
-  color: var(--accent-gold);
-  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
-  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
-.hero-description {
-  font-size: 16px;
-  line-height: 1.55;
-  color: rgba(240, 244, 241, 0.92);
-  text-shadow: 0 1px 6px rgba(0,0,0,0.6);
-  font-weight: 500;
+.ghibli-btn-ghost {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  padding: 7px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s, border-color 0.2s;
 }
 
-/* Bottom Hero Bar */
-.hero-bottom-bar {
+.ghibli-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.ghibli-btn-solid {
+  background: rgba(255, 255, 255, 0.92);
+  border: none;
+  color: #1a1d23;
+  padding: 8px 20px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+.ghibli-btn-solid:hover {
+  background: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Hero Content — Centered ── */
+.ghibli-hero-content {
+  position: relative;
+  z-index: 5;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding-top: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 clamp(20px, 5vw, 80px);
 }
 
-.trusted-text {
-  font-size: 14.5px;
-  font-weight: 500;
-  line-height: 1.45;
-  color: rgba(240, 244, 241, 0.95);
-  text-shadow: 0 1px 6px rgba(0,0,0,0.5);
+.ghibli-title {
+  font-size: clamp(44px, 7vw, 96px);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+  text-shadow: 0 4px 40px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
+  margin-bottom: 20px;
+  max-width: 900px;
 }
 
-.brand-strip {
+.ghibli-subtitle {
+  font-size: clamp(15px, 1.6vw, 19px);
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.4);
+  font-weight: 450;
+  max-width: 600px;
+  margin-bottom: 32px;
+}
+
+.ghibli-cta-row {
+  display: flex;
+  justify-content: center;
+}
+
+.ghibli-cta {
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  padding: 14px 32px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  position: relative;
+  overflow: hidden;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: background 0.25s, transform 0.2s, box-shadow 0.25s, border-color 0.25s;
+  letter-spacing: 0.01em;
+}
+
+.ghibli-cta:hover {
+  background: rgba(255, 255, 255, 0.28);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* ── Trust Strip ── */
+.ghibli-trust {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
-  gap: 36px;
+  gap: 24px;
+  padding: 18px clamp(20px, 4vw, 60px);
+  margin: 0 clamp(16px, 3vw, 48px) 24px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.ghibli-trust-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+}
+
+.ghibli-trust-logos {
+  display: flex;
+  align-items: center;
+  gap: 28px;
   flex-wrap: wrap;
 }
 
-.brand-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: rgba(240, 244, 241, 0.95);
-  font-size: 14.5px;
+.ghibli-trust-logos span {
+  font-size: 14px;
   font-weight: 600;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
-  transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease;
-  cursor: pointer;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  transition: color 0.2s;
+  cursor: default;
 }
 
-.brand-item:hover {
-  color: var(--accent-gold);
-  transform: translateY(-2px);
+.ghibli-trust-logos span:hover {
+  color: #ffffff;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .ghibli-nav-links { display: none; }
+  .ghibli-nav { padding: 12px 20px; margin: 12px 12px 0; }
+  .ghibli-hero-content { padding: 0 20px; }
+  .ghibli-title { font-size: clamp(32px, 9vw, 56px); }
+  .ghibli-subtitle { font-size: 14px; }
+  .ghibli-trust { flex-direction: column; align-items: flex-start; gap: 10px; margin: 0 12px 12px; }
+  .ghibli-trust-logos { gap: 16px; }
 }
 
 /* ================= CONTENT CONTAINER BELOW HERO ================= */

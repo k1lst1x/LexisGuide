@@ -219,182 +219,68 @@ export function App() {
   return (
     <div className="page-wrapper" ref={contentRef}>
       
-      {/* 1. ENTIRE HERO SECTION WITH 4K LANDSCAPE BG */}
-      <section className="hero-hero-section">
-        <div className="hero-bg-wrapper">
+      {/* 1. GHIBLI HERO — FULL-BLEED LANDSCAPE */}
+      <section className="ghibli-hero">
+        <div className="ghibli-bg-wrap">
           <img 
-            src="/ghibli_hero_bg.jpg" 
-            alt="Studio Ghibli Hero Landscape" 
-            className="hero-bg-img" 
-            style={{ transform: `translateY(${heroOffset}px) scale(1.08)` }}
+            src="/ghibli_hero_bg.png" 
+            alt="Studio Ghibli Landscape" 
+            className="ghibli-bg-img" 
+            style={{ transform: `translateY(${heroOffset}px) scale(1.05)` }}
           />
-          <div className="hero-bg-overlay"></div>
+          <div className="ghibli-bg-fade" />
         </div>
         
-        <div className="hero-inner">
-          {/* Header Nav */}
-          <header className="header reveal" style={{ animationDelay: '0.1s' }}>
-            <div className="brand">
-              <span className="brand-name">LexisGuide</span>
-            </div>
-            
-            <nav className="nav-links">
-              <a href="#about" className="nav-item">About <span className="plus">+</span></a>
-              <a href="#process" className="nav-item">Workflow <span className="plus">+</span></a>
-              <button onClick={openDashboard} className="nav-item" style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-                Open Dashboard <span className="plus">⚡</span>
+        {/* Floating glass navbar */}
+        <header className="ghibli-nav reveal" style={{ animationDelay: '0.1s' }}>
+          <span className="ghibli-nav-brand">LexisGuide</span>
+          <nav className="ghibli-nav-links">
+            <a href="#about">About</a>
+            <a href="#process">Workflow</a>
+            <button onClick={openDashboard}>Dashboard</button>
+            <a href="#testimonial">Impact</a>
+          </nav>
+          <div className="ghibli-nav-actions">
+            {currentUser ? (
+              <>
+                <span className="ghibli-nav-user">{currentUser.email}</span>
+                <button onClick={handleSignOut} className="ghibli-btn-ghost">Sign Out</button>
+              </>
+            ) : (
+              <button onClick={() => setAuthOpen(true)} className="ghibli-btn-solid" onMouseDown={addRipple}>
+                Sign In
               </button>
-              <a href="#testimonial" className="nav-item">Review Chain <span className="plus">+</span></a>
-              <a href="#testimonial" className="nav-item">Audit Impact</a>
-            </nav>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <button 
-                onClick={openDashboard}
-                onMouseDown={addRipple}
-                className="ripple-btn"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.15)',
-                  border: '1px solid rgba(226,180,107,0.4)',
-                  color: '#e2b46b',
-                  padding: '7px 16px',
-                  borderRadius: '18px',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}
-              >
-                Launch Dashboard ⚡
-              </button>
-
-              {currentUser ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '13px', color: '#e2b46b', fontWeight: 600 }}>
-                    {currentUser.email}
-                  </span>
-                  <button 
-                    onClick={handleSignOut}
-                    style={{
-                      backgroundColor: 'rgba(255,255,255,0.15)',
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      color: '#ffffff',
-                      padding: '6px 14px',
-                      borderRadius: '16px',
-                      fontSize: '12.5px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              ) : (
-                <button 
-                  onClick={() => setAuthOpen(true)}
-                  onMouseDown={addRipple}
-                  className="ripple-btn"
-                  style={{
-                    backgroundColor: '#e2b46b',
-                    color: '#0b140f',
-                    border: 'none',
-                    padding: '8px 18px',
-                    borderRadius: '20px',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    position: 'relative',
-                    overflow: 'hidden'
-                  }}
-                >
-                  Sign In ↗
-                </button>
-              )}
-
-              <button className="menu-btn" aria-label="Toggle menu">
-                <span className="menu-line"></span>
-                <span className="menu-line"></span>
-              </button>
-            </div>
-          </header>
-          
-          {/* Main Hero Title & Info */}
-          <div className="hero-middle-grid">
-            <div className="hero-title-container reveal" style={{ animationDelay: '0.3s' }}>
-              <h1 className="hero-title">LexisGuide</h1>
-            </div>
-            
-            <div className="hero-info reveal" style={{ animationDelay: '0.5s' }}>
-              <div className="founders-row">
-                <div className="avatar-group">
-                  <div className="avatar avatar-1"></div>
-                  <span className="avatar-divider"></span>
-                  <div className="avatar avatar-2"></div>
-                </div>
-                <span className="tag-built">[ PROPOSAL · LEXHACK 2026 ]</span>
-              </div>
-              
-              <p className="hero-description">
-                Lighthouse for government documents — AI-powered clarity checks, procedural fairness analysis, and verifiable review trails for notices, denials, public forms, and shared agreements.
-              </p>
-
-              <button 
-                onClick={openDashboard}
-                onMouseDown={addRipple}
-                className="ripple-btn"
-                style={{
-                  marginTop: '20px',
-                  backgroundColor: '#e2b46b',
-                  color: '#0b140f',
-                  border: 'none',
-                  padding: '12px 24px',
-                  borderRadius: '24px',
-                  fontSize: '14px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  boxShadow: '0 8px 25px rgba(0,0,0,0.4)',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}
-              >
-                Open Linter Dashboard ⚡
-              </button>
-            </div>
+            )}
           </div>
-          
-          {/* Bottom Hero Brand Strip */}
-          <div className="hero-bottom-bar reveal" style={{ animationDelay: '0.7s' }}>
-            <p className="trusted-text">
-              Trusted by 100+ legal aid advocates, civic tech pioneers, and public service leaders turning legalese into actionable clarity.
-            </p>
-            
-            <div className="brand-strip">
-              <div className="brand-item">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
-                <span>CivicTech</span>
-              </div>
-              <div className="brand-item">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-                <span>LegalAid</span>
-              </div>
-              <div className="brand-item">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/><circle cx="12" cy="12" r="4"/></svg>
-                <span>OpenGov</span>
-              </div>
-              <div className="brand-item">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
-                <span>FairnessLinter</span>
-              </div>
-              <div className="brand-item">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                <span>LexHack</span>
-              </div>
-              <div className="brand-item">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/><path d="M12 1v3m0 16v3m11-12h-3M4 12H1m15.364-7.364l-2.121 2.121M7.757 16.243l-2.121 2.121m12.728 0l-2.121-2.121M7.757 7.757L5.636 5.636"/></svg>
-                <span>ReviewChain</span>
-              </div>
-            </div>
+        </header>
+
+        {/* Centred hero content */}
+        <div className="ghibli-hero-content">
+          <h1 className="ghibli-title reveal" style={{ animationDelay: '0.25s' }}>
+            Clarity for every<br/>public document
+          </h1>
+          <p className="ghibli-subtitle reveal" style={{ animationDelay: '0.45s' }}>
+            AI-powered fairness analysis, plain-language checks, and verifiable review trails for government notices, denials, and agreements.
+          </p>
+          <div className="ghibli-cta-row reveal" style={{ animationDelay: '0.6s' }}>
+            <button 
+              onClick={openDashboard}
+              onMouseDown={addRipple}
+              className="ghibli-cta ripple-btn"
+            >
+              ✦ Open Linter Dashboard
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom trust strip */}
+        <div className="ghibli-trust reveal" style={{ animationDelay: '0.75s' }}>
+          <span className="ghibli-trust-label">Trusted by</span>
+          <div className="ghibli-trust-logos">
+            <span>CivicTech</span>
+            <span>LegalAid</span>
+            <span>OpenGov</span>
+            <span>LexHack 2026</span>
           </div>
         </div>
       </section>
