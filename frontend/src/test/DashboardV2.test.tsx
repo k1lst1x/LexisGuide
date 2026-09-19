@@ -35,7 +35,7 @@ describe('DashboardV2', () => {
     await user.click(screen.getByRole('button', { name: 'Search this conversation' }))
 
     expect(screen.getByRole('dialog', { name: 'Search messages' })).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('Search messages, people, and documents...')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Search chats, people, or documents...')).toBeInTheDocument()
   })
 
   it('explains a highlighted document issue in plain language', async () => {

@@ -3431,6 +3431,24 @@ html, body {
 @media (max-width: 1240px) { .d2-message-workspace { grid-template-columns: 235px minmax(0,1fr); }.d2-message-info { display: none; } }
 @media (max-width: 780px) { .d2-message-page-actions { width: 100%; justify-content: space-between; }.d2-message-workspace { grid-template-columns: 1fr; min-height: auto; }.d2-message-rail { display: none; }.d2-message-thread-head { padding: 0 16px; }.d2-thread-context { margin-right: 16px; margin-left: 16px; }.d2-message-thread .d2-chat-messages { min-height: 340px; padding-right: 16px; padding-left: 16px; }.d2-message-thread .d2-chat-form { margin-right: 16px; margin-left: 16px; }.d2-composer-note { margin-right: 16px; margin-left: 16px; }.d2-message-search-overlay { padding-top: 60px; }.d2-search-tabs { gap: 12px; overflow-x: auto; }.d2-search-tabs button { white-space: nowrap; } }
 
+/* Give the collaboration view room for longer conversations on larger screens. */
+.d2-messages-page { width: 100%; max-width: none; gap: 28px; }
+.d2-message-workspace { grid-template-columns: 280px minmax(500px, 1fr) 305px; min-height: 720px; border-radius: 24px; box-shadow: 0 22px 52px rgba(30,41,59,.1); }
+.d2-message-rail { padding: 26px 16px 18px; }
+.d2-message-thread-head { min-height: 90px; padding-right: 29px; padding-left: 29px; }
+.d2-thread-hash { width: 39px; height: 39px; border-radius: 12px; font-size: 21px; }
+.d2-thread-title { gap: 12px; }.d2-thread-title h2 { font-size: 18px; }.d2-thread-title p { font-size: 12px; }
+.d2-message-thread .d2-chat-messages { min-height: 390px; padding: 24px 29px 14px; gap: 18px; }
+.d2-message-info { padding: 26px 20px; }
+
+@media (max-width: 1240px) {
+  .d2-message-workspace { grid-template-columns: 245px minmax(0, 1fr); min-height: 680px; }
+}
+
+@media (max-width: 780px) {
+  .d2-message-workspace { grid-template-columns: 1fr; min-height: auto; }
+}
+
 /* ─── Settings ─── */
 .d2-settings-grid {
   display: grid;
