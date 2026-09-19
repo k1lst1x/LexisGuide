@@ -20,6 +20,14 @@ backend/   FastAPI API and tests
 frontend/  React web application
 ```
 
+## Live landing page
+
+Once GitHub Pages is enabled, the landing page is published automatically after
+each push to `main` at https://k1lst1x.github.io/LexisGuide/.
+
+The repository also runs backend tests, frontend linting/builds, and CodeQL on
+every push and pull request. Dependabot opens weekly dependency-update PRs.
+
 ## Run locally
 
 Start the API (terminal 1):
