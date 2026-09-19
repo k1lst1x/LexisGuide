@@ -21,3 +21,28 @@
 .scene { will-change: transform; transform: scale(var(--scene-scale, 1)) translateY(var(--scene-y, 0px)); transition: transform .18s ease-out; }.scene.scene-replay { animation: scene-replay .85s cubic-bezier(.2,.8,.2,1) both; }
 .wipe-layer { position: fixed; z-index: 30; inset: 0; pointer-events: none; transform: scaleX(0); transform-origin: left center; background: var(--orange); }.is-wiping .wipe-layer { animation: wipe .85s cubic-bezier(.77,0,.18,1) both; }
 @keyframes scene-replay { 0% { opacity: 0; transform: scale(.72) rotate(-7deg) translateY(70px); filter: blur(16px); } 55% { opacity: 1; filter: blur(0); } 100% { transform: scale(1) rotate(0) translateY(0); } } @keyframes wipe { 0% { transform: scaleX(0); } 38% { transform: scaleX(1); } 62% { transform: scaleX(1); transform-origin: right center; } 100% { transform: scaleX(0); transform-origin: right center; } }
+
+/* Load choreography and scroll-reactive scene depth. */
+.hero-copy3d { transform-origin: left center; transition: transform .16s linear, opacity .16s linear; }
+.scene.scene-enter { animation: scene-enter 1.55s cubic-bezier(.16,.82,.25,1) both; }
+.scene-halo { position: absolute; z-index: 0; left: 50%; top: 48%; border-radius: 50%; pointer-events: none; }
+.halo-one { width: 600px; height: 180px; border: 1px solid rgba(255,174,139,.36); transform: translate(-50%, -50%) rotate(-23deg); box-shadow: 0 0 45px rgba(255,95,43,.16); animation: halo-drift 10s ease-in-out infinite; }
+.halo-two { width: 450px; height: 450px; border: 1px solid rgba(255,104,55,.2); transform: translate(-50%, -50%) rotateX(68deg); box-shadow: inset 0 0 55px rgba(255,123,78,.1); animation: halo-spin 20s linear infinite; }
+.scene-enter .document-3d { animation: document-appear 1.35s cubic-bezier(.16,.82,.25,1) .18s both, document-float 7s ease-in-out 1.6s infinite; }
+.scene-enter .node { opacity: 0; animation: node-appear .7s cubic-bezier(.16,.82,.25,1) both, node-float 5s ease-in-out 1.2s infinite; }
+.scene-enter .node-a { animation-delay: .64s, 1.5s; }.scene-enter .node-b { animation-delay: .82s, 1.7s; }.scene-enter .node-c { animation-delay: 1s, 1.9s; }
+.reveal-on-scroll.in-view .stage-card { animation: card-arrive .9s cubic-bezier(.16,.82,.25,1) .25s both; }
+.reveal-on-scroll.in-view .trust-glow { animation: trust-bloom 1.3s cubic-bezier(.16,.82,.25,1) both, orbit-spin 18s linear 1.3s infinite; }
+.reveal-on-scroll.in-view .chain-line { transform-origin: top; animation: chain-draw 1.2s cubic-bezier(.16,.82,.25,1) .35s both; }
+.reveal-on-scroll.in-view .chain-node { opacity: 0; animation: chain-appear .65s ease both, node-float 5s ease-in-out 1s infinite; }
+.reveal-on-scroll.in-view .chain-0 { animation-delay: .58s, 1.3s; }.reveal-on-scroll.in-view .chain-1 { animation-delay: .74s, 1.5s; }.reveal-on-scroll.in-view .chain-2 { animation-delay: .9s, 1.7s; }.reveal-on-scroll.in-view .chain-3 { animation-delay: 1.06s, 1.9s; }.reveal-on-scroll.in-view .chain-4 { animation-delay: 1.22s, 2.1s; }
+@keyframes scene-enter { from { opacity: 0; filter: blur(20px); transform: scale(.58) translate3d(120px,100px,0) rotate(-8deg); } to { opacity: 1; filter: blur(0); transform: scale(var(--scene-scale, 1)) translateY(var(--scene-y, 0px)); } }
+@keyframes document-appear { from { opacity: 0; transform: rotateY(-70deg) rotateX(24deg) rotateZ(-20deg) translate3d(0,80px,-120px); } to { opacity: 1; transform: rotateY(-27deg) rotateX(8deg) rotateZ(-5deg) translate3d(0,0,0); } }
+@keyframes node-appear { from { opacity: 0; transform: scale(.3) translateY(24px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes halo-drift { 50% { transform: translate(-50%, -50%) rotate(12deg) scale(1.14); } }
+@keyframes halo-spin { to { transform: translate(-50%, -50%) rotateX(68deg) rotateZ(360deg); } }
+@keyframes card-arrive { from { opacity: 0; transform: rotateX(35deg) rotateY(-28deg) translate3d(70px,80px,0); filter: blur(12px); } to { opacity: 1; transform: rotateX(8deg) rotateY(-12deg) rotateZ(2deg) translate3d(0,0,0); filter: blur(0); } }
+@keyframes trust-bloom { from { opacity: 0; transform: scale(.25); filter: blur(45px); } to { opacity: .7; transform: scale(1); filter: blur(25px); } }
+@keyframes chain-draw { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes chain-appear { from { opacity: 0; transform: translateX(28px) scale(.7); } to { opacity: 1; transform: translateX(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
