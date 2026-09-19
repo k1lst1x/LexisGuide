@@ -9,14 +9,14 @@ const termsText = (
     By creating an account, you agree to our{" "}
     <a
       href="#"
-      className="font-medium text-black/45 underline underline-offset-2 dark:text-white/45"
+      className="font-medium text-black/60 underline underline-offset-2 hover:text-black"
     >
       Terms and Services
     </a>{" "}
     and{" "}
     <a
       href="#"
-      className="font-medium text-black/45 underline underline-offset-2 dark:text-white/45"
+      className="font-medium text-black/60 underline underline-offset-2 hover:text-black"
     >
       Privacy Policy
     </a>
@@ -42,23 +42,24 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
   };
 
   return (
-    <section className="min-h-screen bg-white p-3 text-black antialiased [font-synthesis:none] dark:bg-[#050505] dark:text-white">
+    <section className="min-h-screen bg-white p-3 text-black antialiased [font-synthesis:none]">
       {onCancel && (
         <button
           onClick={onCancel}
-          className="fixed top-6 right-6 z-50 rounded-full border border-black/20 bg-white/80 px-4 py-2 text-sm font-semibold backdrop-blur-md transition hover:bg-black/5 dark:border-white/20 dark:bg-black/80 dark:hover:bg-white/10"
+          className="fixed top-6 right-6 z-50 rounded-full border border-black/15 bg-white/90 px-4 py-2 text-sm font-semibold shadow-sm backdrop-blur-md transition hover:bg-black/5 cursor-pointer"
         >
-          ✕ Close
+          ← Return to LexisGuide
         </button>
       )}
       <div className="grid min-h-[calc(100vh-1.5rem)] gap-6 lg:grid-cols-[0.94fr_1.06fr]">
-        <div className="flex min-h-[760px] items-start rounded-md border border-black/20 bg-white px-6 py-12 sm:px-10 dark:border-white/10 dark:bg-[#0a0a0a] lg:min-h-0 lg:px-14 lg:py-28 xl:px-20">
+        {/* Left Form Panel — Pure White Theme */}
+        <div className="flex min-h-[760px] items-start rounded-md border border-black/15 bg-white px-6 py-12 sm:px-10 lg:min-h-0 lg:px-14 lg:py-28 xl:px-20 shadow-sm">
           <div className="mx-auto w-full max-w-[590px]">
             <div>
-              <h1 className="whitespace-nowrap text-3xl font-medium tracking-[-0.04em] sm:text-4xl lg:text-[42px] lg:leading-[1.05] xl:text-[50px]">
+              <h1 className="whitespace-nowrap text-3xl font-semibold tracking-[-0.04em] text-black sm:text-4xl lg:text-[42px] lg:leading-[1.05] xl:text-[50px]">
                 Create an account
               </h1>
-              <p className="mt-3 whitespace-nowrap text-lg leading-snug text-black/60 dark:text-white/55 sm:text-xl lg:text-2xl xl:text-3xl">
+              <p className="mt-3 whitespace-nowrap text-lg leading-snug text-black/60 sm:text-xl lg:text-2xl xl:text-3xl">
                 Brainstorm in chat, build in cowork
               </p>
             </div>
@@ -76,7 +77,7 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
               />
             </div>
 
-            <div className="my-10 text-center text-xl font-medium text-black/60 dark:text-white/50">
+            <div className="my-10 text-center text-xl font-medium text-black/50">
               or
             </div>
 
@@ -107,7 +108,7 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
                 onChange={setPassword}
               />
 
-              <div className="space-y-4 pt-2 text-sm leading-5 text-black/30 dark:text-white/35 sm:text-[15px]">
+              <div className="space-y-4 pt-2 text-sm leading-5 text-black/50 sm:text-[15px]">
                 <CheckboxLine>
                   I don't want to receive emails about solaceui feature updates
                 </CheckboxLine>
@@ -116,7 +117,7 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
 
               <button
                 type="submit"
-                className="mt-9 flex h-12 w-full items-center justify-center rounded-[10px] border border-black/40 bg-black text-xl font-medium text-white transition-colors hover:bg-black/85 dark:border-white/40 dark:bg-white dark:text-black dark:hover:bg-white/85 cursor-pointer"
+                className="mt-9 flex h-12 w-full items-center justify-center rounded-[10px] border border-black/30 bg-black text-xl font-medium text-white transition-all hover:bg-black/85 cursor-pointer shadow-md"
               >
                 Submit
               </button>
@@ -124,25 +125,26 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
           </div>
         </div>
 
-        <div className="relative flex min-h-[720px] overflow-hidden rounded-md bg-black p-8 text-white sm:p-12 lg:min-h-0">
+        {/* Right Hero Banner — Vibrant White & Light Shader Theme */}
+        <div className="relative flex min-h-[720px] overflow-hidden rounded-md border border-black/10 bg-white p-8 text-black sm:p-12 lg:min-h-0 shadow-sm">
           <GrainGradient
             speed={1}
             scale={1}
             rotation={0}
             offsetX={0}
             offsetY={0}
-            softness={0.5}
-            intensity={0.5}
-            noise={0.25}
+            softness={0.6}
+            intensity={0.4}
+            noise={0.15}
             shape="corners"
             frame={2854.5}
-            colors={["#FFFFFF", "#FC7819", "#FC7819", "#FFFFFF"]}
-            colorBack="#00000000"
-            className="absolute inset-0 bg-black"
+            colors={["#FFFFFF", "#FF6B00", "#F97316", "#FFF5EE"]}
+            colorBack="#FFFFFF"
+            className="absolute inset-0 bg-white"
           />
 
           <div className="relative z-10 flex h-full w-full flex-col justify-between">
-            <h2 className="max-w-[620px] pt-0 text-5xl font-medium tracking-[-0.05em] text-white sm:text-6xl lg:pt-16 lg:text-[64px] lg:leading-[0.98] xl:text-[70px]">
+            <h2 className="max-w-[620px] pt-0 text-5xl font-semibold tracking-[-0.05em] text-black sm:text-6xl lg:pt-16 lg:text-[64px] lg:leading-[0.98] xl:text-[70px]">
               Think fast,
               <br />
               Build faster
@@ -150,7 +152,7 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
 
             <a
               href="#"
-              className="mb-0 inline-flex h-12 max-w-full items-center gap-3 rounded-[10px] border border-white/25 px-5 text-base font-medium text-white/85 backdrop-blur-sm transition-colors hover:border-white/45 hover:text-white xl:mb-32 xl:px-6 xl:text-2xl"
+              className="mb-0 inline-flex h-12 max-w-full items-center gap-3 rounded-[10px] border border-black/20 bg-white/70 px-5 text-base font-medium text-black backdrop-blur-md transition-colors hover:border-black/40 hover:bg-white xl:mb-32 xl:px-6 xl:text-2xl shadow-sm"
             >
               <WindowsIcon className="size-5 shrink-0 xl:size-7" />
               <span className="truncate whitespace-nowrap">
@@ -177,7 +179,7 @@ function SocialButton({
     <button
       type="button"
       onClick={onClick}
-      className="flex h-10 items-center justify-center gap-2 rounded-[10px] border border-black/25 bg-white px-3 text-sm leading-none text-black transition-colors hover:bg-black/[0.03] dark:border-white/20 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 xl:text-[19px] cursor-pointer"
+      className="flex h-12 items-center justify-center gap-3 rounded-[10px] border border-black/20 bg-white px-4 text-sm font-medium leading-none text-black transition-all hover:border-black/40 hover:bg-black/[0.02] xl:text-[18px] cursor-pointer shadow-sm"
     >
       <span className="shrink-0">{icon}</span>
       <span className="whitespace-nowrap">{label}</span>
@@ -200,7 +202,7 @@ function FieldBox({
   const [isEditing, setIsEditing] = useState(false);
 
   return (
-    <label className="flex h-14 items-center justify-between gap-4 rounded-[10px] border border-black/25 bg-white px-5 text-lg leading-none dark:border-white/15 dark:bg-white/5 xl:text-xl">
+    <label className="flex h-14 items-center justify-between gap-4 rounded-[10px] border border-black/20 bg-white px-5 text-lg leading-none transition-colors focus-within:border-black/60 xl:text-xl shadow-xs">
       <input
         type={type}
         value={inputValue}
@@ -216,10 +218,10 @@ function FieldBox({
           setIsEditing(true);
           if (onChange) onChange(event.target.value);
         }}
-        className="min-w-0 flex-1 truncate bg-transparent text-black/30 outline-none placeholder:text-black/30 dark:text-white/35 dark:placeholder:text-white/35"
+        className="min-w-0 flex-1 truncate bg-transparent text-black outline-none placeholder:text-black/30 font-normal"
       />
       {!isEditing && (
-        <span className="shrink-0 text-black dark:text-white">{label}</span>
+        <span className="shrink-0 text-black/60 font-medium text-base">{label}</span>
       )}
     </label>
   );
@@ -228,34 +230,34 @@ function FieldBox({
 function CheckboxLine({ children }: { children: ReactNode }) {
   return (
     <label className="flex items-start gap-3 cursor-pointer">
-      <span className="relative mt-1 size-3.5 shrink-0">
+      <span className="relative mt-1 size-4 shrink-0">
         <input
           type="checkbox"
-          className="peer size-full appearance-none rounded-[2px] border border-black/25 bg-white checked:border-black checked:bg-black dark:border-white/30 dark:bg-white/5 dark:checked:border-white dark:checked:bg-white"
+          className="peer size-full appearance-none rounded-[3px] border border-black/30 bg-white checked:border-black checked:bg-black"
         />
         <svg
           viewBox="0 0 12 12"
-          className="pointer-events-none absolute inset-0 hidden size-full p-0.5 text-white peer-checked:block dark:text-black"
+          className="pointer-events-none absolute inset-0 hidden size-full p-0.5 text-white peer-checked:block"
           fill="none"
           aria-hidden="true"
         >
           <path
             d="M3 6.2 5 8.1 9 3.9"
             stroke="currentColor"
-            strokeWidth="1.6"
+            strokeWidth="1.8"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
         </svg>
       </span>
-      <span>{children}</span>
+      <span className="text-black/70">{children}</span>
     </label>
   );
 }
 
 function GoogleIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
       <path
         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09Z"
         fill="#4285F4"
@@ -279,8 +281,8 @@ function GoogleIcon() {
 function AppleIcon() {
   return (
     <svg
-      width="18"
-      height="18"
+      width="20"
+      height="20"
       viewBox="0 0 24 24"
       fill="currentColor"
       aria-hidden="true"
