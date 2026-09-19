@@ -11,6 +11,9 @@ type SampleDoc = {
   type: string
   version: string
   score: number
+  priorityScore?: number
+  deadline?: string | null
+  deadlineConfidence?: string
   status: string
   agency: string
   date: string
@@ -47,6 +50,9 @@ const sampleDocs: SampleDoc[] = [
     type: 'Administrative Denial',
     version: 'v1.0 (Audit Flagged)',
     score: 54,
+    priorityScore: 92,
+    deadline: null,
+    deadlineConfidence: 'low',
     status: 'Needs Improvement',
     agency: 'Department of Human Services · Division of Eligibility',
     date: 'September 12, 2026',
@@ -112,6 +118,9 @@ For inquiries, contact the central administrative portal.`,
     type: 'Administrative Denial',
     version: 'v4.0 (Remediated)',
     score: 89,
+    priorityScore: 28,
+    deadline: '2026-10-14T17:00:00-04:00',
+    deadlineConfidence: 'high',
     status: 'Passed Due Process',
     agency: 'Department of Human Services · Division of Eligibility',
     date: 'September 14, 2026',
@@ -170,6 +179,9 @@ If no appeal is received by October 14, 2026, this decision becomes final. You m
     type: 'Shared Agreement',
     version: 'v1.0 (Workspace Open)',
     score: 62,
+    priorityScore: 78,
+    deadline: null,
+    deadlineConfidence: 'low',
     status: 'Needs Review',
     agency: 'Private Agreement · Landlord & Tenant Workspace',
     date: 'September 15, 2026',
@@ -462,6 +474,30 @@ function documentDisplayName(document: SampleDoc) {
   return document.title
 }
 
+function documentPriority(document: SampleDoc) {
+  if (typeof document.priorityScore === 'number') return document.priorityScore
+  const critical = document.findings.filter((finding) => finding.severity === 'critical').length
+  const warning = document.findings.filter((finding) => finding.severity === 'warning').length
+  return Math.min(100, critical * 28 + warning * 12)
+}
+
+function documentDeadlineValue(document: SampleDoc) {
+  if (!document.deadline) return Number.POSITIVE_INFINITY
+  const parsed = Date.parse(document.deadline)
+  return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed
+}
+
+function formatDocumentDeadline(deadline?: string | null) {
+  if (!deadline) return 'No exact deadline found'
+  const parsed = new Date(deadline)
+  if (Number.isNaN(parsed.getTime())) return deadline
+  return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function sortDocuments(documents: SampleDoc[]) {
+  return [...documents].sort((a, b) => documentDeadlineValue(a) - documentDeadlineValue(b) || documentPriority(b) - documentPriority(a))
+}
+
 function DocumentPicker({ documents, selectedDocument, onSelect }: { documents: SampleDoc[]; selectedDocument: SampleDoc; onSelect: (document: SampleDoc) => void }) {
   const [isOpen, setIsOpen] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -595,6 +631,10 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
       findings?: Array<{ title: string; explanation: string; severity: string; source_text?: string | null; why_it_matters?: string | null; negotiation_point?: string | null; suggested_rewrite?: string | null }>
       overall_assessment?: string
       confidence?: string
+      document_score?: number
+      priority_score?: number
+      deadline?: string | null
+      deadline_confidence?: string
       summary?: string
       next_steps?: string[]
       sources?: Array<{ title?: string; citation?: string; url?: string | null; support?: string }>
@@ -627,7 +667,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
       }))
       : scanUploadedText(text)
     const assessment = aiResult?.overall_assessment
-    const score = assessment === 'favorable' ? 85 : assessment === 'unfavorable' ? 35 : assessment === 'insufficient_information' ? 50 : 62
+    const score = typeof aiResult?.document_score === 'number' ? aiResult.document_score : assessment === 'favorable' ? 85 : assessment === 'unfavorable' ? 35 : assessment === 'insufficient_information' ? 50 : 62
     const uploaded: SampleDoc = {
       ...sampleDocs[0],
       id,
@@ -635,6 +675,9 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
       type,
       version: aiResult ? 'AgentCore review complete' : 'Quick scan complete',
       score,
+      priorityScore: typeof aiResult?.priority_score === 'number' ? aiResult.priority_score : undefined,
+      deadline: aiResult?.deadline,
+      deadlineConfidence: aiResult?.deadline_confidence,
       status: assessment ? assessment.replaceAll('_', ' ') : findings.some((finding) => finding.severity === 'warning') ? 'Review recommended' : 'No common risks found',
       date: new Date().toLocaleDateString(),
       hash,
@@ -668,7 +711,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
         body: JSON.stringify({ document_text: selectedDoc.text.slice(0, 100000), action, jurisdiction: jurisdiction.trim() || undefined }),
       })
       if (!response.ok) throw new Error('The AI service could not complete this action.')
-      const result = await response.json() as { summary?: string; overall_assessment?: string; confidence?: string; next_steps?: string[]; sources?: SampleDoc['sources']; findings?: Array<{ title: string; explanation: string; severity: string; source_text?: string; why_it_matters?: string; negotiation_point?: string; suggested_rewrite?: string }> }
+      const result = await response.json() as { summary?: string; overall_assessment?: string; confidence?: string; document_score?: number; priority_score?: number; deadline?: string | null; deadline_confidence?: string; next_steps?: string[]; sources?: SampleDoc['sources']; findings?: Array<{ title: string; explanation: string; severity: string; source_text?: string; why_it_matters?: string; negotiation_point?: string; suggested_rewrite?: string }> }
       const findings = (result.findings ?? []).map((finding, index) => ({
         id: `ai-${action}-${index}`,
         title: finding.title,
@@ -681,7 +724,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
         negotiationPoint: finding.negotiation_point,
         suggestedRewrite: finding.suggested_rewrite,
       }))
-      const updated = { ...selectedDoc, findings: findings.length ? findings : selectedDoc.findings, summary: result.summary, assessment: result.overall_assessment, confidence: result.confidence, nextSteps: result.next_steps, sources: result.sources }
+      const updated = { ...selectedDoc, score: typeof result.document_score === 'number' ? result.document_score : selectedDoc.score, priorityScore: typeof result.priority_score === 'number' ? result.priority_score : selectedDoc.priorityScore, deadline: result.deadline ?? selectedDoc.deadline, deadlineConfidence: result.deadline_confidence ?? selectedDoc.deadlineConfidence, findings: findings.length ? findings : selectedDoc.findings, summary: result.summary, assessment: result.overall_assessment, confidence: result.confidence, nextSteps: result.next_steps, sources: result.sources }
       setDocuments((current) => current.map((document) => document.id === selectedDoc.id ? updated : document))
       setSelectedDoc(updated)
       setActiveFinding(updated.findings[0]?.id || null)
@@ -772,6 +815,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const isDemoMode = !documents.some((document) => document.id.startsWith('upload-'))
   const workspaceAverage = Math.round(documents.reduce((total, document) => total + document.score, 0) / Math.max(documents.length, 1))
   const highestScore = Math.max(...documents.map((document) => document.score))
+  const priorityDocuments = sortDocuments(documents)
 
   const breadcrumbMap: Record<NavItem, string> = {
     overview: 'Dashboard',
@@ -1062,12 +1106,18 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 </div>
               </section>
 
-              {!documentModalOpen && <section className="d2-document-shelf" aria-label="Documents">
-                {documents.map((document) => <button key={document.id} className="d2-document-shelf-card" onClick={() => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id || null); setDocumentModalOpen(true) }}>
+              {!documentModalOpen && <section className="d2-document-shelf" aria-label="Priority document queue">
+                <div className="d2-document-shelf-heading"><div><span className="d2-eyebrow">AI PRIORITY QUEUE</span><h2>Documents needing attention</h2><p>Sorted by nearest known deadline, then AI urgency score.</p></div><span>{priorityDocuments.length} files</span></div>
+                <div className="d2-document-shelf-list">
+                {priorityDocuments.map((document, index) => <button key={document.id} className="d2-document-shelf-card" onClick={() => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id || null); setDocumentModalOpen(true) }}>
+                  <span className="d2-shelf-rank">{String(index + 1).padStart(2, '0')}</span>
                   <span className="d2-shelf-icon">{documentKind(document.type).icon}</span>
-                  <span><strong>{document.title}</strong><small>{document.type} Â· {document.date}</small><em>{document.summary || 'Open this document in the AI review workspace.'}</em></span>
+                  <span className="d2-shelf-document-copy"><strong>{document.title}</strong><small>{document.type} Â· {document.date}</small><em>{document.summary || 'Open this document in the AI review workspace.'}</em></span>
+                  <span className="d2-shelf-deadline"><small>DEADLINE</small><strong>{formatDocumentDeadline(document.deadline)}</strong><em>{document.deadline ? `${document.deadlineConfidence || 'AI'} confidence` : 'AI found no exact date'}</em></span>
+                  <span className="d2-shelf-priority"><small>AI PRIORITY</small><strong>{documentPriority(document)}<span>/100</span></strong><em>{documentPriority(document) >= 75 ? 'Urgent' : documentPriority(document) >= 45 ? 'Review soon' : 'Routine'}</em></span>
                   <b>Open â†’</b>
                 </button>)}
+                </div>
               </section>}
 
               <div className={`d2-document-workspace ${documentModalOpen ? 'd2-document-modal-open' : 'd2-document-workspace-closed'}`}>

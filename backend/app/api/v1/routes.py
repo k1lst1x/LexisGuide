@@ -44,6 +44,10 @@ class AnalyzeResponse(BaseModel):
     disclaimer: str
     overall_assessment: str | None = None
     confidence: str | None = None
+    document_score: int | None = Field(default=None, ge=0, le=100)
+    priority_score: int | None = Field(default=None, ge=0, le=100)
+    deadline: str | None = None
+    deadline_confidence: str | None = None
     summary: str | None = None
     next_steps: list[str] = Field(default_factory=list)
     questions_for_user: list[str] = Field(default_factory=list)

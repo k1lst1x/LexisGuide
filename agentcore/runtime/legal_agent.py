@@ -16,10 +16,17 @@ disadvantage the user, explain it plainly, rate practical risk, and propose
 negotiation points plus optional replacement clauses. State uncertainty and escalate
 urgent or high-consequence matters to a licensed attorney.
 
-Return valid JSON only with keys overall_assessment, confidence, summary, findings,
+Return valid JSON only with keys overall_assessment, confidence, document_score,
+priority_score, deadline, deadline_confidence, summary, findings,
 next_steps, questions_for_user, and disclaimer. Each finding must have title,
 explanation, severity, source_text, why_it_matters, negotiation_point, and
-suggested_rewrite. The disclaimer must be: LexisGuide provides general information,
+suggested_rewrite. document_score is a 0-100 estimate of how favorable and complete
+the document is for the user (higher is better). priority_score is a 0-100 urgency
+score for the user's next action (higher means more urgent), based on consequences,
+severity, and deadline proximity. deadline must be an exact ISO-8601 timestamp only
+when the document states or reliably implies one; otherwise use null. Never invent a
+deadline. deadline_confidence must explain how certain the extraction is using low,
+medium, or high. The disclaimer must be: LexisGuide provides general information,
 not legal advice.
 """
 
