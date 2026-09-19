@@ -192,13 +192,13 @@ button:focus-visible { outline: 0; box-shadow: 0 0 0 3px rgba(255,100,47,.28), 0
 }
 .magnified-document-face {
   position: absolute;
-  left: 50%;
-  top: 50%;
+  left: 0;
+  top: 0;
   width: 350px;
   height: 455px;
   margin: 0;
-  transform: translate(-50%, -50%) scale(1.72);
-  transform-origin: center center;
+  transform: translate(var(--magnifier-x, -120px), var(--magnifier-y, -120px)) scale(1.72);
+  transform-origin: top left;
   filter: saturate(1.12) contrast(1.05);
 }
 .magnified-document-face::after { animation: none; }

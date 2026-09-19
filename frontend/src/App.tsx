@@ -84,7 +84,21 @@ function App() {
     magnifiedFace.classList.add('magnified-document-face')
     viewport.appendChild(magnifiedFace)
     lens.appendChild(viewport)
-    return () => viewport.remove()
+    let frame = 0
+    const syncMagnification = () => {
+      const lensRect = viewport.getBoundingClientRect()
+      const faceRect = documentFace.getBoundingClientRect()
+      const lensX = lensRect.left + lensRect.width / 2
+      const lensY = lensRect.top + lensRect.height / 2
+      const pointX = Math.max(0, Math.min(faceRect.width, lensX - faceRect.left))
+      const pointY = Math.max(0, Math.min(faceRect.height, lensY - faceRect.top))
+      const zoom = 1.72
+      magnifiedFace.style.setProperty('--magnifier-x', `${lensRect.width / 2 - pointX * zoom}px`)
+      magnifiedFace.style.setProperty('--magnifier-y', `${lensRect.height / 2 - pointY * zoom}px`)
+      frame = window.requestAnimationFrame(syncMagnification)
+    }
+    frame = window.requestAnimationFrame(syncMagnification)
+    return () => { window.cancelAnimationFrame(frame); viewport.remove() }
   }, [])
   const go = (message: string) => { document.querySelector('#experience')?.scrollIntoView({ behavior: 'smooth' }); setToast(message) }
 
