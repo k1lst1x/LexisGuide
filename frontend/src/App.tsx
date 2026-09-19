@@ -4,6 +4,7 @@ import { DashboardV2 } from './DashboardV2'
 import { SplashScreen } from './SplashScreen'
 import { TransitionLoader } from './TransitionLoader'
 import { cognitoGetCurrentUser, cognitoSignOut } from './aws'
+import littlebirdTreesBg from '@/assets/littlebird_trees_bg.png'
 
 const WORKSPACE_KEY = 'lexisguide:workspace'
 const WORKSPACE_USER_KEY = 'lexisguide:workspace-user'
@@ -280,7 +281,7 @@ export function App() {
       <section className="lb-hero">
         <div className="lb-hero-glow" />
         <img
-          src="/littlebird_trees_bg.png"
+          src={littlebirdTreesBg}
           alt="Littlebird Nature Landscape"
           className="lb-hero-tree-bg"
         />
