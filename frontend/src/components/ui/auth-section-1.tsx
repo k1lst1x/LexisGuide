@@ -124,23 +124,25 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
           </div>
         </div>
 
-        {/* Right Column — Rounded Grain Gradient Shader Banner */}
-        <div className="relative min-h-[500px] w-full overflow-hidden rounded-[20px] bg-black lg:min-h-0">
-          <GrainGradient
-            speed={1}
-            scale={1}
-            rotation={0}
-            offsetX={0}
-            offsetY={0}
-            softness={0.5}
-            intensity={0.5}
-            noise={0.25}
-            shape="corners"
-            frame={2854.5}
-            colors={["#FFFFFF", "#FC7819", "#FC7819", "#FFFFFF"]}
-            colorBack="#00000000"
-            className="absolute inset-0 h-full w-full rounded-[20px] object-cover bg-black"
-          />
+        {/* Right Column — Padded Rounded Grain Gradient Shader Banner */}
+        <div className="p-4 sm:p-6 lg:p-6 flex items-center justify-center w-full h-full">
+          <div className="relative min-h-[500px] h-full w-full overflow-hidden rounded-[20px] bg-black lg:min-h-0">
+            <GrainGradient
+              speed={1}
+              scale={1}
+              rotation={0}
+              offsetX={0}
+              offsetY={0}
+              softness={0.5}
+              intensity={0.5}
+              noise={0.25}
+              shape="corners"
+              frame={2854.5}
+              colors={["#FFFFFF", "#FC7819", "#FC7819", "#FFFFFF"]}
+              colorBack="#00000000"
+              className="absolute inset-0 h-full w-full rounded-[20px] object-cover bg-black"
+            />
+          </div>
         </div>
       </div>
     </section>

@@ -22,5 +22,5 @@
     }
   },
   "include": ["src"],
-  "exclude": ["src/aws.ts"]
+  "exclude": ["src/aws.ts", "src/test", "src/**/*.test.tsx", "src/**/*.test.ts"]
 }
