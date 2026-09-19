@@ -740,20 +740,20 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                     <h2>Potential risk</h2>
                     <p>{potentialRiskCount ? `${potentialRiskCount} item${potentialRiskCount === 1 ? '' : 's'} should be reviewed before you agree.` : 'No common risk patterns were found in this scan.'}</p>
                   </div>
-                  <div className="d2-risk-ring" aria-label={`${potentialRiskPercent}% potential risk markers`}>
-                    <svg viewBox="0 0 100 100" aria-hidden="true"><circle className="d2-ring-track" cx="50" cy="50" r="40"/><circle className="d2-ring-risk" cx="50" cy="50" r="40" pathLength="100" strokeDasharray={`${potentialRiskPercent} ${100 - potentialRiskPercent}`} /></svg>
-                    <strong>{potentialRiskPercent}%</strong><span>review</span>
+                  <div className="d2-risk-ring" role="img" aria-label={`${potentialRiskPercent}% of scan checks need review`}>
+                    <svg viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="d2-risk-gradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#fb7185"/><stop offset="100%" stopColor="#dc2626"/></linearGradient></defs><circle className="d2-ring-track" cx="50" cy="50" r="40"/><circle className="d2-ring-risk" cx="50" cy="50" r="40" pathLength="100" stroke="url(#d2-risk-gradient)" strokeDasharray={`${potentialRiskPercent} ${100 - potentialRiskPercent}`} /></svg>
+                    <div className="d2-risk-ring-center"><strong>{potentialRiskPercent}%</strong><span>to review</span></div>
                   </div>
                 </div>
 
                 <div className="d2-insight-mix">
                   <div className="d2-insight-heading"><div><span className="d2-eyebrow">FINDING MIX</span><h2>Good and bad signals</h2></div><span>{findingTotal} checks</span></div>
                   <div className="d2-mix-bar" role="img" aria-label={`${criticalCount} high priority, ${warningCount} review, and ${passCount} checked findings`}>
-                    {criticalCount > 0 && <i className="d2-mix-critical" style={{ width: `${criticalPercent}%` }} />}
-                    {warningCount > 0 && <i className="d2-mix-warning" style={{ width: `${warningPercent}%` }} />}
-                    {passCount > 0 && <i className="d2-mix-pass" style={{ width: `${checkedPercent}%` }} />}
+                    {criticalCount > 0 && <span className="d2-mix-critical" style={{ width: `${criticalPercent}%` }}><b>{criticalPercent}%</b></span>}
+                    {warningCount > 0 && <span className="d2-mix-warning" style={{ width: `${warningPercent}%` }}><b>{warningPercent}%</b></span>}
+                    {passCount > 0 && <span className="d2-mix-pass" style={{ width: `${checkedPercent}%` }}><b>{checkedPercent}%</b></span>}
                   </div>
-                  <div className="d2-mix-legend"><span><i className="d2-legend-critical" />High priority <b>{criticalCount}</b></span><span><i className="d2-legend-warning" />Review <b>{warningCount}</b></span><span><i className="d2-legend-pass" />Checked <b>{passCount}</b></span></div>
+                  <div className="d2-mix-legend"><span><i className="d2-legend-critical" /><em>High priority</em><b>{criticalCount}</b></span><span><i className="d2-legend-warning" /><em>Review</em><b>{warningCount}</b></span><span><i className="d2-legend-pass" /><em>Checked</em><b>{passCount}</b></span></div>
                 </div>
 
                 <div className="d2-insight-categories">
