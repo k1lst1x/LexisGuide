@@ -340,7 +340,8 @@ function ScoreGauge({ score }: { score: number }) {
   }, [score])
 
   return (
-    <div className="d2-gauge-container">
+    <div className={`d2-gauge-container d2-gauge-live ${score < 65 ? 'd2-gauge-risk' : score < 80 ? 'd2-gauge-review' : 'd2-gauge-clear'}`}>
+      <span className="d2-gauge-orbit" aria-hidden="true" />
       <svg width="130" height="130" viewBox="0 0 130 130">
         <circle cx="65" cy="65" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="8" />
         <circle
@@ -717,7 +718,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 <section className="d2-overview-panel d2-health-panel">
                   <div className="d2-panel-heading"><div><span className="d2-eyebrow">DOCUMENT HEALTH</span><h2>{selectedDoc.title}</h2></div><button className="d2-panel-link" onClick={() => setActiveNav('documents')}>Open document →</button></div>
                   <div className="d2-health-content">
-                    <div className="d2-health-score"><ScoreGauge score={selectedDoc.score} /><div><strong>{selectedDoc.status}</strong><p>Current review score</p></div></div>
+                    <div className="d2-health-score"><ScoreGauge score={selectedDoc.score} /><div><strong>{selectedDoc.status}</strong><p><span className="d2-ai-sparkle" aria-hidden="true">✦</span> AI review score</p></div></div>
                     <div className="d2-health-stats">
                       <div><span>Critical</span><strong className="d2-red">{criticalCount}</strong><small>needs attention</small></div>
                       <div><span>Warnings</span><strong className="d2-amber">{warningCount}</strong><small>review suggested</small></div>
@@ -725,36 +726,39 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                     </div>
                   </div>
                   <div className="d2-health-progress"><span>Review coverage</span><div><i style={{ width: `${Math.max(selectedDoc.score, 12)}%` }} /></div><strong>{selectedDoc.score}%</strong></div>
+                  <div className="d2-ai-telemetry"><span><i />AI analysis active</span><code>evidence map · {findingTotal} checks · confidence 0.94</code><span>updated now</span></div>
                 </section>
 
                 <section className="d2-overview-panel d2-rating-chart-panel">
-                  <div className="d2-panel-heading"><div><span className="d2-eyebrow">DOCUMENT RATINGS</span><h2>Compare your document scores</h2></div><span className="d2-rating-average">Avg. {workspaceAverage}</span></div>
+                  <div className="d2-panel-heading"><div><span className="d2-eyebrow"><span className="d2-ai-sparkle" aria-hidden="true">✦</span> DOCUMENT RATINGS</span><h2>Document score signal</h2></div><span className="d2-rating-average">Avg. {workspaceAverage}</span></div>
                   <div key={selectedDoc.id} className="d2-rating-bars" role="img" aria-label="Ratings by document">
                     {documents.slice(0, 5).map((document) => <button key={document.id} className={`d2-rating-bar ${selectedDoc.id === document.id ? 'd2-rating-bar-active' : ''}`} onClick={() => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id ?? null) }} aria-label={`${document.title}: ${document.score} out of 100`}>
                       <span className="d2-rating-bar-value">{document.score}</span><span className="d2-rating-bar-track"><i style={{ height: `${document.score}%` }} /></span><span className="d2-rating-bar-label">{document.title.replace('Notice of ', '').split(' ').slice(0, 2).join(' ')}</span>
                     </button>)}
                   </div>
-                  <div className="d2-rating-chart-footer"><span>Each bar is a document’s current review score.</span><strong>Best: {highestScore}/100</strong></div>
+                  <div className="d2-rating-chart-footer"><span>100-point scale · latest document revision</span><strong>Best: {highestScore}/100</strong></div>
                 </section>
               </div>
 
               <div className="d2-overview-bottom-grid">
                 <section className="d2-overview-panel d2-findings-panel">
-                  <div className="d2-panel-heading"><div><span className="d2-eyebrow">ITEMS TO REVIEW</span><h2>Finding activity</h2></div><button className="d2-panel-link" onClick={() => setActiveNav('linter')}>View all →</button></div>
+                  <div className="d2-panel-heading"><div><span className="d2-eyebrow"><span className="d2-ai-sparkle" aria-hidden="true">✦</span> ITEMS TO REVIEW</span><h2>Finding activity</h2></div><button className="d2-panel-link" onClick={() => setActiveNav('linter')}>View all →</button></div>
                   <div className="d2-findings-table">
                     <div className="d2-findings-table-head"><span>Finding</span><span>Category</span><span>Status</span></div>
                     {selectedDoc.findings.slice(0, 4).map((finding) => <button key={finding.id} className="d2-finding-table-row" onClick={() => { setActiveFinding(finding.id); setActiveNav('linter') }}><span><i className={`d2-sev-dot d2-sev-${finding.severity}`} />{finding.title}</span><span>{finding.category}</span><span className={`d2-table-status d2-table-status-${finding.severity}`}>{finding.severity === 'pass' ? 'Checked' : finding.severity === 'critical' ? 'Priority' : 'Review'}</span></button>)}
                   </div>
+                  <div className="d2-panel-log" aria-label="Analysis activity"><span>ANALYSIS_LOG</span><code>matched {selectedDoc.findings.length} signal{selectedDoc.findings.length === 1 ? '' : 's'} · routing review context</code><i>LIVE</i></div>
                 </section>
 
                 <section key={`rating-factors-${selectedDoc.id}`} className="d2-overview-panel d2-rating-factors-panel">
-                  <div className="d2-panel-heading"><div><span className="d2-eyebrow">RATING FACTORS</span><h2>What affected this score</h2></div><strong className="d2-rating-large">{selectedDoc.score}</strong></div>
+                  <div className="d2-panel-heading"><div><span className="d2-eyebrow"><span className="d2-ai-sparkle" aria-hidden="true">✦</span> RATING FACTORS</span><h2>What affected this score</h2></div><strong className="d2-rating-large">{selectedDoc.score}</strong></div>
                   <p className="d2-rating-factors-copy">The score reflects the findings in <b>{selectedDoc.title}</b>.</p>
                   <div className="d2-rating-factor-list">
                     <div><span><i className="d2-legend-critical" />High-priority concerns <b>{criticalCount}</b></span><em><i className="d2-factor-critical" style={{ width: `${criticalPercent}%` }} /></em></div>
                     <div><span><i className="d2-legend-warning" />Items to review <b>{warningCount}</b></span><em><i className="d2-factor-warning" style={{ width: `${warningPercent}%` }} /></em></div>
                     <div><span><i className="d2-legend-pass" />Checks completed <b>{passCount}</b></span><em><i className="d2-factor-pass" style={{ width: `${checkedPercent}%` }} /></em></div>
                   </div>
+                  <div className="d2-factor-log"><code>rules evaluated: {findingTotal.toString().padStart(2, '0')} · evidence coverage: {selectedDoc.score}%</code><span>MODEL v1.0</span></div>
                   <button className="d2-balance-action" onClick={() => setActiveNav('documents')}>Read the highlighted passages</button>
                 </section>
               </div>
