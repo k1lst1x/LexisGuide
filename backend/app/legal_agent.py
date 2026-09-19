@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import os
-from uuid import uuid4
 from typing import Any
+from uuid import uuid4
 
 import boto3
 
@@ -50,13 +50,17 @@ class LegalDocumentAgent:
         self.client = client or boto3.client(
             "bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1")
         )
-        self.runtime_client = boto3.client(
-            "bedrock-agentcore", region_name=os.getenv("AWS_REGION", "us-east-1")
-        ) if self.runtime_arn else None
+        self.runtime_client = (
+            boto3.client("bedrock-agentcore", region_name=os.getenv("AWS_REGION", "us-east-1"))
+            if self.runtime_arn
+            else None
+        )
         self.knowledge_base_id = os.getenv("BEDROCK_KNOWLEDGE_BASE_ID", "")
-        self.retrieval_client = boto3.client(
-            "bedrock-agent-runtime", region_name=os.getenv("AWS_REGION", "us-east-1")
-        ) if self.knowledge_base_id else None
+        self.retrieval_client = (
+            boto3.client("bedrock-agent-runtime", region_name=os.getenv("AWS_REGION", "us-east-1"))
+            if self.knowledge_base_id
+            else None
+        )
 
     def review(
         self,
@@ -78,9 +82,7 @@ class LegalDocumentAgent:
             "document": document_text,
         }
         if self.retrieval_client and self.knowledge_base_id:
-            request["authority_context"] = self._retrieve_authorities(
-                document_text, jurisdiction
-            )
+            request["authority_context"] = self._retrieve_authorities(document_text, jurisdiction)
         if self.runtime_arn and self.runtime_client:
             response = self.runtime_client.invoke_agent_runtime(
                 agentRuntimeArn=self.runtime_arn,
@@ -99,8 +101,7 @@ class LegalDocumentAgent:
             inferenceConfig={"temperature": 0.1, "maxTokens": 5000},
         )
         text = "".join(
-            block.get("text", "")
-            for block in response["output"]["message"]["content"]
+            block.get("text", "") for block in response["output"]["message"]["content"]
         ).strip()
         parsed = json.loads(text.removeprefix("```json").removesuffix("```").strip())
         parsed.setdefault(
@@ -108,8 +109,13 @@ class LegalDocumentAgent:
         )
         return parsed
 
-    def _retrieve_authorities(self, document_text: str, jurisdiction: str | None) -> list[dict[str, str]]:
-        query = f"{jurisdiction or 'applicable jurisdiction'} legal authorities relevant to: {document_text[:4000]}"
+    def _retrieve_authorities(
+        self, document_text: str, jurisdiction: str | None
+    ) -> list[dict[str, str]]:
+        query = (
+            f"{jurisdiction or 'applicable jurisdiction'} legal authorities relevant to: "
+            f"{document_text[:4000]}"
+        )
         response = self.retrieval_client.retrieve(
             knowledgeBaseId=self.knowledge_base_id,
             retrievalQuery={"text": query},
@@ -118,13 +124,17 @@ class LegalDocumentAgent:
         authorities = []
         for item in response.get("retrievalResults", []):
             location = item.get("location", {})
-            authorities.append({
-                "text": item.get("content", {}).get("text", ""),
-                "uri": location.get("webLocation", {}).get("url") or location.get("s3Location", {}).get("uri", ""),
-                "score": str(item.get("score", "")),
-            })
+            authorities.append(
+                {
+                    "text": item.get("content", {}).get("text", ""),
+                    "uri": location.get("webLocation", {}).get("url")
+                    or location.get("s3Location", {}).get("uri", ""),
+                    "score": str(item.get("score", "")),
+                }
+            )
         return authorities
 
 
 def configured_agent() -> LegalDocumentAgent | None:
-    return LegalDocumentAgent() if (os.getenv("BEDROCK_MODEL_ID") or os.getenv("AGENTCORE_RUNTIME_ARN")) else None
+    is_configured = os.getenv("BEDROCK_MODEL_ID") or os.getenv("AGENTCORE_RUNTIME_ARN")
+    return LegalDocumentAgent() if is_configured else None
