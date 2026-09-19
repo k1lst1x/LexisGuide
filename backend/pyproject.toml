@@ -10,14 +10,14 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi>=0.141,<0.142",
-  "uvicorn[standard]>=0.38,<0.39",
+  "uvicorn[standard]>=0.38,<0.54",
 ]
 
 [project.optional-dependencies]
 dev = [
   "httpx>=0.28,<0.29",
-  "pytest>=8.3,<9.0",
-  "ruff>=0.14,<0.15",
+  "pytest>=8.3,<10.0",
+  "ruff>=0.14,<0.17",
 ]
 
 [tool.hatch.build.targets.wheel]
