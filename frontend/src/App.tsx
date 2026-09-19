@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { AuthModal } from './AuthModal'
+import { Dashboard } from './Dashboard'
 import { cognitoGetCurrentUser, cognitoSignOut } from './aws'
 
 export function App() {
   const [authOpen, setAuthOpen] = useState(false)
+  const [dashOpen, setDashOpen] = useState(false)
   const [currentUser, setCurrentUser] = useState<{ email: string; username: string } | null>(null)
   const [toast, setToast] = useState('')
 
@@ -52,12 +54,30 @@ export function App() {
             <nav className="nav-links">
               <a href="#about" className="nav-item">About <span className="plus">+</span></a>
               <a href="#process" className="nav-item">Workflow <span className="plus">+</span></a>
-              <a href="#process" className="nav-item">Linter <span className="plus">+</span></a>
+              <button onClick={() => setDashOpen(true)} className="nav-item" style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                Open Dashboard <span className="plus">⚡</span>
+              </button>
               <a href="#testimonial" className="nav-item">Review Chain <span className="plus">+</span></a>
               <a href="#testimonial" className="nav-item">Audit Impact</a>
             </nav>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <button 
+                onClick={() => setDashOpen(true)}
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.15)',
+                  border: '1px solid rgba(226,180,107,0.4)',
+                  color: '#e2b46b',
+                  padding: '7px 16px',
+                  borderRadius: '18px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Launch Dashboard ⚡
+              </button>
+
               {currentUser ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <span style={{ fontSize: '13px', color: '#e2b46b', fontWeight: 600 }}>
@@ -123,6 +143,24 @@ export function App() {
               <p className="hero-description">
                 Lighthouse for government documents — AI-powered clarity checks, procedural fairness analysis, and verifiable review trails for notices, denials, public forms, and shared agreements.
               </p>
+
+              <button 
+                onClick={() => setDashOpen(true)}
+                style={{
+                  marginTop: '20px',
+                  backgroundColor: '#e2b46b',
+                  color: '#0b140f',
+                  border: 'none',
+                  padding: '12px 24px',
+                  borderRadius: '24px',
+                  fontSize: '14px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 8px 25px rgba(0,0,0,0.4)'
+                }}
+              >
+                Open Linter Dashboard ⚡
+              </button>
             </div>
           </div>
           
@@ -245,7 +283,7 @@ export function App() {
           
           <div className="process-grid">
             {/* Step 01 */}
-            <div className="process-card">
+            <div className="process-card" onClick={() => setDashOpen(true)} style={{ cursor: 'pointer' }}>
               <div className="process-header">Upload & Extract</div>
               <div className="process-body">
                 <div className="step-num">01</div>
@@ -255,7 +293,7 @@ export function App() {
             </div>
             
             {/* Step 02 */}
-            <div className="process-card">
+            <div className="process-card" onClick={() => setDashOpen(true)} style={{ cursor: 'pointer' }}>
               <div className="process-header">Procedural Lint</div>
               <div className="process-body">
                 <div className="step-num">02</div>
@@ -265,7 +303,7 @@ export function App() {
             </div>
             
             {/* Step 03 */}
-            <div className="process-card">
+            <div className="process-card" onClick={() => setDashOpen(true)} style={{ cursor: 'pointer' }}>
               <div className="process-header">Plain-Language Guide</div>
               <div className="process-body">
                 <div className="step-num">03</div>
@@ -275,7 +313,7 @@ export function App() {
             </div>
             
             {/* Step 04 */}
-            <div className="process-card">
+            <div className="process-card" onClick={() => setDashOpen(true)} style={{ cursor: 'pointer' }}>
               <div className="process-header">Verifiable Review Chain</div>
               <div className="process-body">
                 <div className="step-num">04</div>
@@ -323,7 +361,7 @@ export function App() {
                   <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '100% 50%' }}></div>
                   <span className="reviews-count">100+ Audits Completed</span>
                 </div>
-                <button className="share-btn" onClick={() => setAuthOpen(true)}>Try AWS Authentication ↗</button>
+                <button className="share-btn" onClick={() => setDashOpen(true)}>Open Live Dashboard ⚡</button>
               </div>
             </div>
             
@@ -423,9 +461,9 @@ export function App() {
           
           <div className="footer-col">
             <h4 className="col-title">MODULES</h4>
-            <a href="#">Procedural Linter</a>
-            <a href="#">Verifiable Chain</a>
-            <a href="#">Shared Workspace</a>
+            <button onClick={() => setDashOpen(true)} style={{ background: 'none', border: 'none', color: '#9ab0a0', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}>Procedural Linter ⚡</button>
+            <button onClick={() => setDashOpen(true)} style={{ background: 'none', border: 'none', color: '#9ab0a0', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}>Verifiable Chain ⚡</button>
+            <button onClick={() => setDashOpen(true)} style={{ background: 'none', border: 'none', color: '#9ab0a0', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}>Shared Workspace ⚡</button>
           </div>
           
           <div className="footer-col">
@@ -487,6 +525,12 @@ export function App() {
         <AuthModal 
           onClose={() => setAuthOpen(false)} 
           onSuccess={handleAuthSuccess} 
+        />
+      )}
+
+      {dashOpen && (
+        <Dashboard 
+          onClose={() => setDashOpen(false)} 
         />
       )}
     </div>
