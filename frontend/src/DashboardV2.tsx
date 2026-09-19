@@ -220,13 +220,29 @@ const icons: Record<string, React.ReactNode> = {
 }
 
 const navItems: { key: NavItem; label: string }[] = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'linter', label: 'Audit Linter' },
+  { key: 'overview', label: 'Home' },
+  { key: 'linter', label: 'Checks' },
   { key: 'documents', label: 'Documents' },
-  { key: 'chain', label: 'Review Chain' },
-  { key: 'team', label: 'Team' },
-  { key: 'settings', label: 'Settings' },
+  { key: 'chain', label: 'History' },
+  { key: 'team', label: 'Notes' },
+  { key: 'settings', label: 'Account' },
 ]
+
+function scanUploadedText(text: string): SampleDoc['findings'] {
+  const checks = [
+    { pattern: /within the standard filing period/i, title: 'Deadline is not specific', category: 'Deadline', explanation: 'The document mentions a filing period but does not say exactly when you must act. That can make it harder to protect your rights in time.', rule: 'Ask for a calendar date, time zone, and delivery method.' },
+    { pattern: /forfeiture of rights/i, title: 'Rights may be lost', category: 'Consequences', explanation: 'This language says you could lose rights but does not clearly explain the outcome or available alternatives.', rule: 'Ask what rights are affected and whether you can still reapply or request review.' },
+    { pattern: /may result in (?:tenant )?liability/i, title: 'Responsibility is unclear', category: 'Obligations', explanation: 'The document may shift costs or responsibility to you without defining the limit or the other party’s duties.', rule: 'Ask for the exact condition, cost, and responsibility in writing.' },
+    { pattern: /may be adjusted/i, title: 'Amount can change without details', category: 'Cost', explanation: 'A price or payment can change, but the document does not explain how the amount is calculated or capped.', rule: 'Request the calculation, effective date, and any maximum increase.' },
+  ]
+
+  const findings = checks.flatMap((check, index) => {
+    const match = text.match(check.pattern)
+    return match ? [{ id: `upload-${index}`, title: check.title, severity: 'warning' as const, category: check.category, explanation: check.explanation, evidence: match[0], rule: check.rule }] : []
+  })
+
+  return findings.length ? findings : [{ id: 'upload-clear', title: 'No common risk phrases found', severity: 'pass', category: 'Initial scan', explanation: 'The quick scan did not find one of its common risk patterns. Read the full document and seek advice for an important decision.', evidence: 'No matching language found in this quick text scan.', rule: 'This is a limited automated check, not legal advice.' }]
+}
 
 /* ───────── Animated Score Gauge ───────── */
 function ScoreGauge({ score }: { score: number }) {
@@ -263,12 +279,26 @@ function ScoreGauge({ score }: { score: number }) {
   )
 }
 
+function DocumentText({ document, onSelectFinding }: { document: SampleDoc; onSelectFinding: (id: string) => void }) {
+  const flagged = document.findings.filter((finding) => finding.severity !== 'pass' && finding.evidence)
+  const escaped = flagged.map((finding) => finding.evidence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const matcher = escaped.length ? new RegExp(`(${escaped.join('|')})`, 'gi') : null
+
+  return <pre className="d2-paper-text">{document.text.split('\n').map((line, lineIndex) => <span key={`${line}-${lineIndex}`} className="d2-text-line">{matcher ? line.split(matcher).map((part, partIndex) => {
+    const finding = flagged.find((item) => item.evidence.toLowerCase() === part.toLowerCase())
+    return finding ? <button className={`d2-text-highlight d2-highlight-${finding.severity}`} key={`${part}-${partIndex}`} onClick={() => onSelectFinding(finding.id)}>{part}<span>!</span></button> : part
+  }) : line}{'\n'}</span>)}</pre>
+}
+
 /* ───────── Main Dashboard V2 ───────── */
 export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userEmail?: string }) {
   const [collapsed, setCollapsed] = useState(false)
   const [activeNav, setActiveNav] = useState<NavItem>('overview')
+  const [documents, setDocuments] = useState<SampleDoc[]>(sampleDocs)
   const [selectedDoc, setSelectedDoc] = useState<SampleDoc>(sampleDocs[0])
   const [activeFinding, setActiveFinding] = useState<string | null>(sampleDocs[0].findings[0]?.id || null)
+  const [isScanning, setIsScanning] = useState(false)
+  const [uploadMessage, setUploadMessage] = useState('')
   const [comments, setComments] = useState<Array<{ user: string; text: string; time: string }>>([
     { user: 'Elena Moritz (Legal Aid)', text: 'The appeal deadline is completely missing in v1. We should add a 30-day requirement.', time: '10:14 AM' },
     { user: 'Agency Reviewer', text: 'Agreed. Updating notice to include deadline date of Oct 14, 2026.', time: '10:28 AM' },
@@ -277,6 +307,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
   const [remediating, setRemediating] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -291,10 +322,48 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
   const handleRemediate = () => {
     setRemediating(true)
     setTimeout(() => {
-      setSelectedDoc(sampleDocs[1])
-      setActiveFinding(sampleDocs[1].findings[0]?.id || null)
+      setSelectedDoc(documents[1] ?? documents[0])
+      setActiveFinding((documents[1] ?? documents[0]).findings[0]?.id || null)
       setRemediating(false)
     }, 1200)
+  }
+
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setIsScanning(true)
+    setUploadMessage(`Sending ${file.name} for a quick scan…`)
+    const text = await file.text()
+    try {
+      await fetch('/api/v1/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document_text: text || file.name }),
+      })
+    } catch {
+      // The local quick scan remains available when the API is offline.
+    }
+    const findings = scanUploadedText(text)
+    const uploaded: SampleDoc = {
+      ...sampleDocs[0],
+      id: `upload-${Date.now()}`,
+      title: file.name.replace(/\.[^/.]+$/, '') || 'Uploaded document',
+      type: 'Uploaded document',
+      version: 'Quick scan complete',
+      score: findings.some((finding) => finding.severity === 'warning') ? 62 : 86,
+      status: findings.some((finding) => finding.severity === 'warning') ? 'Review recommended' : 'No common risks found',
+      date: new Date().toLocaleDateString(),
+      hash: `local-${file.size}-${file.lastModified}`,
+      text: text || 'No readable text was found. Upload a .txt, .md, or .csv document for a text scan.',
+      findings,
+    }
+    setDocuments((current) => [uploaded, ...current])
+    setSelectedDoc(uploaded)
+    setActiveFinding(uploaded.findings[0]?.id || null)
+    setIsScanning(false)
+    setUploadMessage(`${file.name} scanned. Click a highlight to see why it needs attention.`)
+    setActiveNav('documents')
+    event.target.value = ''
   }
 
   const handleAddComment = (e: React.FormEvent) => {
@@ -310,12 +379,12 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
   const passCount = selectedDoc.findings.filter(f => f.severity === 'pass').length
 
   const breadcrumbMap: Record<NavItem, string> = {
-    overview: 'Overview',
-    linter: 'Audit Linter',
+    overview: 'Home',
+    linter: 'Checks',
     documents: 'Documents',
-    chain: 'Review Chain',
-    team: 'Team',
-    settings: 'Settings',
+    chain: 'History',
+    team: 'Notes',
+    settings: 'Account',
   }
 
   return (
@@ -408,19 +477,19 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
           {activeNav === 'overview' && (
             <div className="d2-page d2-overview-page">
               <div className="d2-page-header">
-                <h1 className="d2-page-title">Dashboard Overview</h1>
+                <h1 className="d2-page-title">Home</h1>
                 <select
                   className="d2-doc-select"
                   value={selectedDoc.id}
                   onChange={(e) => {
-                    const found = sampleDocs.find(d => d.id === e.target.value)
+                    const found = documents.find(d => d.id === e.target.value)
                     if (found) {
                       setSelectedDoc(found)
                       setActiveFinding(found.findings[0]?.id || null)
                     }
                   }}
                 >
-                  {sampleDocs.map(d => (
+                  {documents.map(d => (
                     <option key={d.id} value={d.id}>{d.title}</option>
                   ))}
                 </select>
@@ -508,7 +577,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
           {activeNav === 'linter' && (
             <div className="d2-page">
               <div className="d2-page-header">
-                <h1 className="d2-page-title">Procedural Fairness Linter</h1>
+                <h1 className="d2-page-title">Document checks</h1>
                 <div className="d2-header-meta">
                   <span className="d2-finding-count">{selectedDoc.findings.length} findings</span>
                   {selectedDoc.score < 75 && (
@@ -573,8 +642,8 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
           {activeNav === 'documents' && (
             <div className="d2-page">
               <div className="d2-page-header">
-                <h1 className="d2-page-title">Document Evidence Viewer</h1>
-                <div className="d2-info-version">{selectedDoc.version}</div>
+                <div><h1 className="d2-page-title">Documents</h1><p className="d2-page-subtitle">Read the full text and select a highlighted passage for a plain-language explanation.</p></div>
+                <div className="d2-document-actions"><input ref={uploadInputRef} type="file" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv" onChange={handleUpload} hidden /><button className="d2-upload-btn" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>{isScanning ? 'Scanning…' : 'Add document'}</button><div className="d2-info-version">{selectedDoc.version}</div></div>
               </div>
 
               <div className="d2-doc-viewer">
@@ -583,20 +652,11 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
                   <span className="d2-doc-agency">{selectedDoc.agency} · {selectedDoc.date}</span>
                 </div>
 
-                <div className="d2-paper">
+                {uploadMessage && <div className="d2-upload-status" role="status">{uploadMessage}</div>}
+                <div className="d2-doc-reader-layout"><div className="d2-paper">
                   <div className="d2-paper-watermark">CONFIDENTIAL · LEGAL DISCLOSURE</div>
-                  <pre className="d2-paper-text">
-                    {selectedDoc.text.split('\n').map((line, idx) => {
-                      const isHighlighted = selectedFindingObj && line.includes(selectedFindingObj.evidence.slice(0, 20))
-                      return (
-                        <span key={idx} className={`d2-text-line ${isHighlighted ? 'd2-line-hl' : ''}`}>
-                          {line}
-                          {'\n'}
-                        </span>
-                      )
-                    })}
-                  </pre>
-                </div>
+                  <DocumentText document={selectedDoc} onSelectFinding={(id) => setActiveFinding(id)} />
+                </div>{selectedFindingObj && <aside className="d2-document-explanation"><span className={`d2-sev-badge d2-sev-badge-${selectedFindingObj.severity}`}>{selectedFindingObj.severity === 'critical' ? 'IMPORTANT' : selectedFindingObj.severity === 'warning' ? 'CHECK THIS' : 'CLEAR'}</span><h2>{selectedFindingObj.title}</h2><p><b>Why it needs attention:</b> {selectedFindingObj.explanation}</p><blockquote>“{selectedFindingObj.evidence}”</blockquote><div><span>What you can do</span><p>{selectedFindingObj.rule}</p></div></aside>}</div>
 
                 <div className="d2-hash-bar">
                   <span className="d2-hash-label">SHA-256 PROVENANCE:</span>
@@ -610,7 +670,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
           {activeNav === 'chain' && (
             <div className="d2-page">
               <div className="d2-page-header">
-                <h1 className="d2-page-title">Verifiable Review Chain</h1>
+                <h1 className="d2-page-title">History</h1>
               </div>
 
               <div className="d2-chain-timeline">
@@ -643,7 +703,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
           {activeNav === 'team' && (
             <div className="d2-page">
               <div className="d2-page-header">
-                <h1 className="d2-page-title">Team Workspace</h1>
+                <h1 className="d2-page-title">Notes</h1>
                 <button className="d2-action-btn d2-btn-sm" onClick={() => alert('Secure invite link copied!')}>+ Invite Member</button>
               </div>
 
@@ -703,7 +763,7 @@ export function DashboardV2({ onClose, userEmail }: { onClose: () => void; userE
           {activeNav === 'settings' && (
             <div className="d2-page">
               <div className="d2-page-header">
-                <h1 className="d2-page-title">Settings</h1>
+                <h1 className="d2-page-title">Account</h1>
               </div>
 
               <div className="d2-settings-grid">

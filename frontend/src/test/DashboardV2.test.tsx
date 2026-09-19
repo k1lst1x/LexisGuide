@@ -9,9 +9,9 @@ describe('DashboardV2', () => {
     const user = userEvent.setup()
     render(<DashboardV2 onClose={vi.fn()} userEmail="person@example.com" />)
 
-    await user.click(screen.getByRole('button', { name: 'Audit Linter' }))
+    await user.click(screen.getByRole('button', { name: 'Checks' }))
 
-    expect(screen.getByRole('heading', { name: 'Procedural Fairness Linter' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Document checks' })).toBeInTheDocument()
     expect(screen.getAllByText('Appeal filing deadline is vague')).toHaveLength(2)
   })
 
@@ -19,7 +19,7 @@ describe('DashboardV2', () => {
     const user = userEvent.setup()
     render(<DashboardV2 onClose={vi.fn()} />)
 
-    await user.click(screen.getByRole('button', { name: 'Team' }))
+    await user.click(screen.getByRole('button', { name: 'Notes' }))
     await user.type(screen.getByPlaceholderText('Type a message...'), 'Please cite the appeal rule.')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
