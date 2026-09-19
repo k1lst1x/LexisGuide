@@ -83,7 +83,7 @@ function App() {
     if (!scene) return
     const visual = document.createElement('div')
     visual.className = 'legal-visual'
-    visual.innerHTML = '<div class="legal-sigil"><span>§</span><small>LEXISGUIDE</small></div><div class="legal-scales"><span class="scale-beam"></span><span class="scale-chain"></span><span class="scale-pan scale-pan-left"><b>FACT</b><i></i></span><span class="scale-pan scale-pan-right"><b>LAW</b><i></i></span></div><div class="legal-card legal-card-front"><small>CASE / 001</small><b>NOTICE</b><span>evidence linked</span></div><div class="legal-card legal-card-back"><small>RULE / 014</small><b>§ 204.1</b><span>verified source</span></div><div class="legal-scan-line"></div>'
+    visual.innerHTML = '<div class="courtroom-aura"></div><div class="court-arch"><span class="arch-cap"></span><span class="arch-inner"><b>§</b><small>CLARITY / 01</small></span></div><div class="court-column court-column-left"><i></i><i></i><i></i></div><div class="court-column court-column-right"><i></i><i></i><i></i></div><div class="judicial-seal"><span>LG</span><small>VERIFIED</small></div><div class="legal-gavel"><span class="gavel-head"></span><span class="gavel-handle"></span></div><div class="evidence-orbit evidence-orbit-one"><span>FACT</span><span>RULE</span></div><div class="evidence-orbit evidence-orbit-two"><span>SOURCE</span><span>DATE</span></div><div class="court-scan"></div>'
     scene.appendChild(visual)
     return () => visual.remove()
   }, [])
