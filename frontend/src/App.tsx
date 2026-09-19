@@ -1,7 +1,31 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { AuthModal } from './AuthModal'
+import { cognitoGetCurrentUser, cognitoSignOut } from './aws'
 
 export function App() {
+  const [authOpen, setAuthOpen] = useState(false)
+  const [currentUser, setCurrentUser] = useState<{ email: string; username: string } | null>(null)
   const [toast, setToast] = useState('')
+
+  useEffect(() => {
+    cognitoGetCurrentUser().then((user) => {
+      if (user) {
+        setCurrentUser({ email: user.email, username: user.username })
+      }
+    })
+  }, [])
+
+  const handleAuthSuccess = (email: string) => {
+    setAuthOpen(false)
+    setCurrentUser({ email, username: email })
+    setToast(`Authenticated as ${email} via AWS Cognito`)
+  }
+
+  const handleSignOut = async () => {
+    await cognitoSignOut().catch(() => {})
+    setCurrentUser(null)
+    setToast('Signed out of AWS session.')
+  }
 
   return (
     <div className="page-wrapper">
@@ -33,10 +57,51 @@ export function App() {
               <a href="#testimonial" className="nav-item">Audit Impact</a>
             </nav>
             
-            <button className="menu-btn" aria-label="Toggle menu">
-              <span className="menu-line"></span>
-              <span className="menu-line"></span>
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              {currentUser ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '13px', color: '#e2b46b', fontWeight: 600 }}>
+                    {currentUser.email}
+                  </span>
+                  <button 
+                    onClick={handleSignOut}
+                    style={{
+                      backgroundColor: 'rgba(255,255,255,0.15)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      color: '#ffffff',
+                      padding: '6px 14px',
+                      borderRadius: '16px',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              ) : (
+                <button 
+                  onClick={() => setAuthOpen(true)}
+                  style={{
+                    backgroundColor: '#e2b46b',
+                    color: '#0b140f',
+                    border: 'none',
+                    padding: '8px 18px',
+                    borderRadius: '20px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Sign In ↗
+                </button>
+              )}
+
+              <button className="menu-btn" aria-label="Toggle menu">
+                <span className="menu-line"></span>
+                <span className="menu-line"></span>
+              </button>
+            </div>
           </header>
           
           {/* Main Hero Title & Info */}
@@ -258,7 +323,7 @@ export function App() {
                   <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '100% 50%' }}></div>
                   <span className="reviews-count">100+ Audits Completed</span>
                 </div>
-                <button className="share-btn" onClick={() => setToast('Live demo trial initialized.')}>Try Live Demo ↗</button>
+                <button className="share-btn" onClick={() => setAuthOpen(true)}>Try AWS Authentication ↗</button>
               </div>
             </div>
             
@@ -416,6 +481,13 @@ export function App() {
         }}>
           {toast}
         </div>
+      )}
+
+      {authOpen && (
+        <AuthModal 
+          onClose={() => setAuthOpen(false)} 
+          onSuccess={handleAuthSuccess} 
+        />
       )}
     </div>
   )

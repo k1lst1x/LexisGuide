@@ -964,7 +964,233 @@ html, body {
   font-size: 15px;
 }
 
-/* Responsive Breakdown */
+/* ================= AUTHENTICATION MODAL & AWS COGNITO STYLING ================= */
+.auth-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(5, 12, 8, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.auth-modal {
+  background-color: #0d1712;
+  border: 1px solid rgba(226, 180, 107, 0.3);
+  border-radius: 28px;
+  width: 100%;
+  max-width: 440px;
+  padding: 36px 32px 32px;
+  position: relative;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+  color: #f0f4f1;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-close {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  background: transparent;
+  border: none;
+  color: #9ab0a0;
+  font-size: 28px;
+  cursor: pointer;
+  line-height: 1;
+  transition: color 0.2s ease;
+}
+
+.auth-close:hover {
+  color: #e2b46b;
+}
+
+.eyebrow {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #e2b46b;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.eyebrow span {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #e2b46b;
+}
+
+.auth-modal h2 {
+  font-size: 26px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+
+.auth-copy {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #9ab0a0;
+  margin-bottom: 24px;
+}
+
+.auth-error-banner {
+  background-color: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  margin-bottom: 18px;
+}
+
+.social-auth-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.social-auth-btn {
+  width: 100%;
+  height: 44px;
+  border-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.google-btn {
+  background-color: #ffffff;
+  color: #1a1a1a;
+  border: 1px solid #ffffff;
+}
+
+.google-btn:hover {
+  background-color: #f3f3f0;
+  transform: translateY(-1px);
+}
+
+.apple-btn {
+  background-color: #000000;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.apple-btn:hover {
+  background-color: #111111;
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 4px 0 20px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.auth-divider span {
+  padding: 0 12px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #789080;
+}
+
+.auth-modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9ab0a0;
+}
+
+.auth-modal input {
+  height: 44px;
+  border-radius: 14px;
+  background-color: #15241b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  padding: 0 16px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.auth-modal input:focus {
+  border-color: #e2b46b;
+}
+
+.auth-submit-btn {
+  margin-top: 8px;
+  height: 46px;
+  border-radius: 23px;
+  background-color: #e2b46b;
+  color: #0b140f;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.auth-submit-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.auth-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.auth-switch {
+  margin-top: 20px;
+  background: transparent;
+  border: none;
+  color: #9ab0a0;
+  font-size: 12.5px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-align: center;
+  transition: color 0.2s ease;
+}
+
+.auth-switch:hover {
+  color: #e2b46b;
+}
+
 @media (max-width: 1024px) {
   .hero-middle-grid {
     flex-direction: column;
