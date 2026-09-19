@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # typescript-eslint 8 supports TypeScript below 6.1. Keep Dependabot from
+    # creating un-installable frontend update PRs until that compatibility lands.
+    ignore:
+      - dependency-name: typescript
+        versions: ['>=6.1.0']
     groups:
       frontend-dependencies:
         patterns: ['*']
