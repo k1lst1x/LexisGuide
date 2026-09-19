@@ -5227,11 +5227,33 @@ html, body {
 .d2-document-insights h2 { margin: 3px 0 6px; font-size: 17px; color: #191919; font-family: var(--font-serif); }
 .d2-document-insights .d2-eyebrow { margin-bottom: 3px; font-size: 8px; color: #d96b27; }
 .d2-insight-risk p { max-width: 190px; font-size: 10.5px; color: #66645d; }
-.d2-risk-ring { width: 88px; height: 88px; padding: 5px; box-shadow: none; }
+.d2-risk-ring { width: 88px; height: 88px; flex: 0 0 88px; box-sizing: border-box; overflow: visible; padding: 5px; box-shadow: none; }
 .d2-risk-ring::after { inset: 9px; }
 .d2-risk-ring circle { stroke-width: 6px; }
 .d2-risk-ring-center strong { font-size: 21px; color: #191919; }
 .d2-risk-ring-center span { font-size: 7px; color: #8c897f; }
+
+/* Keep the label independent from the SVG ring.  Without this wrapper's grid
+   layout, the percentage and caption can flow into each other after a theme
+   change and become unreadable. */
+.d2-risk-ring-center {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  pointer-events: none;
+}
+.d2-risk-ring-center strong,
+.d2-risk-ring-center span { z-index: auto; margin: 0; white-space: nowrap; }
+.d2-risk-ring-center strong { color: #191919; font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: -0.055em; }
+.d2-risk-ring-center span { color: #8c897f; font-weight: 800; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; }
+.d2-insight-risk { min-height: 108px; }
+.d2-insight-risk > div:first-child { min-width: 0; }
 .d2-mix-bar { height: 8px; gap: 1px; padding: 0; border: 0; border-radius: 2px; box-shadow: none; background: #efede4; }
 .d2-mix-bar span { border-radius: 0; }
 .d2-mix-bar span b { display: none; }
@@ -5406,3 +5428,100 @@ html, body {
 .d2-reference-heading .d2-document-picker { width: min(430px, 100%); }.d2-reference-heading .d2-document-picker-trigger { grid-template-columns: 34px minmax(0,1fr) 22px; min-height: 56px; padding: 8px 10px; border-radius: 9px; }.d2-reference-heading .d2-document-picker-icon { width: 34px; height: 34px; border-radius: 6px; font-size: 16px; }.d2-reference-heading .d2-document-picker-copy small { font-size: 8px; }.d2-reference-heading .d2-document-picker-copy strong { font-size: 12px; }.d2-reference-heading .d2-document-picker-chevron { width: 22px; height: 22px; font-size: 18px; }
 @media (max-width: 700px) { .d2-score-signal { height: 170px; }.d2-score-signal-meta { grid-template-columns: 1fr auto; margin-left: 25px; }.d2-score-signal-meta code { display: none; }.d2-score-point text { font-size: 7px; } }
 @media (prefers-reduced-motion: reduce) { .d2-radar-shape, .d2-score-point circle { transition: none !important; } }
+
+/* ─── Dark precision dashboard ───────────────────────────────────────────
+   Keeps the existing LexisGuide workflow and content, while giving the
+   dashboard the high-contrast, data-dense control-room treatment requested.
+   Document pages retain a paper reader where reading long text matters. */
+.d2-root {
+  --d2-ink: #f4f4f5;
+  --d2-muted: rgba(244, 244, 245, .54);
+  --d2-faint: rgba(244, 244, 245, .10);
+  --d2-panel: #101114;
+  --d2-panel-alt: #0c0d0f;
+  background: #060708;
+  color: var(--d2-ink);
+}
+.d2-sidebar {
+  width: 238px;
+  border-color: rgba(255, 255, 255, .09);
+  background: #111214;
+  box-shadow: none;
+}
+.d2-main { border-color: rgba(255, 255, 255, .09); background: #090a0c; box-shadow: none; }
+.d2-topbar {
+  height: 68px;
+  padding: 0 28px;
+  border-bottom-color: rgba(255, 255, 255, .09);
+  background: rgba(12, 13, 15, .94);
+  box-shadow: none;
+}
+.d2-content { background: #090a0c; }
+.d2-sidebar-brand, .d2-sidebar-logo, .d2-workspace-title strong, .d2-page-title, .d2-panel-heading h2, .d2-reference-heading .d2-page-title, .d2-bc-current { color: var(--d2-ink); }
+.d2-sidebar-logo { font-family: var(--font-sans); font-size: 17px; letter-spacing: -.035em; }
+.d2-workspace-title { min-width: 200px; }
+.d2-workspace-title div span, .d2-section-header-copy p, .d2-reference-heading p, .d2-topbar-location { color: var(--d2-muted); }
+.d2-workspace-mark { border: 1px solid rgba(255,255,255,.7); border-radius: 5px; color: #090a0c; background: #f5f5f5; box-shadow: none; }
+.d2-collapse-btn, .d2-nav-btn, .d2-nav-exit { color: var(--d2-muted) !important; }
+.d2-collapse-btn:hover, .d2-nav-btn:hover { color: var(--d2-ink) !important; background: rgba(255,255,255,.055); }
+.d2-nav-btn { border-radius: 7px; font-weight: 650; }
+.d2-nav-active { color: #fff !important; background: rgba(255, 255, 255, .10) !important; box-shadow: inset 0 0 0 1px rgba(255,255,255,.045) !important; }
+.d2-sidebar-bottom { border-top-color: rgba(255,255,255,.09); }
+.d2-clean-icon-btn, .d2-icon-btn { border-color: rgba(255,255,255,.11); color: var(--d2-muted); background: transparent; }
+.d2-icon-btn:hover { border-color: rgba(255,255,255,.35); color: #fff; background: rgba(255,255,255,.06); box-shadow: none; }
+.d2-avatar-circle { color: #090a0c; background: #f4f4f5; }
+.d2-notif-dot { border-color: #0c0d0f; }
+.d2-reference-heading { padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,.09); }
+.d2-reference-heading .d2-eyebrow, .d2-panel-heading .d2-eyebrow, .d2-document-insights .d2-eyebrow { color: #ff7a3d; }
+
+.d2-overview-top-grid, .d2-overview-bottom-grid { gap: 1px; border: 1px solid rgba(255,255,255,.11); background: rgba(255,255,255,.11); }
+.d2-overview-panel {
+  border: 0;
+  border-radius: 0;
+  background: var(--d2-panel);
+  box-shadow: none;
+}
+.d2-overview-panel:hover { border-color: transparent; background: #131519; box-shadow: none; transform: none; }
+.d2-panel-heading h2, .d2-health-score strong, .d2-health-stats strong, .d2-finding-table-row > span:first-child, .d2-rating-large { color: var(--d2-ink); }
+.d2-health-stats > div, .d2-rating-factor-list > div { border-color: rgba(255,255,255,.075); border-radius: 4px; background: #0c0d0f; }
+.d2-health-stats > div span, .d2-health-stats > div small, .d2-health-score p, .d2-health-progress, .d2-rating-factors-copy, .d2-finding-table-head { color: var(--d2-muted); }
+.d2-health-progress, .d2-ai-telemetry, .d2-panel-log, .d2-factor-log, .d2-finding-table-row { border-color: rgba(255,255,255,.08); }
+.d2-health-progress > div, .d2-rating-factor-list em { background: rgba(255,255,255,.10); }
+.d2-health-progress i { background: linear-gradient(90deg, #00d49a, #00a8c7); }
+.d2-ai-telemetry code, .d2-panel-log code, .d2-factor-log code { color: rgba(244,244,245,.57); background: #090a0c; }
+.d2-panel-link, .d2-balance-action { color: #75f4cf; }
+.d2-balance-action { border-color: rgba(117,244,207,.18); border-radius: 4px; background: rgba(117,244,207,.06); }
+.d2-balance-action:hover { border-color: rgba(117,244,207,.4); color: #b9ffe9; background: rgba(117,244,207,.11); }
+
+.d2-gauge-container { background: radial-gradient(circle, #101114 0 41%, rgba(0,212,154,.12) 42% 43%, transparent 44%); }
+.d2-radar-grid, .d2-radar-axis { stroke: rgba(255,255,255,.18); }
+.d2-radar-node { stroke: #101114; }
+.d2-gauge-label .d2-gauge-max { color: var(--d2-muted); }
+.d2-score-grid-line { stroke: rgba(255,255,255,.12); }
+.d2-score-grid-label, .d2-score-point text { fill: rgba(244,244,245,.46); }
+.d2-score-average-line { stroke: rgba(0,212,154,.72); }
+.d2-score-average-label { fill: #70f0c9; }
+.d2-score-signal-line { filter: drop-shadow(0 3px 7px rgba(0,212,154,.24)); }
+.d2-score-point circle { fill: #101114; stroke: #70f0c9; }
+.d2-score-point:hover circle, .d2-score-point:focus circle, .d2-score-point-active circle { fill: #00d49a; stroke: #fff; filter: drop-shadow(0 0 6px rgba(0,212,154,.55)); }
+.d2-score-point:hover text, .d2-score-point:focus text, .d2-score-point-active text { fill: #c7ffef; }
+.d2-score-signal-meta, .d2-score-signal-meta code, .d2-score-signal-meta span:last-child { color: var(--d2-muted); }
+.d2-score-signal-meta span:first-child { color: #70f0c9; }
+.d2-score-signal-meta span:first-child i { background: #00d49a; box-shadow: 0 0 0 3px rgba(0,212,154,.13); }
+.d2-rating-chart-footer { border-top-color: rgba(255,255,255,.08); color: var(--d2-muted); }
+.d2-rating-average { border-color: rgba(0,212,154,.23); color: #70f0c9; background: rgba(0,212,154,.08); }
+.d2-rating-large { border-color: rgba(255,255,255,.12); background: #090a0c; }
+.d2-rating-factor-list > div > span, .d2-rating-factor-list > div > small { color: var(--d2-muted); }
+.d2-factor-log span { color: #70f0c9; }
+
+/* Preserve a high-legibility document canvas inside the dark workspace. */
+.d2-documents-hero, .d2-demo-tutorial, .d2-document-insights > div, .d2-document-library, .d2-document-reader-section, .d2-document-explanation-prominent,
+.d2-finding-card, .d2-finding-detail, .d2-chain-content, .d2-team-members-card, .d2-chat-card, .d2-settings-card, .d2-message-workspace { border-color: rgba(255,255,255,.10); background: var(--d2-panel); box-shadow: none; }
+.d2-documents-hero h1, .d2-document-library h2, .d2-document-explanation h2, .d2-chain-content h4, .d2-activity-card-head h3 { color: var(--d2-ink); }
+.d2-documents-hero p, .d2-demo-intro p, .d2-document-explanation p, .d2-chain-detail, .d2-activity-card-head p { color: var(--d2-muted); }
+.d2-document-insights { border-color: rgba(255,255,255,.10); background: rgba(255,255,255,.10); box-shadow: none; }
+.d2-document-insights > div { border-right-color: rgba(255,255,255,.08); }
+.d2-document-insights h2, .d2-risk-ring-center strong { color: var(--d2-ink); }
+.d2-insight-risk p, .d2-risk-ring-center span, .d2-mix-legend span { color: var(--d2-muted); }
+.d2-mix-legend span { border-color: rgba(255,255,255,.08); background: #0c0d0f; }
+.d2-paper { border-color: rgba(255,255,255,.12); background: #f9f7f1; box-shadow: none; }
