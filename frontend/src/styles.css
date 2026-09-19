@@ -5237,19 +5237,19 @@ html, body {
    layout, the percentage and caption can flow into each other after a theme
    change and become unreadable. */
 .d2-risk-ring-center {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 2;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 3px;
-  width: 100%;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   text-align: center;
   pointer-events: none;
 }
 .d2-risk-ring-center strong,
-.d2-risk-ring-center span { z-index: auto; margin: 0; white-space: nowrap; }
+.d2-risk-ring-center span { display: block; z-index: auto; flex: 0 0 auto; margin: 0; white-space: nowrap; }
 .d2-risk-ring-center strong { color: #191919; font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: -0.055em; }
 .d2-risk-ring-center span { color: #8c897f; font-weight: 800; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; }
 .d2-insight-risk { min-height: 108px; }
