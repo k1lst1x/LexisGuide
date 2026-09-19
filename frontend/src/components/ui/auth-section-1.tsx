@@ -124,9 +124,9 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
           </div>
         </div>
 
-        {/* Right Column — Padded Rounded Grain Gradient Shader Banner */}
-        <div className="p-4 sm:p-6 lg:p-6 flex items-center justify-center w-full h-full">
-          <div className="relative min-h-[500px] h-full w-full overflow-hidden rounded-[20px] bg-black lg:min-h-0">
+        {/* Right Column — Grain Gradient Shader Banner with top & bottom gap */}
+        <div className="auth-gradient-wrapper">
+          <div className="auth-gradient-box">
             <GrainGradient
               speed={1}
               scale={1}
