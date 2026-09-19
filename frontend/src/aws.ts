@@ -7,7 +7,9 @@ import {
   signOut, 
   getCurrentUser,
   fetchAuthSession,
-  fetchUserAttributes
+  fetchUserAttributes,
+  resetPassword,
+  confirmResetPassword
 } from 'aws-amplify/auth'
 
 const localDefaults = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -48,7 +50,7 @@ if (authConfigured) {
   })
 }
 
-// AWS Cognito Auth Handlers
+// AWS Cognito Auth Handlers — NO FALLBACKS, real auth only
 export async function cognitoSignIn(email: string, password: string) {
   return await signIn({
     username: email,
@@ -89,6 +91,22 @@ export async function cognitoAppleSignIn() {
 
 export async function cognitoSignOut() {
   return await signOut()
+}
+
+export async function cognitoResetPassword(email: string) {
+  return await resetPassword({ username: email })
+}
+
+export async function cognitoConfirmResetPassword(
+  email: string,
+  confirmationCode: string,
+  newPassword: string
+) {
+  return await confirmResetPassword({
+    username: email,
+    confirmationCode,
+    newPassword,
+  })
 }
 
 export async function cognitoGetCurrentUser() {

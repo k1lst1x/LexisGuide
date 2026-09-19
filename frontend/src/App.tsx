@@ -1,14 +1,125 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { AuthModal } from './AuthModal'
-import { Dashboard } from './Dashboard'
+import { DashboardV2 } from './DashboardV2'
+import { SplashScreen } from './SplashScreen'
+import { TransitionLoader } from './TransitionLoader'
 import { cognitoGetCurrentUser, cognitoSignOut } from './aws'
 
+/* ───── Scroll reveal hook ───── */
+function useScrollReveal() {
+  useEffect(() => {
+    const els = document.querySelectorAll('.reveal')
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('reveal-visible')
+            observer.unobserve(entry.target)
+          }
+        })
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }
+    )
+    els.forEach((el) => observer.observe(el))
+    return () => observer.disconnect()
+  })
+}
+
+/* ───── 3D tilt hook ───── */
+function useTilt(ref: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    const cards = el.querySelectorAll<HTMLElement>('.tilt-card')
+    const handleMove = (e: MouseEvent) => {
+      const card = e.currentTarget as HTMLElement
+      const rect = card.getBoundingClientRect()
+      const x = ((e.clientX - rect.left) / rect.width - 0.5) * 2
+      const y = ((e.clientY - rect.top) / rect.height - 0.5) * 2
+      card.style.transform = `perspective(800px) rotateY(${x * 6}deg) rotateX(${-y * 6}deg) translateY(-4px)`
+    }
+    const handleLeave = (e: MouseEvent) => {
+      const card = e.currentTarget as HTMLElement
+      card.style.transform = ''
+    }
+
+    cards.forEach((card) => {
+      card.addEventListener('mousemove', handleMove)
+      card.addEventListener('mouseleave', handleLeave)
+    })
+    return () => {
+      cards.forEach((card) => {
+        card.removeEventListener('mousemove', handleMove)
+        card.removeEventListener('mouseleave', handleLeave)
+      })
+    }
+  })
+}
+
+/* ───── Counter animation hook ───── */
+function AnimatedCounter({ target, suffix = '' }: { target: number; suffix?: string }) {
+  const [count, setCount] = useState(0)
+  const ref = useRef<HTMLSpanElement>(null)
+  const started = useRef(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !started.current) {
+          started.current = true
+          const start = Date.now()
+          const duration = 1200
+          const tick = () => {
+            const pct = Math.min((Date.now() - start) / duration, 1)
+            const eased = 1 - Math.pow(1 - pct, 3)
+            setCount(Math.round(eased * target))
+            if (pct < 1) requestAnimationFrame(tick)
+          }
+          requestAnimationFrame(tick)
+        }
+      },
+      { threshold: 0.5 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [target])
+
+  return <span ref={ref}>{count}<sup className="plus-sup">{suffix}</sup></span>
+}
+
+/* ───── Click ripple ───── */
+function addRipple(e: React.MouseEvent<HTMLElement>) {
+  const btn = e.currentTarget
+  const rect = btn.getBoundingClientRect()
+  const ripple = document.createElement('span')
+  ripple.className = 'click-ripple'
+  ripple.style.left = `${e.clientX - rect.left}px`
+  ripple.style.top = `${e.clientY - rect.top}px`
+  btn.appendChild(ripple)
+  setTimeout(() => ripple.remove(), 600)
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   APP
+   ═════════════════════════════════════════════════════════════════ */
 export function App() {
+  const [splashDone, setSplashDone] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [dashOpen, setDashOpen] = useState(false)
+  const [transitioning, setTransitioning] = useState(false)
+  const [transitionMsg, setTransitionMsg] = useState('')
   const [currentUser, setCurrentUser] = useState<{ email: string; username: string } | null>(null)
   const [toast, setToast] = useState('')
+  const [heroOffset, setHeroOffset] = useState(0)
+  const contentRef = useRef<HTMLDivElement>(null)
 
+  useScrollReveal()
+  useTilt(contentRef)
+
+  // Check existing session on mount
   useEffect(() => {
     cognitoGetCurrentUser().then((user) => {
       if (user) {
@@ -17,20 +128,68 @@ export function App() {
     })
   }, [])
 
+  // Parallax on scroll
+  useEffect(() => {
+    const handleScroll = () => setHeroOffset(window.scrollY * 0.35)
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  // Toast auto-dismiss
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(''), 3500)
+      return () => clearTimeout(t)
+    }
+  }, [toast])
+
   const handleAuthSuccess = (email: string) => {
     setAuthOpen(false)
     setCurrentUser({ email, username: email })
-    setToast(`Authenticated as ${email} via AWS Cognito`)
+    setToast(`✓ Authenticated as ${email} via AWS Cognito`)
   }
 
   const handleSignOut = async () => {
     await cognitoSignOut().catch(() => {})
     setCurrentUser(null)
+    setDashOpen(false)
     setToast('Signed out of AWS session.')
   }
 
+  const openDashboard = useCallback(() => {
+    setTransitionMsg('Initializing Audit Workspace...')
+    setTransitioning(true)
+    setTimeout(() => {
+      setDashOpen(true)
+      setTransitioning(false)
+    }, 1400)
+  }, [])
+
+  const closeDashboard = useCallback(() => {
+    setTransitionMsg('Returning to LexisGuide...')
+    setTransitioning(true)
+    setDashOpen(false)
+    setTimeout(() => setTransitioning(false), 800)
+  }, [])
+
+  /* ───── SPLASH ───── */
+  if (!splashDone) {
+    return <SplashScreen onComplete={() => setSplashDone(true)} />
+  }
+
+  /* ───── DASHBOARD ───── */
+  if (dashOpen) {
+    return (
+      <>
+        <DashboardV2 onClose={closeDashboard} userEmail={currentUser?.email} />
+        <TransitionLoader visible={transitioning} message={transitionMsg} />
+      </>
+    )
+  }
+
+  /* ───── LANDING PAGE ───── */
   return (
-    <div className="page-wrapper">
+    <div className="page-wrapper" ref={contentRef}>
       
       {/* 1. ENTIRE HERO SECTION WITH 4K LANDSCAPE BG */}
       <section className="hero-hero-section">
@@ -40,13 +199,14 @@ export function App() {
             onError={(e) => { (e.target as HTMLImageElement).src = '/assets/hero-bg.png' }}
             alt="LexisGuide Atmospheric 4K Landscape" 
             className="hero-bg-img" 
+            style={{ transform: `translateY(${heroOffset}px) scale(1.08)` }}
           />
           <div className="hero-bg-overlay"></div>
         </div>
         
         <div className="hero-inner">
           {/* Header Nav */}
-          <header className="header">
+          <header className="header reveal" style={{ animationDelay: '0.1s' }}>
             <div className="brand">
               <span className="brand-name">LexisGuide</span><span className="trademark">®</span>
             </div>
@@ -54,7 +214,7 @@ export function App() {
             <nav className="nav-links">
               <a href="#about" className="nav-item">About <span className="plus">+</span></a>
               <a href="#process" className="nav-item">Workflow <span className="plus">+</span></a>
-              <button onClick={() => setDashOpen(true)} className="nav-item" style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+              <button onClick={openDashboard} className="nav-item" style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
                 Open Dashboard <span className="plus">⚡</span>
               </button>
               <a href="#testimonial" className="nav-item">Review Chain <span className="plus">+</span></a>
@@ -63,7 +223,9 @@ export function App() {
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <button 
-                onClick={() => setDashOpen(true)}
+                onClick={openDashboard}
+                onMouseDown={addRipple}
+                className="ripple-btn"
                 style={{
                   backgroundColor: 'rgba(255,255,255,0.15)',
                   border: '1px solid rgba(226,180,107,0.4)',
@@ -72,7 +234,9 @@ export function App() {
                   borderRadius: '18px',
                   fontSize: '13px',
                   fontWeight: 700,
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}
               >
                 Launch Dashboard ⚡
@@ -102,6 +266,8 @@ export function App() {
               ) : (
                 <button 
                   onClick={() => setAuthOpen(true)}
+                  onMouseDown={addRipple}
+                  className="ripple-btn"
                   style={{
                     backgroundColor: '#e2b46b',
                     color: '#0b140f',
@@ -110,7 +276,9 @@ export function App() {
                     borderRadius: '20px',
                     fontSize: '13px',
                     fontWeight: 700,
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    position: 'relative',
+                    overflow: 'hidden'
                   }}
                 >
                   Sign In ↗
@@ -126,11 +294,11 @@ export function App() {
           
           {/* Main Hero Title & Info */}
           <div className="hero-middle-grid">
-            <div className="hero-title-container">
+            <div className="hero-title-container reveal" style={{ animationDelay: '0.3s' }}>
               <h1 className="hero-title">LexisGuide<span className="title-trademark">®</span></h1>
             </div>
             
-            <div className="hero-info">
+            <div className="hero-info reveal" style={{ animationDelay: '0.5s' }}>
               <div className="founders-row">
                 <div className="avatar-group">
                   <div className="avatar avatar-1"></div>
@@ -145,7 +313,9 @@ export function App() {
               </p>
 
               <button 
-                onClick={() => setDashOpen(true)}
+                onClick={openDashboard}
+                onMouseDown={addRipple}
+                className="ripple-btn"
                 style={{
                   marginTop: '20px',
                   backgroundColor: '#e2b46b',
@@ -156,7 +326,9 @@ export function App() {
                   fontSize: '14px',
                   fontWeight: 800,
                   cursor: 'pointer',
-                  boxShadow: '0 8px 25px rgba(0,0,0,0.4)'
+                  boxShadow: '0 8px 25px rgba(0,0,0,0.4)',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}
               >
                 Open Linter Dashboard ⚡
@@ -165,7 +337,7 @@ export function App() {
           </div>
           
           {/* Bottom Hero Brand Strip */}
-          <div className="hero-bottom-bar">
+          <div className="hero-bottom-bar reveal" style={{ animationDelay: '0.7s' }}>
             <p className="trusted-text">
               Trusted by 100+ legal aid advocates, civic tech pioneers, and public service leaders turning legalese into actionable clarity.
             </p>
@@ -205,7 +377,7 @@ export function App() {
         
         {/* 2. ABOUT SECTION */}
         <section id="about" className="about-section">
-          <div className="about-header">
+          <div className="about-header reveal">
             <span className="section-tag">// ABOUT LEXISGUIDE</span>
             <div className="about-statement-container">
               <h2 className="about-statement">
@@ -216,7 +388,7 @@ export function App() {
           
           <div className="stats-grid">
             {/* Card 1 */}
-            <div className="stat-card card-white">
+            <div className="stat-card card-white tilt-card reveal" style={{ animationDelay: '0.1s' }}>
               <div className="team-avatar-grid">
                 <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '0% 0%' }}></div>
                 <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '25% 0%' }}></div>
@@ -229,12 +401,12 @@ export function App() {
               </div>
               <div className="stat-bottom">
                 <span className="stat-label">Audited Document Types</span>
-                <span className="stat-number">48<sup className="plus-sup">+</sup></span>
+                <span className="stat-number"><AnimatedCounter target={48} suffix="+" /></span>
               </div>
             </div>
             
             {/* Card 2 */}
-            <div className="stat-card card-dark">
+            <div className="stat-card card-dark tilt-card reveal" style={{ animationDelay: '0.2s' }}>
               <div className="card-header-row">
                 <span className="stat-label-light">LexHack Recognition</span>
                 <div className="award-seal">
@@ -245,23 +417,23 @@ export function App() {
                   </svg>
                 </div>
               </div>
-              <div className="stat-number-large">12<sup className="plus-sup">+</sup></div>
+              <div className="stat-number-large"><AnimatedCounter target={12} suffix="+" /></div>
               <p className="stat-description">Featured and celebrated for procedural fairness, evidence spans, and human-in-the-loop decision support.</p>
             </div>
             
             {/* Card 3 */}
-            <div className="stat-card card-soft">
+            <div className="stat-card card-soft tilt-card reveal" style={{ animationDelay: '0.3s' }}>
               <p className="stat-top-text">From ambiguous benefit denials to complex lease agreements, every notice is audited for clarity and due process.</p>
               <div className="stat-bottom">
                 <span className="stat-label">Fairness Score Jump (v1 → v4)</span>
-                <span className="stat-number">89<sup className="plus-sup">/100</sup></span>
+                <span className="stat-number"><AnimatedCounter target={89} suffix="/100" /></span>
               </div>
             </div>
             
             {/* Card 4 */}
-            <div className="stat-card card-landscape">
+            <div className="stat-card card-landscape tilt-card reveal" style={{ animationDelay: '0.4s' }}>
               <span className="stat-label-light">Jurisdictions & Rule Packs</span>
-              <div className="stat-number-large">14<sup className="plus-sup">+</sup></div>
+              <div className="stat-number-large"><AnimatedCounter target={14} suffix="+" /></div>
               <p className="stat-description-light">Collaborating remotely with civic tech teams and public advocates nationwide.</p>
             </div>
           </div>
@@ -269,7 +441,7 @@ export function App() {
         
         {/* 3. PROCESS SECTION */}
         <section id="process" className="process-section">
-          <div className="section-top-grid">
+          <div className="section-top-grid reveal">
             <div className="left-col">
               <span className="section-tag">// CORE WORKFLOW</span>
               <h2 className="section-heading">Our Process Moves<br />Like Production.</h2>
@@ -282,51 +454,33 @@ export function App() {
           </div>
           
           <div className="process-grid">
-            {/* Step 01 */}
-            <div className="process-card" onClick={() => setDashOpen(true)} style={{ cursor: 'pointer' }}>
-              <div className="process-header">Upload & Extract</div>
-              <div className="process-body">
-                <div className="step-num">01</div>
-                <h3 className="process-title">Extract</h3>
-                <p className="process-desc">Parses PDFs, letters, screenshots, or public web notices to extract issuing agency, decisions, filing dates, and appeal rights.</p>
+            {[
+              { header: 'Upload & Extract', num: '01', title: 'Extract', desc: 'Parses PDFs, letters, screenshots, or public web notices to extract issuing agency, decisions, filing dates, and appeal rights.' },
+              { header: 'Procedural Lint', num: '02', title: 'Lint', desc: 'Executes rule-based and AI checks to spot vague deadlines, missing appeal paths, and contradictory instructions.' },
+              { header: 'Plain-Language Guide', num: '03', title: 'Guide', desc: 'Translates legalese into plain-language next steps: what happened, what to do, by when, and consequences of doing nothing.' },
+              { header: 'Verifiable Review Chain', num: '04', title: 'Chain', desc: 'Generates SHA-256 hashes, rule-set versioning, and evidence spans to record an auditable provenance trail from v1 to v2.' },
+            ].map((step, i) => (
+              <div
+                key={step.num}
+                className="process-card tilt-card reveal"
+                style={{ animationDelay: `${0.1 + i * 0.12}s`, cursor: 'pointer' }}
+                onClick={openDashboard}
+                onMouseDown={addRipple}
+              >
+                <div className="process-header">{step.header}</div>
+                <div className="process-body">
+                  <div className="step-num">{step.num}</div>
+                  <h3 className="process-title">{step.title}</h3>
+                  <p className="process-desc">{step.desc}</p>
+                </div>
               </div>
-            </div>
-            
-            {/* Step 02 */}
-            <div className="process-card" onClick={() => setDashOpen(true)} style={{ cursor: 'pointer' }}>
-              <div className="process-header">Procedural Lint</div>
-              <div className="process-body">
-                <div className="step-num">02</div>
-                <h3 className="process-title">Lint</h3>
-                <p className="process-desc">Executes rule-based and AI checks to spot vague deadlines, missing appeal paths, and contradictory instructions.</p>
-              </div>
-            </div>
-            
-            {/* Step 03 */}
-            <div className="process-card" onClick={() => setDashOpen(true)} style={{ cursor: 'pointer' }}>
-              <div className="process-header">Plain-Language Guide</div>
-              <div className="process-body">
-                <div className="step-num">03</div>
-                <h3 className="process-title">Guide</h3>
-                <p className="process-desc">Translates legalese into plain-language next steps: what happened, what to do, by when, and consequences of doing nothing.</p>
-              </div>
-            </div>
-            
-            {/* Step 04 */}
-            <div className="process-card" onClick={() => setDashOpen(true)} style={{ cursor: 'pointer' }}>
-              <div className="process-header">Verifiable Review Chain</div>
-              <div className="process-body">
-                <div className="step-num">04</div>
-                <h3 className="process-title">Chain</h3>
-                <p className="process-desc">Generates SHA-256 hashes, rule-set versioning, and evidence spans to record an auditable provenance trail from v1 to v2.</p>
-              </div>
-            </div>
+            ))}
           </div>
         </section>
         
         {/* 4. TESTIMONIALS SECTION */}
         <section id="testimonial" className="testimonials-section">
-          <div className="section-top-grid">
+          <div className="section-top-grid reveal">
             <div className="left-col">
               <span className="section-tag">// AUDIT & IMPACT</span>
               <h2 className="section-heading">Voices Between Frames</h2>
@@ -340,9 +494,9 @@ export function App() {
           
           <div className="testimonials-grid">
             {/* Featured Rating Card */}
-            <div className="testimonial-card rating-card">
+            <div className="testimonial-card rating-card tilt-card reveal" style={{ animationDelay: '0.1s' }}>
               <div className="rating-top">
-                <div className="big-score">89<span className="score-denom">/ 100</span></div>
+                <div className="big-score"><AnimatedCounter target={89} suffix="" /><span className="score-denom">/ 100</span></div>
                 <div className="laurel-icon">
                   <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M12 2l2.4 5 5.6.8-4 4 1 5.6-5-2.6-5 2.6 1-5.6-4-4 5.6-.8z"/>
@@ -361,13 +515,13 @@ export function App() {
                   <div className="mini-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '100% 50%' }}></div>
                   <span className="reviews-count">100+ Audits Completed</span>
                 </div>
-                <button className="share-btn" onClick={() => setDashOpen(true)}>Open Live Dashboard ⚡</button>
+                <button className="share-btn" onClick={openDashboard} onMouseDown={addRipple}>Open Live Dashboard ⚡</button>
               </div>
             </div>
             
             {/* Review Card 1 */}
-            <div className="testimonial-card review-card">
-              <div className="quote-mark">“</div>
+            <div className="testimonial-card review-card tilt-card reveal" style={{ animationDelay: '0.2s' }}>
+              <div className="quote-mark">"</div>
               <p className="review-text">LexisGuide didn't just highlight vague appeal paths. It gave our case workers an evidence-linked audit in seconds.</p>
               <div className="review-footer">
                 <div className="reviewer-info">
@@ -385,7 +539,7 @@ export function App() {
             </div>
             
             {/* Review Card 2 */}
-            <div className="testimonial-card review-card">
+            <div className="testimonial-card review-card tilt-card reveal" style={{ animationDelay: '0.3s' }}>
               <div className="reviewer-top-row">
                 <div className="reviewer-avatar" style={{ backgroundImage: "url('/assets/avatars.png')", backgroundPosition: '70% 50%' }}></div>
                 <div>
@@ -393,7 +547,7 @@ export function App() {
                   <p className="reviewer-role">Civic Tech Fellow</p>
                 </div>
               </div>
-              <div className="quote-mark">“</div>
+              <div className="quote-mark">"</div>
               <p className="review-text">Working with LexisGuide felt less like reading dry statutes and more like following a clear, auditable checklist together.</p>
               <div className="review-footer">
                 <div className="review-meta">
@@ -404,8 +558,8 @@ export function App() {
             </div>
             
             {/* Review Card 3 */}
-            <div className="testimonial-card review-card">
-              <div className="quote-mark">“</div>
+            <div className="testimonial-card review-card tilt-card reveal" style={{ animationDelay: '0.4s' }}>
+              <div className="quote-mark">"</div>
               <p className="review-text">The review chain tracks every edit from v1 to v2. Our agency reduced deadline inquiries by 40% before publication.</p>
               <div className="review-footer">
                 <div className="reviewer-info">
@@ -424,7 +578,7 @@ export function App() {
           </div>
           
           {/* Bottom Section Brand Strip */}
-          <div className="testimonials-brand-strip">
+          <div className="testimonials-brand-strip reveal">
             <span className="t-brand">CivicTech</span>
             <span className="t-brand">LegalAid</span>
             <span className="t-brand">OpenGov</span>
@@ -438,7 +592,7 @@ export function App() {
       </div>
       
       {/* 5. FOOTER SECTION */}
-      <footer className="footer">
+      <footer className="footer reveal">
         <div className="footer-header">
           <h2 className="footer-logo">LexisGuide<span className="footer-trademark">®</span></h2>
           <span className="footer-year">© 20 - 26°</span>
@@ -461,9 +615,9 @@ export function App() {
           
           <div className="footer-col">
             <h4 className="col-title">MODULES</h4>
-            <button onClick={() => setDashOpen(true)} style={{ background: 'none', border: 'none', color: '#9ab0a0', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}>Procedural Linter ⚡</button>
-            <button onClick={() => setDashOpen(true)} style={{ background: 'none', border: 'none', color: '#9ab0a0', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}>Verifiable Chain ⚡</button>
-            <button onClick={() => setDashOpen(true)} style={{ background: 'none', border: 'none', color: '#9ab0a0', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}>Shared Workspace ⚡</button>
+            <button onClick={openDashboard} style={{ background: 'none', border: 'none', color: '#9ab0a0', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}>Procedural Linter ⚡</button>
+            <button onClick={openDashboard} style={{ background: 'none', border: 'none', color: '#9ab0a0', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}>Verifiable Chain ⚡</button>
+            <button onClick={openDashboard} style={{ background: 'none', border: 'none', color: '#9ab0a0', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}>Shared Workspace ⚡</button>
           </div>
           
           <div className="footer-col">
@@ -504,23 +658,14 @@ export function App() {
         </div>
       </footer>
 
+      {/* Toast */}
       {toast && (
-        <div style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          backgroundColor: '#e2b46b',
-          color: '#0b140f',
-          padding: '12px 20px',
-          borderRadius: '20px',
-          fontWeight: 700,
-          boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
-          zIndex: 1000
-        }}>
+        <div className="toast-notification">
           {toast}
         </div>
       )}
 
+      {/* Auth Modal */}
       {authOpen && (
         <AuthModal 
           onClose={() => setAuthOpen(false)} 
@@ -528,11 +673,8 @@ export function App() {
         />
       )}
 
-      {dashOpen && (
-        <Dashboard 
-          onClose={() => setDashOpen(false)} 
-        />
-      )}
+      {/* Transition Loader */}
+      <TransitionLoader visible={transitioning} message={transitionMsg} />
     </div>
   )
 }
