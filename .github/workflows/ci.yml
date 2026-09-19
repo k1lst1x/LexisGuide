@@ -70,7 +70,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
       - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: '1.6.6'
       - name: Check formatting
