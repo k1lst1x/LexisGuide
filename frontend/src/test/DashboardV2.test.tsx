@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -144,7 +144,9 @@ describe('DashboardV2', () => {
 
     fireEvent.change(input!, { target: { files: [upload] } })
 
-    expect(await screen.findByRole('status')).toHaveTextContent('review is ready')
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('review is ready')
+    })
     expect(await screen.findByText('Notice period is missing')).toBeInTheDocument()
     expect(screen.getAllByText('Either party may terminate this agreement.')).not.toHaveLength(0)
     expect(document.querySelector('#codeql-probe')).toBeNull()
