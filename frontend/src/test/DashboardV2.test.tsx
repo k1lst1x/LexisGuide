@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -125,6 +125,30 @@ describe('DashboardV2', () => {
 
     expect(await screen.findAllByText('My rental renewal')).toHaveLength(2)
     expect(screen.getByText('Notice period is missing')).toBeInTheDocument()
+  })
+
+  it('keeps uploaded HTML inert while extracting its readable text', async () => {
+    window.localStorage.clear()
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+    const closeTutorial = screen.queryByRole('button', { name: 'Close tutorial' })
+    if (closeTutorial) await user.click(closeTutorial)
+
+    const html = '<p>Either party may terminate this agreement.</p><img id="codeql-probe" src="x" onerror="window.__codeqlProbe = true"><script>window.__codeqlProbe = true</script>'
+    const upload = new File(['fixture'], 'review.html', { type: 'text/html' })
+    Object.defineProperty(upload, 'text', { value: async () => html })
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')
+    expect(input).not.toBeNull()
+
+    fireEvent.change(input!, { target: { files: [upload] } })
+
+    expect(await screen.findByRole('status')).toHaveTextContent('review is ready')
+    expect(await screen.findByText('Notice period is missing')).toBeInTheDocument()
+    expect(screen.getAllByText('Either party may terminate this agreement.')).not.toHaveLength(0)
+    expect(document.querySelector('#codeql-probe')).toBeNull()
+    expect((window as typeof window & { __codeqlProbe?: boolean }).__codeqlProbe).toBeUndefined()
   })
 
   it('uses the document picker to switch the overview context', async () => {
