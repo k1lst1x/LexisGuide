@@ -5619,3 +5619,23 @@ html, body {
 .d2-root .d2-mix-legend span { background: #f8f7f2 !important; border-color: rgba(42,40,36,.10) !important; }
 .d2-root .d2-document-shelf-list { grid-template-columns: 1fr !important; }
 .d2-root .d2-document-shelf-card { grid-column: 1 !important; }
+
+/* Shell navigation: identity lives in the sidebar; page context and actions live above content. */
+.d2-sidebar-brand { display: flex !important; align-items: center; gap: 11px; }
+.d2-sidebar-mark { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px; border: 1px solid rgba(42,40,36,.1); border-radius: 10px; color: #292824; background: #f8f7f2; font: 800 18px/1 var(--font-sans); }
+.d2-sidebar-brand-copy { display: grid; min-width: 0; gap: 2px; }
+.d2-sidebar-brand-copy strong { color: #292824; font-size: 15px; letter-spacing: -.025em; }
+.d2-sidebar-brand-copy span { color: #706e67; font-size: 10px; font-weight: 650; }
+.d2-sidebar-collapsed .d2-sidebar-brand { justify-content: center; }
+.d2-topbar-page-heading { display: flex; align-items: center; gap: 10px; min-width: 0; margin-right: auto; }
+.d2-topbar-page-heading > div { display: grid; min-width: 0; gap: 3px; }
+.d2-topbar-page-heading strong { overflow: hidden; color: #292824; font-size: 17px; font-weight: 800; letter-spacing: -.025em; text-overflow: ellipsis; white-space: nowrap; }
+.d2-topbar-page-heading span:not(.d2-topbar-location-dot) { overflow: hidden; color: #706e67; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.d2-topbar-context-actions { display: flex; align-items: center; gap: 8px; }
+.d2-topbar-context-btn, .d2-topbar-add-btn { border: 1px solid rgba(42,40,36,.13); color: #514e47; background: #fffefa; cursor: pointer; }
+.d2-topbar-context-btn { padding: 8px 11px; border-radius: 8px; font-size: 11px; font-weight: 750; white-space: nowrap; }
+.d2-topbar-context-btn:hover, .d2-topbar-add-btn:hover:not(:disabled) { border-color: rgba(184,112,31,.55); color: #9d5e17; background: #f8f7f2; }
+.d2-topbar-add-btn { display: grid; place-items: center; width: 33px; height: 33px; border-radius: 9px; color: #9d5e17; font-size: 23px; font-weight: 400; line-height: 1; }
+.d2-topbar-add-btn:disabled { cursor: wait; opacity: .55; }
+.d2-root .d2-workspace-title { display: none !important; }
+@media (max-width: 700px) { .d2-topbar-page-heading span:not(.d2-topbar-location-dot) { display: none; }.d2-topbar-context-btn { padding-inline: 8px; }.d2-topbar { gap: 8px; }.d2-topbar-right { gap: 5px; } }

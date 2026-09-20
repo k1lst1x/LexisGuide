@@ -532,7 +532,7 @@ function DocumentPicker({ documents, selectedDocument, onSelect }: { documents: 
 
 /* ───────── Main Dashboard V2 ───────── */
 export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => void; onSignOut?: () => void; userEmail?: string }) {
-  const [collapsed, setCollapsed] = useState(true)
+  const [collapsed, setCollapsed] = useState(false)
   const [activeNav, setActiveNavState] = useState<NavItem>(() => {
     const savedSection = window.localStorage.getItem(LAST_SECTION_KEY)
     return navItems.some((item) => item.key === savedSection) ? savedSection as NavItem : 'overview'
@@ -817,13 +817,13 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const highestScore = Math.max(...documents.map((document) => document.score))
   const priorityDocuments = sortDocuments(documents)
 
-  const breadcrumbMap: Record<NavItem, string> = {
-    overview: 'Dashboard',
-    linter: 'Review',
-    documents: 'Documents',
-    chain: 'Activity',
-    team: 'Messages',
-    settings: 'Profile',
+  const subpageCopy: Record<NavItem, { title: string; description: string }> = {
+    overview: { title: 'Dashboard', description: 'Document health, progress, and the next action in one place.' },
+    linter: { title: 'Review', description: 'See every item that needs your attention and why it matters.' },
+    documents: { title: 'Documents', description: 'Review files, deadlines, priorities, and AI explanations.' },
+    chain: { title: 'Activity', description: 'Follow each review step and see how a document has changed.' },
+    team: { title: 'Messages', description: 'Keep workspace questions and review notes together.' },
+    settings: { title: 'Profile', description: 'Manage your account and workspace preferences.' },
   }
 
   return (
@@ -832,7 +832,8 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
       <aside className={`d2-sidebar ${collapsed ? 'd2-sidebar-collapsed' : ''}`}>
         <div className="d2-sidebar-top">
           <div className="d2-sidebar-brand">
-            {!collapsed && <span className="d2-sidebar-logo">LexisGuide</span>}
+            <span className="d2-sidebar-mark">L</span>
+            {!collapsed && <div className="d2-sidebar-brand-copy"><strong>LexisGuide</strong><span>Document workspace</span></div>}
             <button className="d2-collapse-btn" onClick={() => setCollapsed(!collapsed)} aria-label="Toggle sidebar">
               {icons.collapse}
             </button>
@@ -875,20 +876,18 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
       <div className="d2-main">
         {/* Top bar */}
         <header className="d2-topbar">
-          <div className="d2-workspace-title">
-            <span className="d2-workspace-mark">L</span>
-            <div>
-              <strong>LexisGuide</strong>
-              <span>Document workspace</span>
-            </div>
-          </div>
-
-          <div className="d2-topbar-location">
+          <div className="d2-topbar-page-heading">
             <span className="d2-topbar-location-dot" />
-            <span>{breadcrumbMap[activeNav]}</span>
+            <div><strong>{subpageCopy[activeNav].title}</strong><span>{subpageCopy[activeNav].description}</span></div>
           </div>
 
           <div className="d2-topbar-right">
+            <div className="d2-topbar-context-actions">
+              {activeNav === 'documents' && isDemoMode && <button className="d2-topbar-context-btn" onClick={() => setTutorialOpen(true)}>How does it work?</button>}
+              {activeNav === 'documents' && <button className="d2-topbar-add-btn" onClick={() => uploadInputRef.current?.click()} disabled={isScanning} aria-label="Add document" title="Add document">+</button>}
+              {activeNav === 'overview' && <button className="d2-topbar-context-btn" onClick={() => setActiveNav('documents')}>Open documents</button>}
+              {activeNav === 'linter' && <button className="d2-topbar-context-btn" onClick={() => setActiveNav('documents')}>Open documents</button>}
+            </div>
             <button className="d2-icon-btn d2-clean-icon-btn" aria-label="Search">{icons.search}</button>
             <button className="d2-icon-btn d2-notif-btn" aria-label="Notifications">
               {icons.bell}
@@ -1056,12 +1055,8 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   <label className="d2-jurisdiction-field">Jurisdiction
                     <input value={jurisdiction} onChange={(event) => setJurisdiction(event.target.value)} placeholder="State / country" aria-label="Legal jurisdiction" />
                   </label>
-                  {isDemoMode && <button className="d2-demo-open-btn" onClick={() => setTutorialOpen(true)}>How does this work?</button>}
                   <button className="d2-paste-btn" onClick={() => triggerAiWorkflow(selectedDoc.title, 'document-audit')} title="Watch AI fairness & due process workflow execution">⚡ AI Workflow</button>
                   <button className="d2-paste-btn" onClick={() => setPasteDialogOpen(true)} disabled={isScanning}>Paste text</button>
-                  <button className="d2-upload-btn d2-upload-btn-large" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>
-                    <span>+</span>{isScanning ? 'Scanning document…' : 'Add document'}
-                  </button>
                 </div>
               </div>
 
