@@ -498,7 +498,7 @@ function sortDocuments(documents: SampleDoc[]) {
   return [...documents].sort((a, b) => documentDeadlineValue(a) - documentDeadlineValue(b) || documentPriority(b) - documentPriority(a))
 }
 
-function DocumentPicker({ documents, selectedDocument, onSelect }: { documents: SampleDoc[]; selectedDocument: SampleDoc; onSelect: (document: SampleDoc) => void }) {
+function DocumentPicker({ documents, selectedDocument, onSelect, compactLabel }: { documents: SampleDoc[]; selectedDocument: SampleDoc; onSelect: (document: SampleDoc) => void; compactLabel?: string }) {
   const [isOpen, setIsOpen] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
   const kind = documentKind(selectedDocument.type)
@@ -512,9 +512,9 @@ function DocumentPicker({ documents, selectedDocument, onSelect }: { documents: 
   }, [])
 
   return <div className="d2-document-picker" ref={pickerRef}>
-    <button className={`d2-document-picker-trigger ${isOpen ? 'd2-document-picker-open' : ''}`} onClick={() => setIsOpen((open) => !open)} aria-haspopup="listbox" aria-expanded={isOpen} title={selectedDocument.title}>
+    <button className={`d2-document-picker-trigger ${isOpen ? 'd2-document-picker-open' : ''}`} onClick={() => setIsOpen((open) => !open)} aria-haspopup="listbox" aria-expanded={isOpen} aria-label={`Viewing ${documentDisplayName(selectedDocument)}`} title={selectedDocument.title}>
       <span className="d2-document-picker-icon" aria-hidden="true">{kind.icon}</span>
-      <span className="d2-document-picker-copy"><small>Viewing</small><strong>{documentDisplayName(selectedDocument)}</strong></span>
+      <span className="d2-document-picker-copy"><small>Viewing</small><strong>{compactLabel || documentDisplayName(selectedDocument)}</strong></span>
       <span className="d2-document-picker-chevron" aria-hidden="true">⌄</span>
     </button>
     {isOpen && <div className="d2-document-picker-menu" role="listbox" aria-label="Choose a document">
@@ -882,11 +882,8 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
           </div>
 
           <div className="d2-topbar-right">
-            <div className="d2-topbar-context-actions">
-              {activeNav === 'documents' && isDemoMode && <button className="d2-topbar-context-btn" onClick={() => setTutorialOpen(true)}>How does it work?</button>}
-              {activeNav === 'documents' && <button className="d2-topbar-add-btn" onClick={() => uploadInputRef.current?.click()} disabled={isScanning} aria-label="Add document" title="Add document">+</button>}
-              {activeNav === 'overview' && <button className="d2-topbar-context-btn" onClick={() => setActiveNav('documents')}>Open documents</button>}
-              {activeNav === 'linter' && <button className="d2-topbar-context-btn" onClick={() => setActiveNav('documents')}>Open documents</button>}
+            <div className="d2-topbar-document-control" aria-label="Current document">
+              <DocumentPicker documents={documents} selectedDocument={selectedDoc} compactLabel="Documents" onSelect={(document) => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id || null) }} />
             </div>
             <button className="d2-icon-btn d2-clean-icon-btn" aria-label="Search">{icons.search}</button>
             <button className="d2-icon-btn d2-notif-btn" aria-label="Notifications">
@@ -926,7 +923,6 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   <h1 className="d2-page-title">Dashboard</h1>
                   <p>Document health, progress, and the next action in one place.</p>
                 </div>
-                <DocumentPicker documents={documents} selectedDocument={selectedDoc} onSelect={(document) => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id || null) }} />
               </div>
 
               <div className="d2-overview-top-grid">

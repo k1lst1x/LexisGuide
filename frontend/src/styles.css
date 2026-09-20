@@ -5639,3 +5639,14 @@ html, body {
 .d2-topbar-add-btn:disabled { cursor: wait; opacity: .55; }
 .d2-root .d2-workspace-title { display: none !important; }
 @media (max-width: 700px) { .d2-topbar-page-heading span:not(.d2-topbar-location-dot) { display: none; }.d2-topbar-context-btn { padding-inline: 8px; }.d2-topbar { gap: 8px; }.d2-topbar-right { gap: 5px; } }
+
+/* One consistent page-context row: the active document list stays in the top-right on every subpage. */
+.d2-topbar { align-items: center !important; gap: 18px; }
+.d2-topbar-page-heading { flex: 1 1 auto; }
+.d2-topbar-right { flex: 0 0 auto; margin-left: 0 !important; }
+.d2-topbar-document-control { width: min(360px, 31vw); }
+.d2-topbar-document-control .d2-document-picker { width: 100%; }
+.d2-topbar-document-control .d2-document-picker-trigger { min-height: 48px; padding: 7px 9px; border-radius: 10px; background: #fffefa !important; }
+.d2-topbar-document-control .d2-document-picker-copy small { font-size: 8px; }
+.d2-topbar-document-control .d2-document-picker-copy strong { font-size: 12px; }
+@media (max-width: 760px) { .d2-topbar { gap: 9px; }.d2-topbar-document-control { width: min(205px, 43vw); }.d2-topbar-document-control .d2-document-picker-trigger { grid-template-columns: 30px minmax(0,1fr) 20px; }.d2-topbar-document-control .d2-document-picker-icon { width: 30px; height: 30px; }.d2-topbar-document-control .d2-document-picker-copy strong { font-size: 10px; } }
