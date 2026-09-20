@@ -192,7 +192,14 @@ export default function AuthSectionOne({
               </p>
               <button type="button" className="auth-switch-btn" onClick={switchMode}>
                 {isSignUp ? "Sign in" : "Create an account"}
-                <span aria-hidden="true">→</span>
+                <svg
+                  className="auth-switch-icon"
+                  aria-hidden="true"
+                  focusable="false"
+                  viewBox="0 0 24 24"
+                >
+                  <path d={isSignUp ? "M19 12H5m6-6-6 6 6 6" : "M5 12h14m-6-6 6 6-6 6"} />
+                </svg>
               </button>
             </div>
           </div>
