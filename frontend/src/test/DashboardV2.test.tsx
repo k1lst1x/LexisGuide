@@ -38,6 +38,28 @@ describe('DashboardV2', () => {
     expect(screen.getByPlaceholderText('Search chats, people, or documents...')).toBeInTheDocument()
   })
 
+  it('searches documents and findings from the top bar', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Search workspace' }))
+    await user.type(screen.getByRole('textbox', { name: 'Search documents, issues, or rules' }), 'deadline')
+
+    expect(screen.getByRole('dialog', { name: 'Search workspace' })).toBeInTheDocument()
+    expect(screen.getByText('Appeal filing deadline is vague')).toBeInTheDocument()
+  })
+
+  it('shows the newest review announcements from notifications', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Notifications' }))
+
+    expect(screen.getByRole('dialog', { name: 'Latest announcements' })).toBeInTheDocument()
+    expect(screen.getByText('Review ready')).toBeInTheDocument()
+    expect(screen.getByText('AI scan updated')).toBeInTheDocument()
+  })
+
   it('shows the complete account menu above the workspace', async () => {
     const user = userEvent.setup()
     render(<DashboardV2 onClose={vi.fn()} userEmail="user@lexisguide.gov" />)
@@ -69,6 +91,23 @@ describe('DashboardV2', () => {
     expect(screen.getByText('Why it matters to you')).toBeInTheDocument()
     expect(screen.getByText(/without specifying an exact calendar date/i)).toBeInTheDocument()
     expect(screen.getByText('Recommended next step')).toBeInTheDocument()
+  })
+
+  it('does not show the document tutorial again after it is closed', async () => {
+    window.localStorage.clear()
+    const user = userEvent.setup()
+    const firstView = render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+    await user.click(await screen.findByRole('button', { name: 'Close tutorial' }))
+
+    expect(window.localStorage.getItem('lexisguide:document-tutorial-seen')).toBe('1')
+    firstView.unmount()
+
+    render(<DashboardV2 onClose={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+
+    expect(screen.queryByRole('dialog', { name: /learn the document check/i })).not.toBeInTheDocument()
   })
 
   it('scans pasted text and opens the full document in the reader', async () => {
