@@ -183,4 +183,31 @@ describe('DashboardV2', () => {
 
     expect(onClose).toHaveBeenCalledOnce()
   })
+
+  it('switches dashboard subpages using the persistent top navigation buttons', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Switch to Review' }))
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Switch to Messages' }))
+    expect(screen.getByPlaceholderText('Type a message...')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Switch to Documents' }))
+    expect(screen.getByText('YOUR WORKSPACE')).toBeInTheDocument()
+  })
+
+  it('toggles to AI search mode and executes a natural language query', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('tab', { name: /AI Search/i }))
+    expect(screen.getByPlaceholderText(/Ask AI about clauses/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Find termination without notice clauses/i }))
+    expect(await screen.findByText('AI Synthesis & Legal Advisory')).toBeInTheDocument()
+    expect(screen.getByText(/termination provisions require explicit/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open in Studio & Editor →' })).toBeInTheDocument()
+  })
 })
