@@ -41,6 +41,7 @@ type SampleDoc = {
 type NavItem = 'overview' | 'linter' | 'documents' | 'chain' | 'team' | 'settings'
 
 const LAST_SECTION_KEY = 'lexisguide:last-section'
+const DOCUMENT_TUTORIAL_SEEN_KEY = 'lexisguide:document-tutorial-seen'
 
 /* ───────── Sample Data ───────── */
 const sampleDocs: SampleDoc[] = [
@@ -550,7 +551,8 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [jurisdiction, setJurisdiction] = useState('')
   const [tutorialStep, setTutorialStep] = useState(0)
   const [tutorialStripOpen, setTutorialStripOpen] = useState(true)
-  const [tutorialOpen, setTutorialOpen] = useState(true)
+  const [tutorialOpen, setTutorialOpen] = useState(false)
+  const [tutorialSeen, setTutorialSeen] = useState(() => window.localStorage.getItem(DOCUMENT_TUTORIAL_SEEN_KEY) === '1')
   const [comments, setComments] = useState<Array<{ user: string; text: string; time: string }>>([
     { user: 'Elena Moritz (Legal Aid)', text: 'The appeal deadline is completely missing in v1. We should add a 30-day requirement.', time: '10:14 AM' },
     { user: 'Agency Reviewer', text: 'Agreed. Updating notice to include deadline date of Oct 14, 2026.', time: '10:28 AM' },
@@ -817,6 +819,13 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const highestScore = Math.max(...documents.map((document) => document.score))
   const priorityDocuments = sortDocuments(documents)
 
+  useEffect(() => {
+    if (activeNav !== 'documents' || !isDemoMode || tutorialSeen) return
+    setTutorialSeen(true)
+    window.localStorage.setItem(DOCUMENT_TUTORIAL_SEEN_KEY, '1')
+    setTutorialOpen(true)
+  }, [activeNav, isDemoMode, tutorialSeen])
+
   const subpageCopy: Record<NavItem, { title: string; description: string }> = {
     overview: { title: 'Dashboard', description: 'Document health, progress, and the next action in one place.' },
     linter: { title: 'Review', description: 'See every item that needs your attention and why it matters.' },
@@ -846,7 +855,6 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 className={`d2-nav-btn ${activeNav === item.key ? 'd2-nav-active' : ''}`}
                 onClick={() => {
                   setActiveNav(item.key)
-                  if (item.key === 'documents' && isDemoMode) setTutorialOpen(true)
                 }}
                 aria-label={item.label}
                 title={item.label}
