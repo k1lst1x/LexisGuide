@@ -17,7 +17,7 @@ describe('AuthSectionOne', () => {
     const email = screen.getByLabelText('Email address')
     await user.clear(email)
     await user.type(email, 'student@example.com')
-    await user.click(screen.getByRole('button', { name: 'Submit' }))
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
 
     expect(onSuccess).toHaveBeenCalledWith('student@example.com')
   })
@@ -29,7 +29,7 @@ describe('AuthSectionOne', () => {
     render(<AuthSectionOne onSuccess={onSuccess} onCancel={onCancel} />)
 
     await user.click(screen.getByLabelText(/By creating an account/i))
-    await user.click(screen.getByRole('button', { name: 'Submit' }))
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
     expect(onSuccess).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: /Return to LexisGuide/i }))
@@ -43,5 +43,19 @@ describe('AuthSectionOne', () => {
 
     await user.click(screen.getByRole('button', { name: 'Sign up with Google' }))
     expect(onSuccess).toHaveBeenCalledWith('user@lexisguide.gov')
+  })
+
+  it('switches from sign-in to sign-up from the right-side panel', async () => {
+    const user = userEvent.setup()
+    render(<AuthSectionOne initialMode="sign-in" />)
+
+    expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('First Name')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Create an account' }))
+
+    expect(screen.getByRole('heading', { name: 'Create an account' })).toBeInTheDocument()
+    expect(screen.getByLabelText('First Name')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign up with Google' })).toBeInTheDocument()
   })
 })

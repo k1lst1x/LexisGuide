@@ -189,6 +189,7 @@ export function App() {
       <AuthSectionOne
         onSuccess={handleAuthSuccess}
         onCancel={() => setAuthOpen(false)}
+        initialMode="sign-in"
       />
     )
   }

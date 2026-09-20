@@ -7,15 +7,24 @@ import type { ReactNode } from "react";
 export type AuthSectionOneProps = {
   onSuccess?: (email: string) => void;
   onCancel?: () => void;
+  initialMode?: "sign-in" | "sign-up";
 };
 
-export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOneProps) {
+export default function AuthSectionOne({
+  onSuccess,
+  onCancel,
+  initialMode = "sign-up",
+}: AuthSectionOneProps) {
+  const [mode, setMode] = useState<"sign-in" | "sign-up">(initialMode);
   const [firstName, setFirstName] = useState("Lexis");
   const [lastName, setLastName] = useState("User");
   const [email, setEmail] = useState("user@lexisguide.gov");
   const [password, setPassword] = useState("••••••••••••");
   const [remember, setRemember] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(true);
+  const isSignUp = mode === "sign-up";
+
+  const switchMode = () => setMode((current) => (current === "sign-up" ? "sign-in" : "sign-up"));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,15 +49,17 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
         </button>
       )}
 
-      <div className="auth-grid-card">
+      <div className={`auth-grid-card auth-mode-${mode}`}>
         {/* Left Column — Auth Form Fields */}
         <div className="auth-form-side">
           <div className="auth-form-inner">
             <div className="auth-header-block">
               <div className="auth-brand-badge">LexisGuide Auth</div>
-              <h1 className="auth-heading">Create an account</h1>
+              <h1 className="auth-heading">{isSignUp ? "Create an account" : "Welcome back"}</h1>
               <p className="auth-subheading">
-                Brainstorm in chat, build in cowork
+                {isSignUp
+                  ? "Build clearer paths through complex documents."
+                  : "Pick up where your legal review left off."}
               </p>
             </div>
 
@@ -56,34 +67,36 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
             <div className="auth-social-row">
               <SocialButton
                 icon={<GoogleIcon />}
-                label="Sign up with Google"
+                label={`${isSignUp ? "Sign up" : "Sign in"} with Google`}
                 onClick={() => onSuccess?.(email)}
               />
               <SocialButton
                 icon={<AppleIcon />}
-                label="Sign up with Apple"
+                label={`${isSignUp ? "Sign up" : "Sign in"} with Apple`}
                 onClick={() => onSuccess?.(email)}
               />
             </div>
 
             <div className="auth-divider">
-              <span>or continue with email</span>
+              <span>{isSignUp ? "or continue with email" : "or sign in with email"}</span>
             </div>
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="auth-main-form">
-              <div className="auth-row-2col">
-                <FieldInput
-                  label="First Name"
-                  value={firstName}
-                  onChange={setFirstName}
-                />
-                <FieldInput
-                  label="Last Name"
-                  value={lastName}
-                  onChange={setLastName}
-                />
-              </div>
+              {isSignUp && (
+                <div className="auth-row-2col">
+                  <FieldInput
+                    label="First Name"
+                    value={firstName}
+                    onChange={setFirstName}
+                  />
+                  <FieldInput
+                    label="Last Name"
+                    value={lastName}
+                    onChange={setLastName}
+                  />
+                </div>
+              )}
 
               <FieldInput
                 label="Email address"
@@ -99,34 +112,54 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
                 onChange={setPassword}
               />
 
-              <div className="auth-checkboxes">
-                <label className="auth-checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                  />
-                  <span>Send me product updates & procedural audit reports</span>
-                </label>
+              {isSignUp ? (
+                <div className="auth-checkboxes">
+                  <label className="auth-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={remember}
+                      onChange={(e) => setRemember(e.target.checked)}
+                    />
+                    <span>Send me product updates & procedural audit reports</span>
+                  </label>
 
-                <label className="auth-checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={agreeTerms}
-                    onChange={(e) => setAgreeTerms(e.target.checked)}
-                    required
-                  />
-                  <span>
-                    By creating an account, you agree to our{" "}
-                    <a href="#" className="auth-link">Terms & Services</a> and{" "}
-                    <a href="#" className="auth-link">Privacy Policy</a>
-                  </span>
-                </label>
-              </div>
+                  <label className="auth-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={agreeTerms}
+                      onChange={(e) => setAgreeTerms(e.target.checked)}
+                      required
+                    />
+                    <span>
+                      By creating an account, you agree to our{" "}
+                      <a href="#" className="auth-link">Terms & Services</a> and{" "}
+                      <a href="#" className="auth-link">Privacy Policy</a>
+                    </span>
+                  </label>
+                </div>
+              ) : (
+                <div className="auth-signin-options">
+                  <label className="auth-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={remember}
+                      onChange={(e) => setRemember(e.target.checked)}
+                    />
+                    <span>Keep me signed in on this device</span>
+                  </label>
+                  <button className="auth-text-button" type="button">Forgot password?</button>
+                </div>
+              )}
 
               <button type="submit" className="auth-submit-btn">
-                Submit
+                {isSignUp ? "Create account" : "Sign in"}
               </button>
+              <p className="auth-mobile-switch">
+                {isSignUp ? "Already have an account?" : "New to LexisGuide?"}{" "}
+                <button type="button" onClick={switchMode}>
+                  {isSignUp ? "Sign in" : "Create account"}
+                </button>
+              </p>
             </form>
           </div>
         </div>
@@ -149,6 +182,19 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
               colorBack="#00000000"
               className="absolute inset-0 h-full w-full rounded-[20px] object-cover bg-black"
             />
+            <div className="auth-switch-panel" key={mode}>
+              <span className="auth-switch-kicker">LEXISGUIDE WORKSPACE</span>
+              <h2>{isSignUp ? "Already reviewing with us?" : "New here?"}</h2>
+              <p>
+                {isSignUp
+                  ? "Sign in to return to your saved documents, findings, and next steps."
+                  : "Create an account to save reviews and keep your legal documents organized."}
+              </p>
+              <button type="button" className="auth-switch-btn" onClick={switchMode}>
+                {isSignUp ? "Sign in" : "Create an account"}
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

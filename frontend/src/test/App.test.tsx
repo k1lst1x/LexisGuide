@@ -77,7 +77,7 @@ describe('App', () => {
     render(<App />)
     await user.click(screen.getByRole('button', { name: 'Complete splash' }))
     await user.click(await screen.findByRole('button', { name: 'Sign In' }))
-    await user.click(screen.getByRole('button', { name: 'Submit' }))
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
     expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
     expect(window.localStorage.getItem('lexisguide:workspace')).toBe('open')
