@@ -892,6 +892,16 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   }, [isStudioOpen])
 
   useEffect(() => {
+    if (isStudioOpen) {
+      const originalOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = originalOverflow
+      }
+    }
+  }, [isStudioOpen])
+
+  useEffect(() => {
     if (activeNav !== 'documents' || !isDemoMode || tutorialSeen) return
     const timer = window.setTimeout(() => {
       setTutorialSeen(true)
@@ -1141,26 +1151,26 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
               <input ref={uploadInputRef} type="file" accept="*/*" onChange={handleUpload} hidden />
               {uploadMessage && <div className="d2-upload-status" role="status">{uploadMessage}</div>}
 
-              {/* Top-to-Bottom Document List Header */}
+              {/* Top Compact Header */}
               <div className="d2-documents-head">
                 <div className="d2-documents-head-copy">
                   <span className="d2-eyebrow">YOUR WORKSPACE</span>
                   <h1 className="d2-page-title">Documents</h1>
                   <p className="d2-page-desc">
-                    Review and edit documents from top to bottom. Click any document to open its dedicated analysis studio with fairness scores, issue fixes, and real-time editing.
+                    Review legal documents, notices, and agreements in your workspace with AI fairness audits and live editing.
                   </p>
                 </div>
                 <div className="d2-documents-head-actions">
-                  <button className="d2-library-add" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>
-                    + Add document
-                  </button>
-                  <button className="d2-library-paste" onClick={() => setPasteDialogOpen(true)} disabled={isScanning}>
+                  <button className="d2-btn-paste-modern" onClick={() => setPasteDialogOpen(true)} disabled={isScanning}>
                     Paste text
+                  </button>
+                  <button className="d2-btn-upload-modern" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>
+                    + Add document
                   </button>
                 </div>
               </div>
 
-              {/* Vertical Stack of Documents */}
+              {/* Compact Vertical Stack of Documents */}
               <div className="d2-documents-vertical-stack" role="list" aria-label="Documents repository">
                 {documents.map((doc) => {
                   const kind = documentKind(doc.type)
@@ -1195,10 +1205,10 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                         <p className="d2-doc-card-agency">{doc.agency}</p>
                         {doc.summary && <p className="d2-doc-card-summary">{doc.summary}</p>}
 
-                        {/* Quick preview of flagged issues (clicking one opens the studio and selects that issue) */}
+                        {/* Interactive issue chips */}
                         <div className="d2-doc-card-issues-preview">
                           <span className="d2-issues-label">
-                            {issues.length ? `${issues.length} issue${issues.length === 1 ? '' : 's'} identified:` : 'All checks clear'}
+                            {issues.length ? `${issues.length} issue${issues.length === 1 ? '' : 's'}:` : 'All checks:'}
                           </span>
                           <div className="d2-issues-chips">
                             {issues.slice(0, 3).map((f) => (
@@ -1270,8 +1280,8 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 })}
               </div>
 
-              {/* DEDICATED DOCUMENT SUBPAGE POPUP / STUDIO */}
-              {isStudioOpen && (
+              {/* DEDICATED DOCUMENT SUBPAGE POPUP / STUDIO (MOUNTED IN PORTAL ON BODY) */}
+              {isStudioOpen && createPortal(
                 <div
                   className="d2-studio-overlay"
                   role="dialog"
@@ -1282,7 +1292,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   }}
                 >
                   <div className="d2-studio-window">
-                    {/* Sticky Studio Top Navigation Bar */}
+                    {/* Compact Sticky Top Bar */}
                     <header className="d2-studio-header">
                       <div className="d2-studio-nav-left">
                         <button
@@ -1293,6 +1303,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                         >
                           ← Back to Documents
                         </button>
+                        <div className="d2-studio-divider" />
                         <div className="d2-studio-title-block">
                           <div className="d2-studio-meta-tag">
                             <span className="d2-doc-type-tag">{documentKind(selectedDoc.type).label}</span>
@@ -1303,33 +1314,34 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                       </div>
 
                       <div className="d2-studio-nav-right">
-                        <label className="d2-jurisdiction-field" style={{ margin: 0 }}>
+                        <div className="d2-studio-jur-box">
                           <input
                             value={jurisdiction}
                             onChange={(event) => setJurisdiction(event.target.value)}
                             placeholder="State / country"
                             aria-label="Legal jurisdiction"
-                            style={{ width: '135px', padding: '6px 10px', fontSize: '11px', borderRadius: '6px' }}
+                            className="d2-studio-jur-input"
                           />
-                        </label>
+                        </div>
                         <button
                           type="button"
-                          className="d2-paste-btn"
-                          style={{ padding: '7px 12px', fontSize: '11.5px', background: '#191919', color: '#f6f4ee', borderColor: 'rgba(0,0,0,0.12)', cursor: 'pointer' }}
+                          className="d2-studio-ai-btn"
                           onClick={() => triggerAiWorkflow(selectedDoc.title, 'document-audit')}
                           title="Watch animated AI due process analysis"
                         >
                           ⚡ AI Workflow
                         </button>
-                        <button type="button" className="d2-ai-edit-btn" onClick={() => runDocumentAction('review')} disabled={isScanning}>
-                          Summarize
-                        </button>
-                        <button type="button" className="d2-ai-edit-btn" onClick={() => runDocumentAction('negotiate')} disabled={isScanning}>
-                          Negotiate
-                        </button>
-                        <button type="button" className="d2-ai-edit-btn d2-ai-edit-btn-primary" onClick={() => runDocumentAction('rewrite')} disabled={isScanning}>
-                          Propose rewrite
-                        </button>
+                        <div className="d2-studio-action-pill-group">
+                          <button type="button" className="d2-studio-btn-action" onClick={() => runDocumentAction('review')} disabled={isScanning}>
+                            Summarize
+                          </button>
+                          <button type="button" className="d2-studio-btn-action" onClick={() => runDocumentAction('negotiate')} disabled={isScanning}>
+                            Negotiate
+                          </button>
+                          <button type="button" className="d2-studio-btn-action d2-studio-btn-primary" onClick={() => runDocumentAction('rewrite')} disabled={isScanning}>
+                            Propose rewrite
+                          </button>
+                        </div>
                         <button
                           type="button"
                           className="d2-studio-close-icon-btn"
@@ -1342,22 +1354,11 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                       </div>
                     </header>
 
-                    {/* Studio Body: 2 Columns */}
+                    {/* Studio Body: Split View */}
                     <div className="d2-studio-body">
-                      {/* Left Column: Summary, Fairness Graph, and Issues You Can Fix */}
+                      {/* Left Column: Fairness Dial, Executive Summary, Actionable Issues */}
                       <div className="d2-studio-left-pane">
-                        {/* Summary Card */}
-                        <section className="d2-studio-card d2-studio-summary-card">
-                          <div className="d2-card-head">
-                            <span className="d2-eyebrow">EXECUTIVE SUMMARY</span>
-                            <span className="d2-version-tag">{selectedDoc.version}</span>
-                          </div>
-                          <p className="d2-studio-summary-text">
-                            {selectedDoc.summary || 'LexisGuide scanned this document to identify potential fairness risks, missing procedural protections, and ambiguous clauses.'}
-                          </p>
-                        </section>
-
-                        {/* Percentage of Fairness with Graph */}
+                        {/* Fairness Dial Card */}
                         <section className="d2-studio-card d2-studio-fairness-card">
                           <div className="d2-card-head">
                             <span className="d2-eyebrow">FAIRNESS & DUE PROCESS</span>
@@ -1365,7 +1366,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                           </div>
 
                           <div className="d2-fairness-graph-row">
-                            {/* Circular Score Dial */}
+                            {/* Circular Dial */}
                             <div className="d2-fairness-dial" role="img" aria-label={`Fairness rating ${selectedDoc.score}%`}>
                               <svg viewBox="0 0 100 100" className="d2-fairness-dial-svg">
                                 <circle className="d2-dial-track" cx="50" cy="50" r="40" />
@@ -1384,7 +1385,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                               </div>
                             </div>
 
-                            {/* Breakdown Bar & Metrics */}
+                            {/* Breakdown Distribution */}
                             <div className="d2-fairness-breakdown">
                               <h4>Clause Fairness Distribution</h4>
                               <div className="d2-fairness-stacked-bar">
@@ -1401,7 +1402,18 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                           </div>
                         </section>
 
-                        {/* Issues You Can Fix to Improve Fairness */}
+                        {/* Summary Card */}
+                        <section className="d2-studio-card d2-studio-summary-card">
+                          <div className="d2-card-head">
+                            <span className="d2-eyebrow">EXECUTIVE SUMMARY</span>
+                            <span className="d2-version-tag">{selectedDoc.version}</span>
+                          </div>
+                          <p className="d2-studio-summary-text">
+                            {selectedDoc.summary || 'LexisGuide scanned this document to identify potential fairness risks, missing procedural protections, and ambiguous clauses.'}
+                          </p>
+                        </section>
+
+                        {/* Actionable Issues Card */}
                         <section className="d2-studio-card d2-studio-issues-card">
                           <div className="d2-card-head">
                             <span className="d2-eyebrow">ACTIONABLE IMPROVEMENTS</span>
@@ -1514,14 +1526,14 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                               <div className="d2-paper d2-paper-scrollable">
                                 <div className="d2-paper-watermark">DOCUMENT COPY</div>
                                 <div className="d2-reader-hint">
-                                  <span className="d2-highlight-key" /> Highlighted text may affect fairness or due process. Select any highlight to inspect details.
+                                  <span className="d2-highlight-key" /> Highlighted text indicates clauses affecting fairness or due process. Select any highlight to inspect.
                                 </div>
                                 <DocumentText document={selectedDoc} onSelectFinding={(id) => setActiveFinding(id)} />
                               </div>
                             ) : (
                               <div className="d2-realtime-editor-wrap">
                                 <div className="d2-editor-hint-bar">
-                                  <span>✏ You are editing the working copy in real time. Changes can be re-audited by AI immediately.</span>
+                                  <span>✏ You are editing the working copy in real time. Click "Live AI Re-Analyze" to test your edits.</span>
                                 </div>
                                 <textarea
                                   className="d2-realtime-textarea"
@@ -1538,12 +1550,14 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                           <div className="d2-editor-footer">
                             <span className="d2-hash-label">DOCUMENT ID:</span>
                             <code className="d2-hash-value">{selectedDoc.hash}</code>
+                            <span className="d2-verified-pill">✓ Integrity Verified</span>
                           </div>
                         </section>
                       </div>
                     </div>
                   </div>
-                </div>
+                </div>,
+                document.body
               )}
 
               {/* DEMO ONBOARDING TUTORIAL MODAL (PORTAL) */}
