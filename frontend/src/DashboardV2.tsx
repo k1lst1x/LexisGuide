@@ -42,6 +42,7 @@ type NavItem = 'overview' | 'linter' | 'documents' | 'chain' | 'team' | 'setting
 
 const LAST_SECTION_KEY = 'lexisguide:last-section'
 const DOCUMENT_TUTORIAL_SEEN_KEY = 'lexisguide:document-tutorial-seen'
+const DOCUMENT_TUTORIAL_TIPS_DISMISSED_KEY = 'lexisguide:document-tutorial-tips-dismissed'
 
 /* ───────── Sample Data ───────── */
 const sampleDocs: SampleDoc[] = [
@@ -550,7 +551,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [pastedText, setPastedText] = useState('')
   const [jurisdiction, setJurisdiction] = useState('')
   const [tutorialStep, setTutorialStep] = useState(0)
-  const [tutorialStripOpen, setTutorialStripOpen] = useState(true)
+  const [tutorialStripOpen, setTutorialStripOpen] = useState(() => window.localStorage.getItem(DOCUMENT_TUTORIAL_TIPS_DISMISSED_KEY) !== 'true')
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [tutorialSeen, setTutorialSeen] = useState(() => window.localStorage.getItem(DOCUMENT_TUTORIAL_SEEN_KEY) === '1')
   const [comments, setComments] = useState<Array<{ user: string; text: string; time: string }>>([
@@ -566,7 +567,13 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [aiWorkflowMode, setAiWorkflowMode] = useState<'document-audit' | 'remediation' | 'project-plan'>('document-audit')
   const [aiWorkflowDocName, setAiWorkflowDocName] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [workspaceSearchOpen, setWorkspaceSearchOpen] = useState(false)
+  const [workspaceSearch, setWorkspaceSearch] = useState('')
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(true)
   const userMenuRef = useRef<HTMLDivElement>(null)
+  const workspaceToolsRef = useRef<HTMLDivElement>(null)
+  const workspaceSearchInputRef = useRef<HTMLInputElement>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const sectionTitleTimerRef = useRef<number | undefined>(undefined)
 
@@ -574,6 +581,17 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     setAiWorkflowMode(mode)
     setAiWorkflowDocName(docTitle)
     setAiWorkflowOpen(true)
+  }
+
+  const dismissDocumentTutorial = () => {
+    window.localStorage.setItem(DOCUMENT_TUTORIAL_SEEN_KEY, '1')
+    setTutorialSeen(true)
+    setTutorialOpen(false)
+  }
+
+  const dismissDocumentTutorialTips = () => {
+    window.localStorage.setItem(DOCUMENT_TUTORIAL_TIPS_DISMISSED_KEY, 'true')
+    setTutorialStripOpen(false)
   }
 
   const setActiveNav = (section: NavItem) => {
@@ -588,6 +606,10 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false)
       }
+      if (workspaceToolsRef.current && !workspaceToolsRef.current.contains(e.target as Node)) {
+        setWorkspaceSearchOpen(false)
+        setNotificationsOpen(false)
+      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -597,13 +619,22 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
-        setMessageSearchOpen(true)
+        setNotificationsOpen(false)
+        setWorkspaceSearchOpen(true)
       }
-      if (event.key === 'Escape') setMessageSearchOpen(false)
+      if (event.key === 'Escape') {
+        setMessageSearchOpen(false)
+        setWorkspaceSearchOpen(false)
+        setNotificationsOpen(false)
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
+
+  useEffect(() => {
+    if (workspaceSearchOpen) workspaceSearchInputRef.current?.focus()
+  }, [workspaceSearchOpen])
 
   useEffect(() => {
     window.localStorage.setItem(LAST_SECTION_KEY, activeNav)
@@ -697,7 +728,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     setActiveFinding(uploaded.findings[0]?.id || null)
     setUploadMessage(`${title} is ready. Select a highlighted passage to see why it needs attention.`)
     setTutorialStep(3)
-    setTutorialOpen(false)
+    dismissDocumentTutorial()
     setActiveNav('documents')
   }
 
@@ -818,6 +849,26 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const workspaceAverage = Math.round(documents.reduce((total, document) => total + document.score, 0) / Math.max(documents.length, 1))
   const highestScore = Math.max(...documents.map((document) => document.score))
   const priorityDocuments = sortDocuments(documents)
+  const workspaceSearchQuery = workspaceSearch.trim().toLowerCase()
+  const matchingDocuments = (workspaceSearchQuery
+    ? documents.filter((document) => [document.title, document.type, document.status, document.agency].some((value) => value.toLowerCase().includes(workspaceSearchQuery)))
+    : documents.slice(0, 3)).slice(0, 4)
+  const matchingFindings = workspaceSearchQuery
+    ? documents.flatMap((document) => document.findings.filter((finding) => [finding.title, finding.category, finding.explanation, finding.evidence].some((value) => value.toLowerCase().includes(workspaceSearchQuery))).map((finding) => ({ document, finding }))).slice(0, 5)
+    : []
+  const announcements = [
+    { title: 'Review ready', detail: `${selectedDoc.title} has ${potentialRiskCount} item${potentialRiskCount === 1 ? '' : 's'} to review.`, time: 'Just now', tone: potentialRiskCount ? 'priority' : 'clear' },
+    { title: 'AI scan updated', detail: `${findingTotal} checks were evaluated against the current document.`, time: 'Today', tone: 'info' },
+    { title: 'Workspace reminder', detail: 'Select a highlighted passage to read the plain-language explanation.', time: 'Today', tone: 'neutral' },
+  ]
+
+  const openSearchResult = (document: SampleDoc, findingId?: string) => {
+    setSelectedDoc(document)
+    setActiveFinding(findingId ?? document.findings[0]?.id ?? null)
+    setActiveNav('documents')
+    setWorkspaceSearchOpen(false)
+    setWorkspaceSearch('')
+  }
 
   useEffect(() => {
     if (activeNav !== 'documents' || !isDemoMode || tutorialSeen) return
@@ -896,11 +947,28 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
             <div className="d2-topbar-document-control" aria-label="Current document">
               <DocumentPicker documents={documents} selectedDocument={selectedDoc} compactLabel="Documents" onSelect={(document) => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id || null) }} />
             </div>
-            <button className="d2-icon-btn d2-clean-icon-btn" aria-label="Search">{icons.search}</button>
-            <button className="d2-icon-btn d2-notif-btn" aria-label="Notifications">
-              {icons.bell}
-              <span className="d2-notif-dot" />
-            </button>
+            <div className="d2-workspace-tools" ref={workspaceToolsRef}>
+              <button className={`d2-icon-btn d2-clean-icon-btn ${workspaceSearchOpen ? 'd2-icon-btn-active' : ''}`} onClick={() => { setNotificationsOpen(false); setWorkspaceSearchOpen((open) => !open) }} aria-label="Search workspace" aria-expanded={workspaceSearchOpen} aria-controls="workspace-search-panel">{icons.search}</button>
+              <button className={`d2-icon-btn d2-notif-btn ${notificationsOpen ? 'd2-icon-btn-active' : ''}`} onClick={() => { setWorkspaceSearchOpen(false); setNotificationsOpen((open) => !open); setHasUnreadNotifications(false) }} aria-label="Notifications" aria-expanded={notificationsOpen} aria-controls="workspace-notifications-panel">
+                {icons.bell}
+                {hasUnreadNotifications && <span className="d2-notif-dot" />}
+              </button>
+
+              {workspaceSearchOpen && <section id="workspace-search-panel" className="d2-workspace-popover d2-workspace-search-popover" role="dialog" aria-label="Search workspace">
+                <label className="d2-workspace-search-input"><span aria-hidden="true">{icons.search}</span><input ref={workspaceSearchInputRef} value={workspaceSearch} onChange={(event) => setWorkspaceSearch(event.target.value)} placeholder="Search documents, issues, or rules…" aria-label="Search documents, issues, or rules" /><kbd>Esc</kbd></label>
+                <div className="d2-workspace-search-results">
+                  <p>{workspaceSearchQuery ? 'Documents' : 'Recent documents'}</p>
+                  {matchingDocuments.length ? matchingDocuments.map((document) => <button key={document.id} className="d2-workspace-result" onClick={() => openSearchResult(document)}><span className="d2-workspace-result-icon" aria-hidden="true">{documentKind(document.type).icon}</span><span><strong>{documentDisplayName(document)}</strong><small>{document.type} · {document.score}/100</small></span><em>Open →</em></button>) : <span className="d2-workspace-empty">No documents match “{workspaceSearch}”.</span>}
+                  {workspaceSearchQuery && <><p className="d2-workspace-result-label">Flagged language</p>{matchingFindings.length ? matchingFindings.map(({ document, finding }) => <button key={`${document.id}-${finding.id}`} className="d2-workspace-result d2-workspace-finding-result" onClick={() => openSearchResult(document, finding.id)}><i className={`d2-sev-dot d2-sev-${finding.severity}`} /><span><strong>{finding.title}</strong><small>{documentDisplayName(document)} · {finding.category}</small></span><em>Review →</em></button>) : <span className="d2-workspace-empty">No findings match this search.</span>}</>}
+                </div>
+              </section>}
+
+              {notificationsOpen && <section id="workspace-notifications-panel" className="d2-workspace-popover d2-notifications-popover" role="dialog" aria-label="Latest announcements">
+                <header><div><span className="d2-eyebrow">UPDATES</span><h2>Latest announcements</h2></div><button type="button" onClick={() => setNotificationsOpen(false)} aria-label="Close notifications">×</button></header>
+                <div className="d2-notification-list">{announcements.map((announcement) => <button key={announcement.title} className="d2-notification-item" onClick={() => { setNotificationsOpen(false); setActiveNav('documents') }}><i className={`d2-notification-tone d2-notification-${announcement.tone}`} /><span><strong>{announcement.title}</strong><small>{announcement.detail}</small></span><time>{announcement.time}</time></button>)}</div>
+                <footer><span><i /> All caught up</span><button type="button" onClick={() => setNotificationsOpen(false)}>Done</button></footer>
+              </section>}
+            </div>
             <div className="d2-user-menu-anchor" ref={userMenuRef}>
               <button className="d2-avatar-btn" onClick={() => setUserMenuOpen(!userMenuOpen)} aria-label="Account menu">
                 <div className="d2-avatar-circle">
@@ -1070,7 +1138,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
               {uploadMessage && <div className="d2-upload-status" role="status">{uploadMessage}</div>}
 
               {isDemoMode && tutorialStripOpen && <section className="d2-demo-tutorial" aria-label="Document review tutorial">
-                <button className="d2-demo-strip-close" onClick={() => setTutorialStripOpen(false)} aria-label="Close tutorial tips" title="Close tutorial tips">×</button>
+                <button className="d2-demo-strip-close" onClick={dismissDocumentTutorialTips} aria-label="Close tutorial tips" title="Close tutorial tips">×</button>
                 <div className="d2-demo-intro"><span className="d2-demo-badge">DEMO MODE</span><div><h2>Try it with a sample document</h2><p>Learn how LexisGuide works before adding a personal file. Nothing in these samples belongs to you.</p></div></div>
                 <div className="d2-demo-steps">
                   <button className={`d2-demo-step ${tutorialStep === 1 ? 'd2-demo-step-active' : ''}`} onClick={() => { setSelectedDoc(sampleDocs[2]); setActiveFinding(sampleDocs[2].findings[0]?.id ?? null); setTutorialStep(1) }}><span>1</span><div><strong>Choose a sample</strong><small>Open a housing, benefit, or agreement example.</small></div></button>
@@ -1185,12 +1253,12 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
 
               {isDemoMode && tutorialOpen && createPortal(<div className="d2-demo-overlay" role="dialog" aria-modal="true" aria-labelledby="demo-tour-title">
                 <section className="d2-demo-modal">
-                  <button className="d2-demo-close" onClick={() => setTutorialOpen(false)} aria-label="Close tutorial">×</button>
+                  <button className="d2-demo-close" onClick={dismissDocumentTutorial} aria-label="Close tutorial">×</button>
                   <div className="d2-demo-modal-intro"><span>LEXISGUIDE DEMO</span><h2 id="demo-tour-title">Learn the document check in under a minute.</h2><p>Start with a safe example, see how flagged language is explained, then use the same tool for your own document.</p></div>
                   <div className="d2-demo-modal-steps">
-                    <button onClick={() => { setSelectedDoc(sampleDocs[2]); setActiveFinding(sampleDocs[2].findings[0]?.id ?? null); setTutorialStep(1); setTutorialOpen(false) }}><span className="d2-demo-modal-number">01</span><span className="d2-demo-modal-icon">⌂</span><strong>Explore a sample</strong><small>Open a practice housing agreement with realistic review flags.</small><em>Start exploring →</em></button>
-                    <button onClick={() => { setSelectedDoc(sampleDocs[0]); setActiveFinding('f-1'); setTutorialStep(2); setTutorialOpen(false) }}><span className="d2-demo-modal-number">02</span><span className="d2-demo-modal-icon">!</span><strong>See an issue explained</strong><small>Jump to a highlighted sentence and read what it could mean for you.</small><em>Show an example →</em></button>
-                    <button onClick={() => { setTutorialStep(3); setTutorialOpen(false); uploadInputRef.current?.click() }}><span className="d2-demo-modal-number">03</span><span className="d2-demo-modal-icon">+</span><strong>Scan your own file</strong><small>Add a file or paste copied text when you are ready to begin your own review.</small><em>Add a document →</em></button>
+                    <button onClick={() => { setSelectedDoc(sampleDocs[2]); setActiveFinding(sampleDocs[2].findings[0]?.id ?? null); setTutorialStep(1); dismissDocumentTutorial() }}><span className="d2-demo-modal-number">01</span><span className="d2-demo-modal-icon">⌂</span><strong>Explore a sample</strong><small>Open a practice housing agreement with realistic review flags.</small><em>Start exploring →</em></button>
+                    <button onClick={() => { setSelectedDoc(sampleDocs[0]); setActiveFinding('f-1'); setTutorialStep(2); dismissDocumentTutorial() }}><span className="d2-demo-modal-number">02</span><span className="d2-demo-modal-icon">!</span><strong>See an issue explained</strong><small>Jump to a highlighted sentence and read what it could mean for you.</small><em>Show an example →</em></button>
+                    <button onClick={() => { setTutorialStep(3); dismissDocumentTutorial(); uploadInputRef.current?.click() }}><span className="d2-demo-modal-number">03</span><span className="d2-demo-modal-icon">+</span><strong>Scan your own file</strong><small>Add a file or paste copied text when you are ready to begin your own review.</small><em>Add a document →</em></button>
                   </div>
                   <p className="d2-demo-modal-footnote">Practice documents only. Automated flags are prompts to review—not proof of fraud or legal advice.</p>
                 </section>
