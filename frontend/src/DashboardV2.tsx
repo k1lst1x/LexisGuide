@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useEffectEvent, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 import { AIWorkflowProgress } from './components/AIWorkflowProgress'
@@ -627,8 +627,16 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     }
   }
 
+  const refreshWorkspacesForActiveSection = useEffectEvent(() => {
+    void refreshWorkspaces()
+  })
+
   useEffect(() => {
-    if (activeNav === 'team') void refreshWorkspaces()
+    if (activeNav !== 'team') return
+    const refreshTimer = window.setTimeout(() => {
+      refreshWorkspacesForActiveSection()
+    }, 0)
+    return () => window.clearTimeout(refreshTimer)
   }, [activeNav])
 
   const createSharedWorkspace = async () => {
@@ -792,7 +800,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
       true
     ).slice(0, 3)
 
-    let answerText = ''
+    let answerText: string
     if (lowerQuery.includes('terminat') || lowerQuery.includes('notice')) {
       answerText = `In “${targetDoc.title}”, termination provisions require explicit calendar dates or written notice periods (typically 30 days) before cancellation. Open-ended wording like “standard filing period” introduces procedural ambiguity without defined cure windows.`
     } else if (lowerQuery.includes('dispute') || lowerQuery.includes('arbitrat')) {
