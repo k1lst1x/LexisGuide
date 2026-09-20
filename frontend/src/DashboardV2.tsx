@@ -42,7 +42,6 @@ type NavItem = 'overview' | 'linter' | 'documents' | 'chain' | 'team' | 'setting
 
 const LAST_SECTION_KEY = 'lexisguide:last-section'
 const DOCUMENT_TUTORIAL_SEEN_KEY = 'lexisguide:document-tutorial-seen'
-const DOCUMENT_TUTORIAL_TIPS_DISMISSED_KEY = 'lexisguide:document-tutorial-tips-dismissed'
 
 /* ───────── Sample Data ───────── */
 const sampleDocs: SampleDoc[] = [
@@ -476,30 +475,6 @@ function documentDisplayName(document: SampleDoc) {
   return document.title
 }
 
-function documentPriority(document: SampleDoc) {
-  if (typeof document.priorityScore === 'number') return document.priorityScore
-  const critical = document.findings.filter((finding) => finding.severity === 'critical').length
-  const warning = document.findings.filter((finding) => finding.severity === 'warning').length
-  return Math.min(100, critical * 28 + warning * 12)
-}
-
-function documentDeadlineValue(document: SampleDoc) {
-  if (!document.deadline) return Number.POSITIVE_INFINITY
-  const parsed = Date.parse(document.deadline)
-  return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed
-}
-
-function formatDocumentDeadline(deadline?: string | null) {
-  if (!deadline) return 'No exact deadline found'
-  const parsed = new Date(deadline)
-  if (Number.isNaN(parsed.getTime())) return deadline
-  return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-function sortDocuments(documents: SampleDoc[]) {
-  return [...documents].sort((a, b) => documentDeadlineValue(a) - documentDeadlineValue(b) || documentPriority(b) - documentPriority(a))
-}
-
 function DocumentPicker({ documents, selectedDocument, onSelect, compactLabel }: { documents: SampleDoc[]; selectedDocument: SampleDoc; onSelect: (document: SampleDoc) => void; compactLabel?: string }) {
   const [isOpen, setIsOpen] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -551,8 +526,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [pastedTitle, setPastedTitle] = useState('')
   const [pastedText, setPastedText] = useState('')
   const [jurisdiction, setJurisdiction] = useState('')
-  const [tutorialStep, setTutorialStep] = useState(0)
-  const [tutorialStripOpen, setTutorialStripOpen] = useState(() => window.localStorage.getItem(DOCUMENT_TUTORIAL_TIPS_DISMISSED_KEY) !== 'true')
+  const [, setTutorialStep] = useState(0)
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [tutorialSeen, setTutorialSeen] = useState(() => window.localStorage.getItem(DOCUMENT_TUTORIAL_SEEN_KEY) === '1')
   const [comments, setComments] = useState<Array<{ user: string; text: string; time: string }>>([
@@ -588,11 +562,6 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     window.localStorage.setItem(DOCUMENT_TUTORIAL_SEEN_KEY, '1')
     setTutorialSeen(true)
     setTutorialOpen(false)
-  }
-
-  const dismissDocumentTutorialTips = () => {
-    window.localStorage.setItem(DOCUMENT_TUTORIAL_TIPS_DISMISSED_KEY, 'true')
-    setTutorialStripOpen(false)
   }
 
   const setActiveNav = (section: NavItem) => {
@@ -842,14 +811,12 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const passCount = selectedDoc.findings.filter(f => f.severity === 'pass').length
   const findingTotal = Math.max(selectedDoc.findings.length, 1)
   const potentialRiskCount = criticalCount + warningCount
-  const potentialRiskPercent = Math.round((potentialRiskCount / findingTotal) * 100)
   const checkedPercent = Math.round((passCount / findingTotal) * 100)
   const criticalPercent = (criticalCount / findingTotal) * 100
   const warningPercent = (warningCount / findingTotal) * 100
   const isDemoMode = !documents.some((document) => document.id.startsWith('upload-'))
   const workspaceAverage = Math.round(documents.reduce((total, document) => total + document.score, 0) / Math.max(documents.length, 1))
   const highestScore = Math.max(...documents.map((document) => document.score))
-  const priorityDocuments = sortDocuments(documents)
   const workspaceSearchQuery = workspaceSearch.trim().toLowerCase()
   const matchingDocuments = (workspaceSearchQuery
     ? documents.filter((document) => [document.title, document.type, document.status, document.agency].some((value) => value.toLowerCase().includes(workspaceSearchQuery)))
@@ -1083,8 +1050,8 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
           {/* ═════ LINTER ═════ */}
           {activeNav === 'linter' && (
             <div className="d2-page">
-              <div className="d2-page-header">
-                <div className="d2-section-header-copy"><span className="d2-eyebrow">DOCUMENTS</span><h1 className="d2-page-title">Review</h1><p>See every item that needs your attention and why it matters.</p></div>
+              <div className="d2-review-toolbar">
+                <h1 className="d2-sr-only">Review</h1>
                 <div className="d2-header-meta">
                   <span className="d2-finding-count">{selectedDoc.findings.length} findings</span>
                   {selectedDoc.score < 75 && (
