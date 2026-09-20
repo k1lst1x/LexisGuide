@@ -29,7 +29,14 @@ export default function AuthSectionOne({ onSuccess, onCancel }: AuthSectionOnePr
       {/* Return button */}
       {onCancel && (
         <button onClick={onCancel} className="auth-back-btn">
-          ← Return to LexisGuide
+          <svg
+            aria-hidden="true"
+            className="auth-back-icon"
+            viewBox="0 0 24 24"
+          >
+            <path d="m9 14-5-5 5-5M4 9h11a5 5 0 0 1 5 5v1" />
+          </svg>
+          <span>Return to LexisGuide</span>
         </button>
       )}
 
