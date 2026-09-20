@@ -22,8 +22,13 @@ DEFAULT_CORS_ORIGINS = (
 
 
 def cors_origins() -> list[str]:
-    """Return explicit browser origins; never permit credentialed wildcard CORS."""
-    configured = os.getenv("CORS_ALLOW_ORIGINS", "")
+    """Return explicit browser origins; never permit credentialed wildcard CORS.
+
+    ``CORS_ORIGINS`` remains supported for existing local deployments. The
+    production-specific name takes precedence so the Lambda configuration is
+    unambiguous.
+    """
+    configured = os.getenv("CORS_ALLOW_ORIGINS") or os.getenv("CORS_ORIGINS", "")
     origins = [origin.strip().rstrip("/") for origin in configured.split(",") if origin.strip()]
     return origins or list(DEFAULT_CORS_ORIGINS)
 

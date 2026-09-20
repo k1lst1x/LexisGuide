@@ -126,9 +126,9 @@ export async function cognitoGetCurrentUser() {
   }
 }
 
-export async function cognitoGetIdToken() {
+export async function cognitoGetIdToken(forceRefresh = false) {
   try {
-    const session = await fetchAuthSession()
+    const session = await fetchAuthSession({ forceRefresh })
     return session.tokens?.idToken?.toString()
   } catch {
     return undefined

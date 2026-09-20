@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import os
+import secrets
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Any
+from uuid import uuid4
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
+from botocore.exceptions import ClientError
 
 
 @lru_cache
@@ -45,3 +49,127 @@ def list_records(user_id: str) -> list[dict[str, Any]]:
         if last_evaluated_key is None:
             return records
         query_args["ExclusiveStartKey"] = last_evaluated_key
+
+
+def create_workspace(owner: dict[str, str], name: str) -> dict[str, Any]:
+    workspace_id = str(uuid4())
+    now = datetime.now(UTC).isoformat()
+    workspace = {"id": workspace_id, "name": name, "owner_id": owner["sub"], "created_at": now}
+    table = _table()
+    table.put_item(Item={"PK": f"WORKSPACE#{workspace_id}", "SK": "META", **workspace})
+    table.put_item(
+        Item={
+            "PK": f"WORKSPACE#{workspace_id}",
+            "SK": f"MEMBER#{owner['sub']}",
+            "workspace_id": workspace_id,
+            "user_id": owner["sub"],
+            "email": owner.get("email", ""),
+            "name": owner.get("name", ""),
+            "role": "owner",
+            "joined_at": now,
+        }
+    )
+    table.put_item(
+        Item={
+            "PK": f"USER#{owner['sub']}",
+            "SK": f"WORKSPACE#{workspace_id}",
+            "workspace_id": workspace_id,
+            "role": "owner",
+            "name": name,
+            "joined_at": now,
+        }
+    )
+    return workspace
+
+
+def list_workspaces(user_id: str) -> list[dict[str, Any]]:
+    response = _table().query(
+        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("WORKSPACE#")
+    )
+    workspaces = []
+    for membership in response.get("Items", []):
+        workspace = (
+            _table()
+            .get_item(Key={"PK": f"WORKSPACE#{membership['workspace_id']}", "SK": "META"})
+            .get("Item")
+        )
+        if workspace:
+            workspaces.append({**workspace, "role": membership.get("role", "member")})
+    return workspaces
+
+
+def get_workspace_membership(workspace_id: str, user_id: str) -> dict[str, Any] | None:
+    return (
+        _table()
+        .get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": f"MEMBER#{user_id}"})
+        .get("Item")
+    )
+
+
+def list_workspace_members(workspace_id: str) -> list[dict[str, Any]]:
+    response = _table().query(
+        KeyConditionExpression=Key("PK").eq(f"WORKSPACE#{workspace_id}")
+        & Key("SK").begins_with("MEMBER#")
+    )
+    return response.get("Items", [])
+
+
+def create_workspace_invite(workspace_id: str, inviter_id: str) -> dict[str, Any]:
+    token = secrets.token_urlsafe(18)
+    now = datetime.now(UTC).isoformat()
+    invite = {
+        "token": token,
+        "workspace_id": workspace_id,
+        "created_by": inviter_id,
+        "created_at": now,
+    }
+    # The random token is the partition key so joining is a constant-time read.
+    # This avoids a table-wide Scan, which would both scale poorly and require
+    # broader production IAM permissions.
+    _table().put_item(Item={"PK": f"INVITE#{token}", "SK": "META", **invite})
+    return invite
+
+
+def consume_workspace_invite(token: str, user: dict[str, str]) -> dict[str, Any] | None:
+    table = _table()
+    invite_key = {"PK": f"INVITE#{token}", "SK": "META"}
+    invite = table.get_item(Key=invite_key).get("Item")
+    if not invite:
+        return None
+
+    try:
+        # A conditional deletion gives the token one-use semantics even when
+        # two browsers submit it at the same time.
+        table.delete_item(
+            Key=invite_key,
+            ConditionExpression=Attr("PK").exists(),
+        )
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return None
+        raise
+
+    workspace_id = invite["workspace_id"]
+    now = datetime.now(UTC).isoformat()
+    table.put_item(
+        Item={
+            "PK": f"WORKSPACE#{workspace_id}",
+            "SK": f"MEMBER#{user['sub']}",
+            "workspace_id": workspace_id,
+            "user_id": user["sub"],
+            "email": user.get("email", ""),
+            "name": user.get("name", ""),
+            "role": "member",
+            "joined_at": now,
+        }
+    )
+    table.put_item(
+        Item={
+            "PK": f"USER#{user['sub']}",
+            "SK": f"WORKSPACE#{workspace_id}",
+            "workspace_id": workspace_id,
+            "role": "member",
+            "joined_at": now,
+        }
+    )
+    return table.get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": "META"}).get("Item")

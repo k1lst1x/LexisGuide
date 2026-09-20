@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -144,7 +144,9 @@ describe('DashboardV2', () => {
 
     fireEvent.change(input!, { target: { files: [upload] } })
 
-    expect(await screen.findByRole('status')).toHaveTextContent('review is ready')
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('review is ready')
+    })
     expect(await screen.findByText('Notice period is missing')).toBeInTheDocument()
     expect(screen.getAllByText('Either party may terminate this agreement.')).not.toHaveLength(0)
     expect(document.querySelector('#codeql-probe')).toBeNull()
@@ -180,5 +182,32 @@ describe('DashboardV2', () => {
     await user.click(screen.getByRole('button', { name: 'Exit Dashboard' }))
 
     expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('switches dashboard subpages using the persistent top navigation buttons', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Switch to Review' }))
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Switch to Messages' }))
+    expect(screen.getByPlaceholderText('Type a message...')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Switch to Documents' }))
+    expect(screen.getByText('YOUR WORKSPACE')).toBeInTheDocument()
+  })
+
+  it('toggles to AI search mode and executes a natural language query', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('tab', { name: /AI Search/i }))
+    expect(screen.getByPlaceholderText(/Ask AI about clauses/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Find termination without notice clauses/i }))
+    expect(await screen.findByText('AI Synthesis & Legal Advisory')).toBeInTheDocument()
+    expect(screen.getByText(/termination provisions require explicit/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open in Studio & Editor →' })).toBeInTheDocument()
   })
 })

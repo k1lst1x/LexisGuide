@@ -1,11 +1,22 @@
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.auth import current_user
 from app.legal_agent import configured_agent
-from app.storage import get_profile, list_records, put_profile, save_record
+from app.storage import (
+    consume_workspace_invite,
+    create_workspace,
+    create_workspace_invite,
+    get_profile,
+    get_workspace_membership,
+    list_records,
+    list_workspace_members,
+    list_workspaces,
+    put_profile,
+    save_record,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["v1"])
 
@@ -75,6 +86,34 @@ class UserRecord(BaseModel):
     type: str
     title: str
     payload: dict
+
+
+class WorkspaceCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+
+
+class Workspace(BaseModel):
+    id: str
+    name: str
+    owner_id: str
+    created_at: str
+    role: str = "member"
+
+
+class WorkspaceMember(BaseModel):
+    user_id: str
+    email: str = ""
+    name: str = ""
+    role: str
+    joined_at: str
+
+
+class WorkspaceInvite(BaseModel):
+    invite_code: str
+
+
+class WorkspaceJoinResponse(Workspace):
+    pass
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -160,3 +199,47 @@ async def create_record(
         title=record["title"],
         payload=record["payload"],
     )
+
+
+@router.get("/workspaces", response_model=list[Workspace])
+async def read_workspaces(user: dict[str, str] = Depends(current_user)) -> list[Workspace]:
+    return [Workspace(**workspace) for workspace in list_workspaces(user["sub"])]
+
+
+@router.post("/workspaces", response_model=Workspace, status_code=status.HTTP_201_CREATED)
+async def create_shared_workspace(
+    payload: WorkspaceCreate, user: dict[str, str] = Depends(current_user)
+) -> Workspace:
+    return Workspace(**create_workspace(user, payload.name.strip()))
+
+
+@router.get("/workspaces/{workspace_id}/members", response_model=list[WorkspaceMember])
+async def read_workspace_members(
+    workspace_id: str, user: dict[str, str] = Depends(current_user)
+) -> list[WorkspaceMember]:
+    if not get_workspace_membership(workspace_id, user["sub"]):
+        raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
+    return [WorkspaceMember(**member) for member in list_workspace_members(workspace_id)]
+
+
+@router.post("/workspaces/{workspace_id}/invites", response_model=WorkspaceInvite)
+async def create_shared_workspace_invite(
+    workspace_id: str, user: dict[str, str] = Depends(current_user)
+) -> WorkspaceInvite:
+    membership = get_workspace_membership(workspace_id, user["sub"])
+    if not membership or membership.get("role") not in {"owner", "admin"}:
+        raise HTTPException(
+            status_code=403, detail="Only workspace owners or admins can invite members."
+        )
+    invite = create_workspace_invite(workspace_id, user["sub"])
+    return WorkspaceInvite(invite_code=invite["token"])
+
+
+@router.post("/workspaces/join", response_model=WorkspaceJoinResponse)
+async def join_shared_workspace(
+    payload: WorkspaceInvite, user: dict[str, str] = Depends(current_user)
+) -> WorkspaceJoinResponse:
+    workspace = consume_workspace_invite(payload.invite_code, user)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Invite code is invalid or expired.")
+    return WorkspaceJoinResponse(**workspace, role="member")

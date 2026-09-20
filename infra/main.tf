@@ -142,6 +142,7 @@ data "aws_iam_policy_document" "api_lambda" {
   statement {
     sid = "AccessOwnUserRecords"
     actions = [
+      "dynamodb:DeleteItem",
       "dynamodb:GetItem",
       "dynamodb:PutItem",
       "dynamodb:Query",
