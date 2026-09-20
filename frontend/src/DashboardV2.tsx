@@ -542,7 +542,6 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [sectionTitleExpanded, setSectionTitleExpanded] = useState(true)
   const [documents, setDocuments] = useState<SampleDoc[]>(sampleDocs)
   const [selectedDoc, setSelectedDoc] = useState<SampleDoc>(sampleDocs[0])
-  const [documentModalOpen, setDocumentModalOpen] = useState(false)
   const [activeFinding, setActiveFinding] = useState<string | null>(sampleDocs[0].findings[0]?.id || null)
   const [isScanning, setIsScanning] = useState(false)
   const [uploadMessage, setUploadMessage] = useState('')
@@ -724,7 +723,6 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     }
     setDocuments((current) => [uploaded, ...current])
     setSelectedDoc(uploaded)
-    setDocumentModalOpen(true)
     setActiveFinding(uploaded.findings[0]?.id || null)
     setUploadMessage(`${title} is ready. Select a highlighted passage to see why it needs attention.`)
     setTutorialStep(3)
@@ -944,9 +942,6 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
           </div>
 
           <div className="d2-topbar-right">
-            <div className="d2-topbar-document-control" aria-label="Current document">
-              <DocumentPicker documents={documents} selectedDocument={selectedDoc} compactLabel="Documents" onSelect={(document) => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id || null) }} />
-            </div>
             <div className="d2-workspace-tools" ref={workspaceToolsRef}>
               <button className={`d2-icon-btn d2-clean-icon-btn ${workspaceSearchOpen ? 'd2-icon-btn-active' : ''}`} onClick={() => { setNotificationsOpen(false); setWorkspaceSearchOpen((open) => !open) }} aria-label="Search workspace" aria-expanded={workspaceSearchOpen} aria-controls="workspace-search-panel">{icons.search}</button>
               <button className={`d2-icon-btn d2-notif-btn ${notificationsOpen ? 'd2-icon-btn-active' : ''}`} onClick={() => { setWorkspaceSearchOpen(false); setNotificationsOpen((open) => !open); setHasUnreadNotifications(false) }} aria-label="Notifications" aria-expanded={notificationsOpen} aria-controls="workspace-notifications-panel">
@@ -1002,6 +997,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   <h1 className="d2-page-title">Dashboard</h1>
                   <p>Document health, progress, and the next action in one place.</p>
                 </div>
+                <DocumentPicker documents={documents} selectedDocument={selectedDoc} onSelect={(document) => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id || null) }} />
               </div>
 
               <div className="d2-overview-top-grid">
@@ -1119,109 +1115,84 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
           {/* ═════ DOCUMENTS ═════ */}
           {activeNav === 'documents' && (
             <div className="d2-page d2-documents-page">
+              <h1 className="d2-visually-hidden">Documents</h1>
               <input ref={uploadInputRef} type="file" accept="*/*" onChange={handleUpload} hidden />
-              <div className="d2-documents-hero">
-                <div>
-                  <span className="d2-eyebrow">DOCUMENT REVIEW</span>
-                  <h1>Documents</h1>
-                  <p>Understand a document before you agree. Add a PDF, Word, webpage, or text file—or paste its contents—then select a highlighted passage to see what it could mean for you.</p>
-                </div>
-                <div className="d2-document-hero-actions">
-                  <label className="d2-jurisdiction-field">Jurisdiction
-                    <input value={jurisdiction} onChange={(event) => setJurisdiction(event.target.value)} placeholder="State / country" aria-label="Legal jurisdiction" />
-                  </label>
-                  <button className="d2-paste-btn" onClick={() => triggerAiWorkflow(selectedDoc.title, 'document-audit')} title="Watch AI fairness & due process workflow execution">⚡ AI Workflow</button>
-                  <button className="d2-paste-btn" onClick={() => setPasteDialogOpen(true)} disabled={isScanning}>Paste text</button>
-                </div>
-              </div>
-
               {uploadMessage && <div className="d2-upload-status" role="status">{uploadMessage}</div>}
 
-              {isDemoMode && tutorialStripOpen && <section className="d2-demo-tutorial" aria-label="Document review tutorial">
-                <button className="d2-demo-strip-close" onClick={dismissDocumentTutorialTips} aria-label="Close tutorial tips" title="Close tutorial tips">×</button>
-                <div className="d2-demo-intro"><span className="d2-demo-badge">DEMO MODE</span><div><h2>Try it with a sample document</h2><p>Learn how LexisGuide works before adding a personal file. Nothing in these samples belongs to you.</p></div></div>
-                <div className="d2-demo-steps">
-                  <button className={`d2-demo-step ${tutorialStep === 1 ? 'd2-demo-step-active' : ''}`} onClick={() => { setSelectedDoc(sampleDocs[2]); setActiveFinding(sampleDocs[2].findings[0]?.id ?? null); setTutorialStep(1) }}><span>1</span><div><strong>Choose a sample</strong><small>Open a housing, benefit, or agreement example.</small></div></button>
-                  <button className={`d2-demo-step ${tutorialStep === 2 ? 'd2-demo-step-active' : ''}`} onClick={() => { setSelectedDoc(sampleDocs[0]); setActiveFinding('f-1'); setTutorialStep(2) }}><span>2</span><div><strong>Select a highlight</strong><small>See a plain-language explanation and next step.</small></div></button>
-                  <button className={`d2-demo-step ${tutorialStep === 3 ? 'd2-demo-step-active' : ''}`} onClick={() => { setTutorialStep(3); uploadInputRef.current?.click() }}><span>3</span><div><strong>Add your document</strong><small>Upload a file or paste its text for the same quick scan.</small></div></button>
-                </div>
-              </section>}
-
-              <section key={selectedDoc.id} className="d2-document-insights" aria-label="Document scan summary">
-                <div className="d2-insight-risk">
-                  <div>
-                    <span className="d2-eyebrow">SCAN SUMMARY</span>
-                    <h2>Potential risk</h2>
-                    <p>{potentialRiskCount ? `${potentialRiskCount} item${potentialRiskCount === 1 ? '' : 's'} should be reviewed before you agree.` : 'No common risk patterns were found in this scan.'}</p>
-                  </div>
-                  <div className="d2-risk-ring" role="img" aria-label={`${potentialRiskPercent}% of scan checks need review`}>
-                    <svg viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="d2-risk-gradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#fb7185"/><stop offset="100%" stopColor="#dc2626"/></linearGradient></defs><circle className="d2-ring-track" cx="50" cy="50" r="40"/><circle className="d2-ring-risk" cx="50" cy="50" r="40" pathLength="100" stroke="url(#d2-risk-gradient)" strokeDasharray={`${potentialRiskPercent} ${100 - potentialRiskPercent}`} /></svg>
-                    <div className="d2-risk-ring-center"><strong>{potentialRiskPercent}%</strong><span>to review</span></div>
-                  </div>
-                </div>
-
-                <div className="d2-insight-mix">
-                  <div className="d2-insight-heading"><div><span className="d2-eyebrow">FINDING MIX</span><h2>Good and bad signals</h2></div><span>{findingTotal} checks</span></div>
-                  <div className="d2-mix-bar" role="img" aria-label={`${criticalCount} high priority, ${warningCount} review, and ${passCount} checked findings`}>
-                    {criticalCount > 0 && <span className="d2-mix-critical" style={{ width: `${criticalPercent}%` }}><b>{criticalPercent}%</b></span>}
-                    {warningCount > 0 && <span className="d2-mix-warning" style={{ width: `${warningPercent}%` }}><b>{warningPercent}%</b></span>}
-                    {passCount > 0 && <span className="d2-mix-pass" style={{ width: `${checkedPercent}%` }}><b>{checkedPercent}%</b></span>}
-                  </div>
-                  <div className="d2-mix-legend"><span><i className="d2-legend-critical" /><em>High priority</em><b>{criticalCount}</b></span><span><i className="d2-legend-warning" /><em>Review</em><b>{warningCount}</b></span><span><i className="d2-legend-pass" /><em>Checked</em><b>{passCount}</b></span></div>
-                </div>
-
-                <div className="d2-insight-categories">
-                  <span className="d2-eyebrow">WHAT TO LOOK AT</span>
-                  <div>{selectedDoc.findings.filter((finding) => finding.severity !== 'pass').slice(0, 3).map((finding) => <button key={finding.id} onClick={() => { setActiveFinding(finding.id); setActiveNav('documents') }}><i className={`d2-sev-dot d2-sev-${finding.severity}`} /><span>{finding.category}</span><b>›</b></button>)}{potentialRiskCount === 0 && <p>All completed checks are shown as clear.</p>}</div>
-                </div>
-              </section>
-
-              {!documentModalOpen && <section className="d2-document-shelf" aria-label="Priority document queue">
-                <div className="d2-document-shelf-heading"><div><span className="d2-eyebrow">AI PRIORITY QUEUE</span><h2>Documents needing attention</h2><p>Sorted by nearest known deadline, then AI urgency score.</p></div><span>{priorityDocuments.length} files</span></div>
-                <div className="d2-document-shelf-list">
-                {priorityDocuments.map((document, index) => <button key={document.id} className="d2-document-shelf-card" onClick={() => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id || null); setDocumentModalOpen(true) }}>
-                  <span className="d2-shelf-rank">{String(index + 1).padStart(2, '0')}</span>
-                  <span className="d2-shelf-icon">{documentKind(document.type).icon}</span>
-                  <span className="d2-shelf-document-copy"><strong>{document.title}</strong><small>{document.type} Â· {document.date}</small><em>{document.summary || 'Open this document in the AI review workspace.'}</em></span>
-                  <span className="d2-shelf-deadline"><small>DEADLINE</small><strong>{formatDocumentDeadline(document.deadline)}</strong><em>{document.deadline ? `${document.deadlineConfidence || 'AI'} confidence` : 'AI found no exact date'}</em></span>
-                  <span className="d2-shelf-priority"><small>AI PRIORITY</small><strong>{documentPriority(document)}<span>/100</span></strong><em>{documentPriority(document) >= 75 ? 'Urgent' : documentPriority(document) >= 45 ? 'Review soon' : 'Routine'}</em></span>
-                  <b>Open â†’</b>
-                </button>)}
-                </div>
-              </section>}
-
-              <div className={`d2-document-workspace ${documentModalOpen ? 'd2-document-modal-open' : 'd2-document-workspace-closed'}`}>
-                {documentModalOpen && <button className="d2-document-modal-close" onClick={() => setDocumentModalOpen(false)} aria-label="Close document">Ã—</button>}
+              <div className="d2-document-workspace">
                 <aside className="d2-document-library" aria-label="Your documents">
-                  <div className="d2-library-heading"><div><span className="d2-eyebrow">{isDemoMode ? 'PRACTICE FILES' : 'YOUR FILES'}</span><h2>{isDemoMode ? 'Sample documents' : 'Your documents'}</h2></div><span>{documents.length}</span></div>
+                  <div className="d2-library-heading">
+                    <div>
+                      <span className="d2-eyebrow">{isDemoMode ? 'PRACTICE FILES' : 'YOUR FILES'}</span>
+                      <h2>{isDemoMode ? 'Sample documents' : 'Your documents'}</h2>
+                    </div>
+                    <span>{documents.length}</span>
+                  </div>
                   <div className="d2-library-list">
                     {documents.map((document) => {
                       const kind = documentKind(document.type)
                       const issueCount = document.findings.filter((finding) => finding.severity !== 'pass').length
-                      return <button key={document.id} className={`d2-library-item ${selectedDoc.id === document.id ? 'd2-library-item-active' : ''}`} onClick={() => { setSelectedDoc(document); setActiveFinding(document.findings.find((finding) => finding.severity !== 'pass')?.id ?? document.findings[0]?.id ?? null); setDocumentModalOpen(true) }}>
-                        <span className="d2-library-icon" aria-hidden="true">{kind.icon}</span>
-                        <span className="d2-library-copy"><strong>{document.title}</strong><small>{kind.label} · {document.date}</small></span>
-                        <span className={`d2-library-count ${issueCount ? 'd2-library-count-risk' : ''}`}>{issueCount ? `${issueCount} issue${issueCount === 1 ? '' : 's'}` : 'Checked'}</span>
-                      </button>
+                      return (
+                        <button
+                          key={document.id}
+                          className={`d2-library-item ${selectedDoc.id === document.id ? 'd2-library-item-active' : ''}`}
+                          onClick={() => {
+                            setSelectedDoc(document)
+                            setActiveFinding(document.findings.find((finding) => finding.severity !== 'pass')?.id ?? document.findings[0]?.id ?? null)
+                          }}
+                        >
+                          <span className="d2-library-icon" aria-hidden="true">{kind.icon}</span>
+                          <span className="d2-library-copy">
+                            <strong>{document.title}</strong>
+                            <small>{kind.label} · {document.date}</small>
+                          </span>
+                          <span className={`d2-library-count ${issueCount ? 'd2-library-count-risk' : ''}`}>
+                            {issueCount ? `${issueCount} issue${issueCount === 1 ? '' : 's'}` : 'Checked'}
+                          </span>
+                        </button>
+                      )
                     })}
                   </div>
-                  <div className="d2-library-actions"><button className="d2-library-add" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>+ Add another document</button><button className="d2-library-paste" onClick={() => setPasteDialogOpen(true)} disabled={isScanning}>Paste document text</button></div>
-                  <p className="d2-library-note">{isDemoMode ? 'These examples are here to help you practice. Add a PDF, Word, text file, or pasted content when you are ready.' : 'PDF, Word, webpage, rich-text, and readable text files can be opened here. Your document stays in this browser for the quick scan.'}</p>
+                  <div className="d2-library-actions">
+                    <button className="d2-library-add" onClick={() => uploadInputRef.current?.click()} disabled={isScanning}>+ Add document</button>
+                    <button className="d2-library-paste" onClick={() => setPasteDialogOpen(true)} disabled={isScanning}>Paste text</button>
+                  </div>
+                  <p className="d2-library-note">
+                    {isDemoMode
+                      ? 'These examples are here to help you practice. Add a PDF, Word, text file, or pasted content when you are ready.'
+                      : 'PDF, Word, webpage, rich-text, and readable text files can be opened here. Your document stays in this browser for the quick scan.'}
+                  </p>
                 </aside>
 
                 <section className="d2-document-reader-section">
                   <div className="d2-reader-toolbar">
-                    <div><span className="d2-doc-type-tag">{documentKind(selectedDoc.type).label}</span><h2>{selectedDoc.title}</h2><p>{selectedDoc.agency} · {selectedDoc.date}</p></div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div>
+                      <span className="d2-doc-type-tag">{documentKind(selectedDoc.type).label}</span>
+                      <h2>{selectedDoc.title}</h2>
+                      <p>{selectedDoc.agency} · {selectedDoc.date}</p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <label className="d2-jurisdiction-field" style={{ margin: 0 }}>
+                        <input
+                          value={jurisdiction}
+                          onChange={(event) => setJurisdiction(event.target.value)}
+                          placeholder="State / country"
+                          aria-label="Legal jurisdiction"
+                          style={{ width: '135px', padding: '6px 10px', fontSize: '11px', borderRadius: '6px' }}
+                        />
+                      </label>
                       <button
                         className="d2-paste-btn"
-                        style={{ padding: '6px 11px', fontSize: '11.5px', background: '#1e293b', color: '#93c5fd', borderColor: 'rgba(59,130,246,0.3)', cursor: 'pointer' }}
+                        style={{ padding: '6px 11px', fontSize: '11.5px', background: '#191919', color: '#f6f4ee', borderColor: 'rgba(0,0,0,0.12)', cursor: 'pointer' }}
                         onClick={() => triggerAiWorkflow(selectedDoc.title, 'document-audit')}
                         title="View real animated AI workflow execution"
                       >
                         ⚡ AI Workflow
                       </button>
-                      <div className="d2-scan-summary"><strong>{selectedDoc.findings.filter((finding) => finding.severity !== 'pass').length}</strong><span>items to review</span></div>
+                      <div className="d2-scan-summary">
+                        <strong>{selectedDoc.findings.filter((finding) => finding.severity !== 'pass').length}</strong>
+                        <span>items to review</span>
+                      </div>
                       <button className="d2-ai-edit-btn" onClick={() => runDocumentAction('review')} disabled={isScanning}>Summarize</button>
                       <button className="d2-ai-edit-btn" onClick={() => runDocumentAction('negotiate')} disabled={isScanning}>Negotiate</button>
                       <button className="d2-ai-edit-btn d2-ai-edit-btn-primary" onClick={() => runDocumentAction('rewrite')} disabled={isScanning}>Propose rewrite</button>
@@ -1236,18 +1207,58 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 </section>
 
                 <aside className="d2-document-explanation d2-document-explanation-prominent">
-                  {selectedFindingObj ? <>
-                    <span className={`d2-sev-badge d2-sev-badge-${selectedFindingObj.severity}`}>{selectedFindingObj.severity === 'critical' ? 'HIGH PRIORITY' : selectedFindingObj.severity === 'warning' ? 'REVIEW THIS' : 'CHECKED'}</span>
-                    <h2>{selectedFindingObj.title}</h2>
-                    {selectedDoc.summary && <p className="d2-ai-summary"><strong>AI summary:</strong> {selectedDoc.summary}</p>}
-                    <p className="d2-explanation-intro">This is a potential issue, not a finding of fraud.</p>
-                    <div className="d2-explanation-section"><span>Highlighted passage</span><blockquote>“{selectedFindingObj.evidence}”</blockquote></div>
-                    <div className="d2-explanation-section"><span>Why it matters to you</span><p>{selectedFindingObj.whyItMatters || selectedFindingObj.explanation}</p></div>
-                    {selectedFindingObj.negotiationPoint && <div className="d2-explanation-section"><span>Negotiation point</span><p>{selectedFindingObj.negotiationPoint}</p></div>}
-                    {selectedFindingObj.suggestedRewrite && <div className="d2-explanation-section"><span>Suggested rewrite</span><blockquote>{selectedFindingObj.suggestedRewrite}</blockquote><button className="d2-ai-edit-btn d2-ai-edit-btn-primary" onClick={applySuggestedRewrite}>Apply to working copy</button></div>}
-                    <div className="d2-next-step"><span>Recommended next step</span><p>{selectedFindingObj.rule}</p></div>
-                    {selectedDoc.sources?.length ? <div className="d2-explanation-section"><span>Authorities consulted</span>{selectedDoc.sources.slice(0, 3).map((source) => <p key={`${source.citation}-${source.title}`}><strong>{source.title}</strong><br />{source.citation}{source.url && <> · <a href={source.url} target="_blank" rel="noreferrer">Open source</a></>}</p>)}</div> : null}
-                  </> : <><h2>Select a highlight</h2><p>Choose a highlighted word or sentence in the document to see a clear explanation here.</p></>}
+                  {selectedFindingObj ? (
+                    <>
+                      <span className={`d2-sev-badge d2-sev-badge-${selectedFindingObj.severity}`}>
+                        {selectedFindingObj.severity === 'critical' ? 'HIGH PRIORITY' : selectedFindingObj.severity === 'warning' ? 'REVIEW THIS' : 'CHECKED'}
+                      </span>
+                      <h2>{selectedFindingObj.title}</h2>
+                      {selectedDoc.summary && <p className="d2-ai-summary"><strong>AI summary:</strong> {selectedDoc.summary}</p>}
+                      <p className="d2-explanation-intro">This is a potential issue, not a finding of fraud.</p>
+                      <div className="d2-explanation-section">
+                        <span>Highlighted passage</span>
+                        <blockquote>“{selectedFindingObj.evidence}”</blockquote>
+                      </div>
+                      <div className="d2-explanation-section">
+                        <span>Why it matters to you</span>
+                        <p>{selectedFindingObj.whyItMatters || selectedFindingObj.explanation}</p>
+                      </div>
+                      {selectedFindingObj.negotiationPoint && (
+                        <div className="d2-explanation-section">
+                          <span>Negotiation point</span>
+                          <p>{selectedFindingObj.negotiationPoint}</p>
+                        </div>
+                      )}
+                      {selectedFindingObj.suggestedRewrite && (
+                        <div className="d2-explanation-section">
+                          <span>Suggested rewrite</span>
+                          <blockquote>{selectedFindingObj.suggestedRewrite}</blockquote>
+                          <button className="d2-ai-edit-btn d2-ai-edit-btn-primary" onClick={applySuggestedRewrite}>Apply to working copy</button>
+                        </div>
+                      )}
+                      <div className="d2-next-step">
+                        <span>Recommended next step</span>
+                        <p>{selectedFindingObj.rule}</p>
+                      </div>
+                      {selectedDoc.sources?.length ? (
+                        <div className="d2-explanation-section">
+                          <span>Authorities consulted</span>
+                          {selectedDoc.sources.slice(0, 3).map((source) => (
+                            <p key={`${source.citation}-${source.title}`}>
+                              <strong>{source.title}</strong><br />
+                              {source.citation}
+                              {source.url && <> · <a href={source.url} target="_blank" rel="noreferrer">Open source</a></>}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <h2>Select a highlight</h2>
+                      <p>Choose a highlighted word or sentence in the document to see a clear explanation here.</p>
+                    </>
+                  )}
                 </aside>
               </div>
 
@@ -1263,6 +1274,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   <p className="d2-demo-modal-footnote">Practice documents only. Automated flags are prompts to review—not proof of fraud or legal advice.</p>
                 </section>
               </div>, document.body)}
+
               {pasteDialogOpen && createPortal(<div className="d2-import-overlay" role="dialog" aria-modal="true" aria-labelledby="paste-document-title">
                 <form className="d2-import-modal" onSubmit={handlePastedDocument}>
                   <button type="button" className="d2-demo-close" onClick={() => setPasteDialogOpen(false)} aria-label="Close paste document">×</button>
