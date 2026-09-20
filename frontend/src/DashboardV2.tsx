@@ -39,6 +39,8 @@ type SampleDoc = {
 }
 
 type NavItem = 'overview' | 'linter' | 'documents' | 'chain' | 'team' | 'settings'
+type WorkspaceSummary = { id: string; name: string; owner_id: string; created_at: string; role: string }
+type WorkspaceMember = { user_id: string; email: string; name: string; role: string; joined_at: string }
 
 const LAST_SECTION_KEY = 'lexisguide:last-section'
 const DOCUMENT_TUTORIAL_SEEN_KEY = 'lexisguide:document-tutorial-seen'
@@ -545,6 +547,12 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [workspaceSearchOpen, setWorkspaceSearchOpen] = useState(false)
   const [workspaceSearch, setWorkspaceSearch] = useState('')
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceSummary | null>(null)
+  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([])
+  const [workspaceName, setWorkspaceName] = useState('')
+  const [workspaceInviteCode, setWorkspaceInviteCode] = useState('')
+  const [workspaceNotice, setWorkspaceNotice] = useState('')
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(true)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const workspaceToolsRef = useRef<HTMLDivElement>(null)
@@ -569,6 +577,70 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     setSectionTitleExpanded(true)
     if (sectionTitleTimerRef.current) window.clearTimeout(sectionTitleTimerRef.current)
     sectionTitleTimerRef.current = window.setTimeout(() => setSectionTitleExpanded(false), 1200)
+  }
+
+  const workspaceRequest = async (path: string, init: RequestInit = {}) => {
+    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+    let token = await cognitoGetIdToken()
+    if (!token) throw new Error('Sign in to manage shared workspaces.')
+    const request = () => fetch(`${apiBase}/api/v1${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...(init.headers || {}), Authorization: `Bearer ${token}` },
+    })
+    let response = await request()
+    if (response.status === 401) {
+      token = await cognitoGetIdToken(true)
+      if (!token) throw new Error('Your AWS session expired. Please sign in again.')
+      response = await request()
+    }
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || 'Workspace request failed.')
+    return response.json()
+  }
+
+  const refreshWorkspaces = async () => {
+    try {
+      const next = await workspaceRequest('/workspaces') as WorkspaceSummary[]
+      setWorkspaces(next)
+      const selected = activeWorkspace && next.find((workspace) => workspace.id === activeWorkspace.id)
+      const workspace = selected || next[0] || null
+      setActiveWorkspace(workspace)
+      if (workspace) setWorkspaceMembers(await workspaceRequest(`/workspaces/${workspace.id}/members`) as WorkspaceMember[])
+    } catch (error) {
+      setWorkspaceNotice(error instanceof Error ? error.message : 'Shared workspace is unavailable.')
+    }
+  }
+
+  useEffect(() => {
+    if (activeNav === 'team') void refreshWorkspaces()
+  }, [activeNav])
+
+  const createSharedWorkspace = async () => {
+    if (!workspaceName.trim()) return
+    try {
+      const workspace = await workspaceRequest('/workspaces', { method: 'POST', body: JSON.stringify({ name: workspaceName.trim() }) }) as WorkspaceSummary
+      setWorkspaceName('')
+      setWorkspaceNotice(`Workspace “${workspace.name}” created.`)
+      await refreshWorkspaces()
+    } catch (error) { setWorkspaceNotice(error instanceof Error ? error.message : 'Could not create workspace.') }
+  }
+
+  const inviteToWorkspace = async () => {
+    if (!activeWorkspace) return
+    try {
+      const invite = await workspaceRequest(`/workspaces/${activeWorkspace.id}/invites`, { method: 'POST' }) as { invite_code: string }
+      setWorkspaceInviteCode(invite.invite_code)
+      setWorkspaceNotice('Invite code created. Share it with a signed-in teammate.')
+    } catch (error) { setWorkspaceNotice(error instanceof Error ? error.message : 'Could not create invite.') }
+  }
+
+  const joinSharedWorkspace = async () => {
+    if (!workspaceInviteCode.trim()) return
+    try {
+      const workspace = await workspaceRequest('/workspaces/join', { method: 'POST', body: JSON.stringify({ invite_code: workspaceInviteCode.trim() }) }) as WorkspaceSummary
+      setWorkspaceInviteCode('')
+      setWorkspaceNotice(`Joined “${workspace.name}”.`)
+      await refreshWorkspaces()
+    } catch (error) { setWorkspaceNotice(error instanceof Error ? error.message : 'Could not join workspace.') }
   }
 
   useEffect(() => {
@@ -1602,6 +1674,22 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 <div className="d2-section-header-copy"><span className="d2-eyebrow">TEAM</span><h1 className="d2-page-title">Messages</h1><p>Keep document decisions, people, and next steps in one place.</p></div>
                 <div className="d2-message-page-actions"><button className="d2-message-search-btn" onClick={() => setMessageSearchOpen(true)}>⌕ <span>Search</span><kbd>⌘ K</kbd></button><button className="d2-action-btn d2-btn-sm" onClick={() => setMessageNotice('Invite link ready to share with your review team.')}>+ Invite</button></div>
               </div>
+
+              <section className="d2-shared-workspace-card" aria-label="Shared workspace access">
+                <div className="d2-shared-workspace-heading"><div><span className="d2-eyebrow">SHARED WORKSPACE</span><h2>{activeWorkspace?.name || 'Create or join a workspace'}</h2><p>Invite teammates with AWS Cognito accounts and collaborate on the same documents and review notes.</p></div><span className="d2-shared-workspace-live"><i /> Authenticated collaboration</span></div>
+                <div className="d2-shared-workspace-controls">
+                  <select aria-label="Choose workspace" value={activeWorkspace?.id || ''} onChange={(event) => { const workspace = workspaces.find((item) => item.id === event.target.value) || null; setActiveWorkspace(workspace) }}>
+                    <option value="">No workspace selected</option>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} · {workspace.role}</option>)}
+                  </select>
+                  <input aria-label="New workspace name" value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder="New workspace name" />
+                  <button className="d2-action-btn d2-btn-sm" onClick={() => void createSharedWorkspace()}>Create</button>
+                  <button className="d2-action-btn d2-btn-sm" disabled={!activeWorkspace} onClick={() => void inviteToWorkspace()}>Create invite</button>
+                  <input aria-label="Workspace invite code" value={workspaceInviteCode} onChange={(event) => setWorkspaceInviteCode(event.target.value)} placeholder="Paste invite code" />
+                  <button className="d2-action-btn d2-btn-sm" onClick={() => void joinSharedWorkspace()}>Join</button>
+                </div>
+                {activeWorkspace && <div className="d2-shared-workspace-members"><span>{workspaceMembers.length} member{workspaceMembers.length === 1 ? '' : 's'} connected</span>{workspaceMembers.slice(0, 5).map((member) => <span key={member.user_id} className="d2-shared-member-chip">{(member.email || member.name || member.user_id)[0].toUpperCase()} {member.email || member.name || 'Member'} · {member.role}</span>)}</div>}
+                {workspaceNotice && <p className="d2-shared-workspace-notice" role="status">{workspaceNotice}</p>}
+              </section>
 
               {messageNotice && <div className="d2-message-notice" role="status"><span>✓</span>{messageNotice}<button aria-label="Dismiss message" onClick={() => setMessageNotice('')}>×</button></div>}
 
