@@ -359,73 +359,46 @@ async function extractDocumentText(file: File): Promise<ExtractedDocument> {
   return { text, type: extension ? `${extension.toUpperCase()} document` : 'Uploaded document' }
 }
 
-/* ───────── Animated Score Gauge ───────── */
+/* ───────── Document score bar ───────── */
 function ScoreGauge({ score }: { score: number }) {
   const [animated, setAnimated] = useState(0)
-  const color = score < 65 ? '#ef4444' : score < 80 ? '#f59e0b' : '#22c55e'
-  const axes = Array.from({ length: 6 }, (_, index) => (Math.PI * 2 * index) / 6 - Math.PI / 2)
-  const pointFor = (angle: number, ratio: number) => `${65 + Math.cos(angle) * 49 * ratio},${65 + Math.sin(angle) * 49 * ratio}`
-  const scoreShape = axes.map((angle, index) => pointFor(angle, Math.max(.22, (animated / 100) * [.95, .81, 1, .73, .9, .84][index]))).join(' ')
+  const tone = score < 65 ? 'risk' : score < 80 ? 'review' : 'clear'
 
   useEffect(() => {
-    const timer = setTimeout(() => setAnimated(score), 100)
+    const timer = window.setTimeout(() => setAnimated(score), 80)
     return () => clearTimeout(timer)
   }, [score])
 
   return (
-    <div className={`d2-gauge-container d2-gauge-live ${score < 65 ? 'd2-gauge-risk' : score < 80 ? 'd2-gauge-review' : 'd2-gauge-clear'}`}>
-      <span className="d2-gauge-orbit" aria-hidden="true" />
-      <svg width="130" height="130" viewBox="0 0 130 130">
-        <defs><linearGradient id="d2-radar-fill" x1="0" x2="1" y1="0" y2="1"><stop stopColor={color} stopOpacity=".34" /><stop offset="1" stopColor={color} stopOpacity=".06" /></linearGradient></defs>
-        {[.33, .66, 1].map((ratio) => <polygon key={ratio} className="d2-radar-grid" points={axes.map((angle) => pointFor(angle, ratio)).join(' ')} />)}
-        {axes.map((angle) => <line key={angle} className="d2-radar-axis" x1="65" y1="65" x2={65 + Math.cos(angle) * 49} y2={65 + Math.sin(angle) * 49} />)}
-        <polygon className="d2-radar-shape" points={scoreShape} fill="url(#d2-radar-fill)" stroke={color} />
-        {axes.map((angle, index) => { const ratio = Math.max(.22, (animated / 100) * [.95, .81, 1, .73, .9, .84][index]); return <circle key={`${angle}-${ratio}`} className="d2-radar-node" cx={65 + Math.cos(angle) * 49 * ratio} cy={65 + Math.sin(angle) * 49 * ratio} fill={color} /> })}
-      </svg>
-      <div className="d2-gauge-label">
-        <span className="d2-gauge-num" style={{ color }}>{Math.round(animated)}</span>
-        <span className="d2-gauge-max">/100</span>
+    <div className={`d2-score-bar d2-score-bar-${tone}`} role="img" aria-label={`Document score ${score} out of 100`}>
+      <div className="d2-score-bar-value">
+        <strong>{Math.round(animated)}</strong>
+        <span>/100</span>
       </div>
+      <div className="d2-score-bar-track"><i style={{ width: `${animated}%` }} /></div>
+      <div className="d2-score-bar-scale"><span>0</span><span>50</span><span>100</span></div>
     </div>
   )
 }
 
-function DocumentScoreSignal({ documents, selectedDocument, onSelect }: { documents: SampleDoc[]; selectedDocument: SampleDoc; onSelect: (document: SampleDoc) => void }) {
-  const displayedDocuments = documents.slice(0, 5)
-  const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const width = 620
-  const height = 190
-  const padding = { top: 18, right: 24, bottom: 30, left: 28 }
-  const plotWidth = width - padding.left - padding.right
-  const plotHeight = height - padding.top - padding.bottom
-  const pointFor = (document: SampleDoc, index: number) => ({
-    x: padding.left + (displayedDocuments.length === 1 ? plotWidth / 2 : index * (plotWidth / (displayedDocuments.length - 1))),
-    y: padding.top + (1 - document.score / 100) * plotHeight,
-  })
-  const points = displayedDocuments.map(pointFor)
-  const curveSegments = points.slice(1).map((point, index) => {
-    const previous = points[index]
-    const controlDistance = (point.x - previous.x) * .42
-    return `C ${previous.x + controlDistance} ${previous.y}, ${point.x - controlDistance} ${point.y}, ${point.x} ${point.y}`
-  }).join(' ')
-  const signal = points.length ? `M ${points[0].x} ${points[0].y} ${curveSegments}` : ''
-  const averageScore = Math.round(displayedDocuments.reduce((total, document) => total + document.score, 0) / Math.max(displayedDocuments.length, 1))
-  const averageY = padding.top + (1 - averageScore / 100) * plotHeight
-  const activeIndex = Math.max(displayedDocuments.findIndex((document) => document.id === (hoveredId ?? selectedDocument.id)), 0)
-  const activeDocument = displayedDocuments[activeIndex]
-  const activePoint = points[activeIndex]
+function DocumentLibraryPanel({ documents, selectedDocument, onSelect, sort }: { documents: SampleDoc[]; selectedDocument: SampleDoc; onSelect: (document: SampleDoc) => void; sort: 'priority' | 'score-low' | 'score-high' | 'name' }) {
+  const sortedDocuments = [...documents].sort((left, right) => {
+    if (sort === 'score-low') return left.score - right.score || left.title.localeCompare(right.title)
+    if (sort === 'score-high') return right.score - left.score || left.title.localeCompare(right.title)
+    if (sort === 'name') return documentDisplayName(left).localeCompare(documentDisplayName(right))
 
-  return <div className="d2-score-signal" role="img" aria-label="Interactive document score signal" onMouseLeave={() => setHoveredId(null)}>
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-      <defs><linearGradient id="d2-score-signal-fill" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#7c73ed" stopOpacity=".22" /><stop offset="1" stopColor="#7c73ed" stopOpacity="0" /></linearGradient><linearGradient id="d2-score-signal-line" x1="0" x2="1"><stop stopColor="#a5b4fc" /><stop offset="1" stopColor="#4f46e5" /></linearGradient></defs>
-      {[0, 25, 50, 75, 100].map((value) => { const y = padding.top + (1 - value / 100) * plotHeight; return <g key={value}><line className="d2-score-grid-line" x1={padding.left} x2={width - padding.right} y1={y} y2={y} /><text className="d2-score-grid-label" x="0" y={y + 3}>{value}</text></g> })}
-      <line className="d2-score-average-line" x1={padding.left} x2={width - padding.right} y1={averageY} y2={averageY} /><text className="d2-score-average-label" x={width - padding.right} y={averageY - 4}>AVG {averageScore}</text>
-      <path className="d2-score-signal-area" d={`${signal} L ${points.at(-1)?.x ?? padding.left} ${height - padding.bottom} L ${points[0]?.x ?? padding.left} ${height - padding.bottom} Z`} />
-      <path className="d2-score-signal-line" d={signal} />
-      {displayedDocuments.map((document, index) => { const point = points[index]; const active = document.id === (hoveredId ?? selectedDocument.id); return <g key={document.id} className={`d2-score-point ${active ? 'd2-score-point-active' : ''}`} role="button" tabIndex={0} aria-label={`${document.title}: ${document.score} out of 100`} onMouseEnter={() => setHoveredId(document.id)} onFocus={() => setHoveredId(document.id)} onBlur={() => setHoveredId(null)} onClick={() => onSelect(document)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(document) } }}><circle cx={point.x} cy={point.y} r={active ? 5.5 : 3.5} /><text x={point.x} y={height - 8}>{document.title.replace('Notice of ', '').split(' ').slice(0, 2).join(' ')}</text></g> })}
-      {activeDocument && <g className="d2-score-signal-readout"><rect x={Math.min(Math.max(activePoint.x - 32, padding.left), width - 90)} y={Math.max(activePoint.y - 31, 2)} width="64" height="20" rx="3" /><text x={Math.min(Math.max(activePoint.x, padding.left + 32), width - 58)} y={Math.max(activePoint.y - 18, 15)}>{activeDocument.score} / 100</text></g>}
-    </svg>
-    <div className="d2-score-signal-meta"><span><i /> live score model</span><code>revision-aware · evidence weighted</code><span>{activeDocument?.title}</span></div>
+    const urgency = (document: SampleDoc) => document.findings.reduce((total, finding) => total + (finding.severity === 'critical' ? 2 : finding.severity === 'warning' ? 1 : 0), 0)
+    return urgency(right) - urgency(left) || left.score - right.score || left.title.localeCompare(right.title)
+  })
+
+  return <div className={`d2-linked-document-list d2-linked-document-library d2-file-sort-${sort}`} role="listbox" aria-label="Documents in workspace">
+    <div className="d2-linked-list-heading"><span>FILES</span><small>{documents.length} available</small></div>
+    {sortedDocuments.map((document, index) => {
+      const isActive = document.id === selectedDocument.id
+      return <button key={`${document.id}-${sort}`} type="button" role="option" aria-selected={isActive} className={`d2-linked-document-option ${isActive ? 'd2-linked-document-active' : ''}`} style={{ '--file-order': index } as React.CSSProperties} onClick={() => onSelect(document)}>
+        <span className="d2-linked-document-icon" aria-hidden="true">{documentKind(document.type).icon}</span><span><strong>{documentDisplayName(document)}</strong><small>{documentKind(document.type).label}</small></span>
+      </button>
+    })}
   </div>
 }
 
@@ -570,6 +543,9 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [workspaceInviteCode, setWorkspaceInviteCode] = useState('')
   const [workspaceNotice, setWorkspaceNotice] = useState('')
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(true)
+  const [impactFilter, setImpactFilter] = useState<'critical' | 'warning' | 'pass' | null>(null)
+  const [hoveredImpact, setHoveredImpact] = useState<'critical' | 'warning' | 'pass' | null>(null)
+  const [documentSort, setDocumentSort] = useState<'priority' | 'score-low' | 'score-high' | 'name'>('priority')
   const userMenuRef = useRef<HTMLDivElement>(null)
   const workspaceToolsRef = useRef<HTMLDivElement>(null)
   const searchContainerRef = useRef<HTMLDivElement>(null)
@@ -1021,9 +997,18 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const checkedPercent = Math.round((passCount / findingTotal) * 100)
   const criticalPercent = (criticalCount / findingTotal) * 100
   const warningPercent = (warningCount / findingTotal) * 100
+  // Hover is always a temporary preview. A click remains the fallback selection
+  // once the pointer leaves, so the summary and table never disagree.
+  const activeImpact = hoveredImpact ?? impactFilter
+  const visibleImpactFindings = activeImpact
+    ? selectedDoc.findings.filter((finding) => finding.severity === activeImpact)
+    : selectedDoc.findings
+  const impactGroups: Array<{ severity: 'critical' | 'warning' | 'pass'; label: string; count: number; percent: number }> = [
+    { severity: 'critical', label: 'High impact', count: criticalCount, percent: criticalPercent },
+    { severity: 'warning', label: 'Needs review', count: warningCount, percent: warningPercent },
+    { severity: 'pass', label: 'Verified', count: passCount, percent: checkedPercent },
+  ]
   const isDemoMode = !documents.some((document) => document.id.startsWith('upload-'))
-  const workspaceAverage = Math.round(documents.reduce((total, document) => total + document.score, 0) / Math.max(documents.length, 1))
-  const highestScore = Math.max(...documents.map((document) => document.score))
   const workspaceSearchQuery = workspaceSearch.trim().toLowerCase()
   const matchingDocuments = (workspaceSearchQuery
     ? documents.filter((document) => [document.title, document.type, document.status, document.agency].some((value) => value.toLowerCase().includes(workspaceSearchQuery)))
@@ -1544,44 +1529,83 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 <section className="d2-overview-panel d2-health-panel">
                   <div className="d2-panel-heading"><div><span className="d2-eyebrow">DOCUMENT HEALTH</span><h2>{selectedDoc.title}</h2></div><button className="d2-panel-link" onClick={() => setActiveNav('documents')}>Open document →</button></div>
                   <div className="d2-health-content">
-                    <div className="d2-health-score"><ScoreGauge score={selectedDoc.score} /><div><strong>{selectedDoc.status}</strong><p><span className="d2-ai-sparkle" aria-hidden="true">✦</span> AI review score</p></div></div>
+                    <div className="d2-health-score"><ScoreGauge score={selectedDoc.score} /><div><strong>{selectedDoc.status}</strong><p>Document review score</p></div></div>
                     <div className="d2-health-stats">
                       <div><span>Critical</span><strong className="d2-red">{criticalCount}</strong><small>needs attention</small></div>
                       <div><span>Warnings</span><strong className="d2-amber">{warningCount}</strong><small>review suggested</small></div>
                       <div><span>Checked</span><strong className="d2-green">{passCount}</strong><small>clear items</small></div>
                     </div>
                   </div>
+                  <div className="d2-health-breakdown" role="img" aria-label={`${selectedDoc.title} rating breakdown: rating ${selectedDoc.score} percent, ${checkedPercent} percent checks completed, ${Math.round((potentialRiskCount / findingTotal) * 100)} percent need review`}>
+                    <span className="d2-health-breakdown-title">Rating breakdown</span>
+                    <div className="d2-health-breakdown-metrics">
+                      <div><span>Document rating</span><strong>{selectedDoc.score}%</strong><i><b className="d2-health-breakdown-score" style={{ width: `${selectedDoc.score}%` }} /></i></div>
+                      <div><span>Checks completed</span><strong>{checkedPercent}%</strong><i><b className="d2-health-breakdown-clear" style={{ width: `${checkedPercent}%` }} /></i></div>
+                      <div><span>Needs review</span><strong>{Math.round((potentialRiskCount / findingTotal) * 100)}%</strong><i><b className="d2-health-breakdown-review" style={{ width: `${Math.round((potentialRiskCount / findingTotal) * 100)}%` }} /></i></div>
+                    </div>
+                  </div>
                   <div className="d2-health-progress"><span>Review coverage</span><div><i style={{ width: `${Math.max(selectedDoc.score, 12)}%` }} /></div><strong>{selectedDoc.score}%</strong></div>
                   <div className="d2-ai-telemetry"><span><i />AI analysis active</span><code>evidence map · {findingTotal} checks · confidence 0.94</code><span>updated now</span></div>
                 </section>
 
-                <section className="d2-overview-panel d2-rating-chart-panel">
-                  <div className="d2-panel-heading"><div><span className="d2-eyebrow"><span className="d2-ai-sparkle" aria-hidden="true">✦</span> DOCUMENT RATINGS</span><h2>Document score signal</h2></div><span className="d2-rating-average">Avg. {workspaceAverage}</span></div>
-                  <DocumentScoreSignal documents={documents} selectedDocument={selectedDoc} onSelect={(document) => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id ?? null) }} />
-                  <div className="d2-rating-chart-footer"><span>100-point scale · latest document revision</span><strong>Best: {highestScore}/100</strong></div>
+                <section className="d2-overview-panel d2-file-library-panel">
+                  <div className="d2-panel-heading"><div><span className="d2-eyebrow">DOCUMENTS</span><h2>Your files</h2></div><label className="d2-file-sort"><span>Sort files</span><select aria-label="Sort files" value={documentSort} onChange={(event) => setDocumentSort(event.target.value as typeof documentSort)}><option value="priority">Review priority</option><option value="score-low">Lowest rating</option><option value="score-high">Highest rating</option><option value="name">Name</option></select></label></div>
+                  <DocumentLibraryPanel documents={documents} selectedDocument={selectedDoc} sort={documentSort} onSelect={(document) => { setSelectedDoc(document); setActiveFinding(document.findings[0]?.id ?? null) }} />
                 </section>
               </div>
 
               <div className="d2-overview-bottom-grid">
-                <section className="d2-overview-panel d2-findings-panel">
-                  <div className="d2-panel-heading"><div><span className="d2-eyebrow"><span className="d2-ai-sparkle" aria-hidden="true">✦</span> ITEMS TO REVIEW</span><h2>Finding activity</h2></div><button className="d2-panel-link" onClick={() => setActiveNav('linter')}>View all →</button></div>
-                  <div className="d2-findings-table">
-                    <div className="d2-findings-table-head"><span>Finding</span><span>Category</span><span>Status</span></div>
-                    {selectedDoc.findings.slice(0, 4).map((finding) => <button key={finding.id} className="d2-finding-table-row" onClick={() => { setActiveFinding(finding.id); setActiveNav('linter') }}><span><i className={`d2-sev-dot d2-sev-${finding.severity}`} />{finding.title}</span><span>{finding.category}</span><span className={`d2-table-status d2-table-status-${finding.severity}`}>{finding.severity === 'pass' ? 'Checked' : finding.severity === 'critical' ? 'Priority' : 'Review'}</span></button>)}
+                <section key={`score-impact-${selectedDoc.id}`} className="d2-overview-panel d2-score-impact-panel">
+                  <div className="d2-panel-heading">
+                    <div><span className="d2-eyebrow">SCORE IMPACT</span><h2>How findings affect your score</h2></div>
+                    <div className="d2-impact-score"><strong>{selectedDoc.score}</strong><span>/100</span></div>
                   </div>
-                  <div className="d2-panel-log" aria-label="Analysis activity"><span>ANALYSIS_LOG</span><code>matched {selectedDoc.findings.length} signal{selectedDoc.findings.length === 1 ? '' : 's'} · routing review context</code><i>LIVE</i></div>
-                </section>
-
-                <section key={`rating-factors-${selectedDoc.id}`} className="d2-overview-panel d2-rating-factors-panel">
-                  <div className="d2-panel-heading"><div><span className="d2-eyebrow"><span className="d2-ai-sparkle" aria-hidden="true">✦</span> RATING FACTORS</span><h2>What affected this score</h2></div><strong className="d2-rating-large">{selectedDoc.score}</strong></div>
-                  <p className="d2-rating-factors-copy">The score reflects the findings in <b>{selectedDoc.title}</b>.</p>
-                  <div className="d2-rating-factor-list">
-                    <div><span><i className="d2-legend-critical" />High-priority concerns <b>{criticalCount}</b></span><em><i className="d2-factor-critical" style={{ width: `${criticalPercent}%` }} /></em><small>{criticalCount ? `${criticalCount} urgent signal${criticalCount === 1 ? '' : 's'} linked to document evidence` : 'No urgent patterns found in this scan'}</small></div>
-                    <div><span><i className="d2-legend-warning" />Items to review <b>{warningCount}</b></span><em><i className="d2-factor-warning" style={{ width: `${warningPercent}%` }} /></em><small>{warningCount ? `${warningCount} phrase${warningCount === 1 ? '' : 's'} queued for your review` : 'No additional phrases waiting for review'}</small></div>
-                    <div><span><i className="d2-legend-pass" />Checks completed <b>{passCount}</b></span><em><i className="d2-factor-pass" style={{ width: `${checkedPercent}%` }} /></em><small>{passCount ? `${passCount} check${passCount === 1 ? '' : 's'} cleared against current rules` : 'Awaiting a completed rule check'}</small></div>
+                  <p className="d2-score-impact-copy">Each result below is connected to <b>{selectedDoc.title}</b> and shows its current effect on your review.</p>
+                  <div className="d2-impact-summary" aria-label="Score impact summary">
+                    {impactGroups.map((group) => {
+                      const relatedIssues = selectedDoc.findings.filter((finding) => finding.severity === group.severity)
+                      const isActive = activeImpact === group.severity
+                      return <div
+                        key={group.severity}
+                        className={`d2-impact-summary-${group.severity} ${isActive ? 'd2-impact-summary-active' : ''}`}
+                        onMouseEnter={() => setHoveredImpact(group.severity)}
+                        onMouseLeave={() => setHoveredImpact(null)}
+                      >
+                        <button
+                          type="button"
+                          className="d2-impact-summary-trigger"
+                          aria-pressed={impactFilter === group.severity}
+                          aria-label={`Show ${group.label.toLowerCase()} files: ${group.count} finding${group.count === 1 ? '' : 's'} in the current document`}
+                          onFocus={() => setHoveredImpact(group.severity)}
+                          onClick={() => setImpactFilter((current) => current === group.severity ? null : group.severity)}
+                        >
+                          <span>{group.label}</span><strong>{group.count}</strong><i><b style={{ width: `${group.percent}%` }} /></i>
+                        </button>
+                        {hoveredImpact === group.severity && (
+                          <div className="d2-impact-files-popover" role="status">
+                            <strong>Related {group.label.toLowerCase()} issues</strong>
+                            <small className="d2-impact-preview-hint">Hover to preview · click to keep this view</small>
+                            {relatedIssues.length ? relatedIssues.map((finding) => <button key={finding.id} type="button" onClick={() => { setActiveFinding(finding.id); setImpactFilter(group.severity); setActiveNav('linter') }}>
+                              <span><i className={`d2-sev-dot d2-sev-${finding.severity}`} /></span><b>{finding.title}</b><small>{finding.category}</small>
+                            </button>) : <small>No issues match this category.</small>}
+                          </div>
+                        )}
+                      </div>
+                    })}
                   </div>
-                  <div className="d2-factor-log"><code>rules evaluated: {findingTotal.toString().padStart(2, '0')} · evidence coverage: {selectedDoc.score}%</code><span>MODEL v1.0</span></div>
-                  <button className="d2-balance-action" onClick={() => setActiveNav('documents')}>Read the highlighted passages</button>
+                  <div className="d2-impact-table">
+                    <div className="d2-impact-table-head"><span>{activeImpact ? `${impactGroups.find((group) => group.severity === activeImpact)?.label} findings` : 'Finding'}</span><span>Category</span><span>Score impact</span><span>Status</span></div>
+                    {visibleImpactFindings.slice(0, 4).map((finding, index) => {
+                      const impact = finding.severity === 'critical' ? 'High impact' : finding.severity === 'warning' ? 'Review impact' : 'Verified'
+                      return <button key={`${finding.id}-${activeImpact ?? 'all'}`} className="d2-impact-row" style={{ '--impact-row-index': index } as React.CSSProperties} onClick={() => { setActiveFinding(finding.id); setActiveNav('linter') }}>
+                        <span><i className={`d2-sev-dot d2-sev-${finding.severity}`} />{finding.title}</span>
+                        <span>{finding.category}</span>
+                        <span className={`d2-impact-effect d2-impact-effect-${finding.severity}`}>{impact}</span>
+                        <span className={`d2-table-status d2-table-status-${finding.severity}`}>{finding.severity === 'pass' ? 'Checked' : finding.severity === 'critical' ? 'Priority' : 'Review'}</span>
+                      </button>
+                    })}
+                  </div>
+                  <div className="d2-panel-log" aria-label="Analysis activity"><span>ANALYSIS LOG</span><code>{activeImpact ? `${visibleImpactFindings.length} ${impactGroups.find((group) => group.severity === activeImpact)?.label.toLowerCase()} finding${visibleImpactFindings.length === 1 ? '' : 's'} shown` : `${findingTotal} checks connected to the current rating`}</code><button className="d2-impact-open-review" onClick={() => setActiveNav('linter')}>Open review →</button></div>
                 </section>
               </div>
             </div>
@@ -1592,7 +1616,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
             <div className="d2-page">
               <div className="d2-review-toolbar">
                 <h1 className="d2-sr-only">Review</h1>
-                <div className="d2-header-meta">
+                <div className="d2-review-summary">
                   <span className="d2-finding-count">{selectedDoc.findings.length} findings</span>
                   {selectedDoc.score < 75 && (
                     <button className="d2-action-btn d2-action-primary d2-btn-sm" onClick={handleRemediate} disabled={remediating}>

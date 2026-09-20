@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -13,6 +13,16 @@ describe('DashboardV2', () => {
 
     expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
     expect(screen.getAllByText('Appeal filing deadline is vague')).toHaveLength(2)
+  })
+
+  it('shows the separated finding count and remediation action in Review', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+
+    expect(screen.getByText('4 findings')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Auto-Remediate/ })).toBeInTheDocument()
   })
 
   it('adds a non-empty team discussion message', async () => {
@@ -159,19 +169,79 @@ describe('DashboardV2', () => {
 
     await user.click(screen.getByRole('button', { name: 'Dashboard' }))
     await user.click(screen.getByRole('button', { name: /Viewing.*Benefits decision.*8942-B/i }))
-    expect(screen.getByRole('listbox', { name: 'Choose a document' })).toBeInTheDocument()
+    const picker = screen.getByRole('listbox', { name: 'Choose a document' })
+    expect(picker).toBeInTheDocument()
 
-    await user.click(screen.getByRole('option', { name: /Lease agreement/i }))
+    await user.click(within(picker).getByRole('option', { name: /Lease agreement/i }))
     expect(screen.getByRole('button', { name: /Viewing.*Lease agreement/i })).toBeInTheDocument()
   })
 
-  it('shows the interactive document score signal on the dashboard', async () => {
+  it('links a selected document to its dashboard rating bars', async () => {
     const user = userEvent.setup()
     render(<DashboardV2 onClose={vi.fn()} />)
 
     await user.click(screen.getByRole('button', { name: 'Dashboard' }))
-    expect(screen.getByRole('img', { name: 'Interactive document score signal' })).toBeInTheDocument()
-    expect(screen.getByText('live score model')).toBeInTheDocument()
+    const files = screen.getByRole('listbox', { name: 'Documents in workspace' })
+    expect(files).toBeInTheDocument()
+
+    await user.click(within(files).getByRole('option', { name: /Lease agreement/i }))
+
+    expect(screen.getByRole('img', { name: /Residential Lease Agreement.*rating breakdown: rating 62 percent/i })).toBeInTheDocument()
+    expect(screen.getByText('Rating breakdown')).toBeInTheDocument()
+  })
+
+  it('sorts dashboard files by the selected review order', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Dashboard' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Sort files' }), 'score-high')
+
+    const files = screen.getByRole('listbox', { name: 'Documents in workspace' })
+    expect(within(files).getAllByRole('option')[0]).toHaveTextContent('Updated benefits decision')
+  })
+
+  it('shows the document health as a simple 100-point score bar', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Dashboard' }))
+
+    expect(screen.getByRole('img', { name: 'Document score 54 out of 100' })).toBeInTheDocument()
+    expect(screen.getByText('Document review score')).toBeInTheDocument()
+  })
+
+  it('combines findings and their rating impact in one dashboard panel', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Dashboard' }))
+
+    expect(screen.getByRole('heading', { name: 'How findings affect your score' })).toBeInTheDocument()
+    expect(screen.getAllByText('High impact')).toHaveLength(3)
+    expect(screen.getAllByText('Appeal filing deadline is vague')).not.toHaveLength(0)
+    expect(screen.queryByRole('heading', { name: 'Finding activity' })).not.toBeInTheDocument()
+  })
+
+  it('previews issues on hover and keeps the category filter after a click', async () => {
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Dashboard' }))
+    const highImpact = screen.getByRole('button', { name: /Show high impact files/i })
+    fireEvent.mouseEnter(highImpact)
+
+    expect(screen.getByText('Related high impact issues')).toBeInTheDocument()
+    expect(within(screen.getByRole('status')).getByText('Appeal filing deadline is vague')).toBeInTheDocument()
+    expect(screen.queryByText('Consequences of inaction not fully detailed')).not.toBeInTheDocument()
+
+    fireEvent.mouseLeave(highImpact)
+    expect(screen.getByText('Consequences of inaction not fully detailed')).toBeInTheDocument()
+
+    await user.click(highImpact)
+    fireEvent.mouseLeave(highImpact)
+    expect(screen.getByText('High impact findings')).toBeInTheDocument()
+    expect(screen.queryByText('Consequences of inaction not fully detailed')).not.toBeInTheDocument()
   })
 
   it('exits through the sidebar control', async () => {
