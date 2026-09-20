@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from review_contract import ReviewResult
 
 from app.auth import current_user
 from app.legal_agent import configured_agent
@@ -33,36 +34,7 @@ class AnalyzeRequest(BaseModel):
     goals: str | None = Field(default=None, max_length=2_000)
 
 
-class Finding(BaseModel):
-    title: str
-    explanation: str
-    severity: str
-    source_text: str | None = None
-    why_it_matters: str | None = None
-    negotiation_point: str | None = None
-    suggested_rewrite: str | None = None
-
-
-class Source(BaseModel):
-    title: str = ""
-    citation: str = ""
-    url: str | None = None
-    support: str = ""
-
-
-class AnalyzeResponse(BaseModel):
-    findings: list[Finding]
-    disclaimer: str
-    overall_assessment: str | None = None
-    confidence: str | None = None
-    document_score: int | None = Field(default=None, ge=0, le=100)
-    priority_score: int | None = Field(default=None, ge=0, le=100)
-    deadline: str | None = None
-    deadline_confidence: str | None = None
-    summary: str | None = None
-    next_steps: list[str] = Field(default_factory=list)
-    questions_for_user: list[str] = Field(default_factory=list)
-    sources: list[Source] = Field(default_factory=list)
+AnalyzeResponse = ReviewResult
 
 
 class ProfileUpdate(BaseModel):

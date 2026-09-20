@@ -13,7 +13,12 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$(dirname -- "$artifact_path")"
-python3.12 -m pip install --disable-pip-version-check --no-compile --target "$build_dir" "$backend_dir"
+python3.12 -m pip install \
+  --disable-pip-version-check \
+  --no-compile \
+  --target "$build_dir" \
+  "$repo_dir/packages/review_contract" \
+  "$backend_dir"
 
 (
   cd "$build_dir"

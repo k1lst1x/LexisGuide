@@ -28,13 +28,56 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
       - name: Install dependencies
-        run: pip install -e '.[dev]'
+        run: pip install -e ../packages/review_contract -e '.[dev]'
       - name: Lint
         run: ruff check .
       - name: Check formatting
         run: ruff format --check .
       - name: Test
         run: pytest
+
+  review-contract:
+    name: Review contract checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: packages/review_contract/pyproject.toml
+      - name: Install dependencies
+        run: pip install -e 'packages/review_contract' 'pytest>=8.3,<10.0' 'ruff>=0.14,<0.17'
+      - name: Lint and check formatting
+        run: |
+          ruff check packages/review_contract
+          ruff format --check packages/review_contract
+      - name: Test
+        run: pytest packages/review_contract/tests
+
+  agentcore-runtime:
+    name: AgentCore runtime checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agentcore/runtime
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            agentcore/runtime/pyproject.toml
+            packages/review_contract/pyproject.toml
+      - name: Install the runtime and shared contract
+        run: pip install -e ../../packages/review_contract -e .
+      - name: Test AgentCore request and result integration
+        run: python -m unittest discover -s tests
 
   frontend:
     name: Frontend checks

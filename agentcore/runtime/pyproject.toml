@@ -6,7 +6,11 @@ dependencies = [
   "boto3>=1.42,<2.0",
   "bedrock-agentcore>=1.0,<2.0",
   "aws-opentelemetry-distro~=0.18.0",
+  "lexisguide-review-contract",
 ]
+
+[tool.uv.sources]
+lexisguide-review-contract = { path = "../../packages/review_contract", editable = true }
 
 [tool.agentcore]
 entrypoint = "main.py"

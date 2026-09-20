@@ -7,12 +7,16 @@ plain-language explanations, negotiation points, and optional rewrites.
 ## Local test
 
 From this directory, set `AWS_REGION` and `BEDROCK_MODEL_ID`, then run the AgentCore
-dev server. `agentcore dev --no-browser` exposes `/invocations` on port 8080.
+dev server. The runtime's `pyproject.toml` resolves the shared
+`packages/review_contract` package through its local uv source. `agentcore dev
+--no-browser` exposes `/invocations` on port 8080.
 
 ## Deploy
 
 Install the current AWS CLI AgentCore plugin (`npm install -g @aws/agentcore`),
 authenticate AWS, and run `agentcore validate` followed by `agentcore deploy -y`
-from this directory. The runtime role
+from this directory. The deployment bundle includes the shared contract as a normal
+Python dependency, so the API and runtime use the same prompt and validation models.
+The runtime role
 needs Bedrock model invocation and CloudWatch Logs permissions. Do not put AWS keys
 in the frontend or commit `.env` files.

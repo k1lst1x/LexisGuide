@@ -5,7 +5,7 @@ FastAPI service for the LexisGuide web client.
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -e '.[dev]'
+pip install -e ../packages/review_contract -e '.[dev]'
 uvicorn app.main:app --reload
 ```
 

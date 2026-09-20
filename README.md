@@ -20,6 +20,7 @@ frontend/          React web application, deployed to GitHub Pages
 backend/           FastAPI API and tests, packaged as an AWS Lambda
 agentcore/runtime/ AgentCore service that performs the model invocation
 infra/             Terraform for Cognito, DynamoDB, Lambda, and API Gateway
+packages/review_contract/ Shared review request/result models and canonical prompt
 ```
 
 ## Live landing page
@@ -52,7 +53,7 @@ Start the API (terminal 1):
 cd backend
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -e '.[dev]'
+pip install -e ../packages/review_contract -e '.[dev]'
 uvicorn app.main:app --reload --port 8000
 ```
 

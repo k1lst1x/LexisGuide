@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - backend/**
+      - packages/review_contract/**
       - infra/**
       - .github/workflows/deploy-api.yml
   workflow_dispatch:
