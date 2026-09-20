@@ -821,9 +821,12 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
 
   useEffect(() => {
     if (activeNav !== 'documents' || !isDemoMode || tutorialSeen) return
-    setTutorialSeen(true)
-    window.localStorage.setItem(DOCUMENT_TUTORIAL_SEEN_KEY, '1')
-    setTutorialOpen(true)
+    const timer = window.setTimeout(() => {
+      setTutorialSeen(true)
+      window.localStorage.setItem(DOCUMENT_TUTORIAL_SEEN_KEY, '1')
+      setTutorialOpen(true)
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [activeNav, isDemoMode, tutorialSeen])
 
   const subpageCopy: Record<NavItem, { title: string; description: string }> = {
