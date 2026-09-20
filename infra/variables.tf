@@ -1,5 +1,6 @@
 variable "aws_region" {
-  type = string
+  type    = string
+  default = "us-east-1"
 }
 
 variable "project_name" {
@@ -13,10 +14,39 @@ variable "cognito_domain_prefix" {
 
 variable "callback_urls" {
   type = list(string)
+  default = [
+    "http://localhost:5173/auth/callback",
+    "https://k1lst1x.github.io/LexisGuide/auth/callback",
+  ]
 }
 
 variable "logout_urls" {
   type = list(string)
+  default = [
+    "http://localhost:5173",
+    "https://k1lst1x.github.io/LexisGuide",
+  ]
+}
+
+variable "api_lambda_artifact_path" {
+  description = "Path to the ZIP created by backend/scripts/build_lambda_package.sh."
+  type        = string
+}
+
+variable "agentcore_runtime_arn" {
+  description = "Deployed AgentCore runtime ARN. Leave empty only for a local/stub API."
+  type        = string
+  default     = ""
+}
+
+variable "api_allowed_origins" {
+  description = "Exact browser origins permitted to call the API with credentials."
+  type        = list(string)
+  default = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://k1lst1x.github.io",
+  ]
 }
 
 variable "google_client_id" {

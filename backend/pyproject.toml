@@ -11,6 +11,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "boto3>=1.42,<2.0",
   "fastapi>=0.141,<0.142",
+  "mangum>=0.19,<1.0",
   "PyJWT[crypto]>=2.10,<3.0",
   "python-dotenv>=1.1,<2.0",
   "uvicorn[standard]>=0.38,<0.54",

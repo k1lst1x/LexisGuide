@@ -6,20 +6,24 @@ from fastapi.testclient import TestClient
 from app.api.v1 import routes
 
 
-def test_analyze_rejects_empty_document(client: TestClient) -> None:
-    response = client.post("/api/v1/analyze", json={"document_text": ""})
+def test_analyze_rejects_empty_document(authenticated_client: TestClient) -> None:
+    response = authenticated_client.post("/api/v1/analyze", json={"document_text": ""})
 
     assert response.status_code == 422
 
 
-def test_analyze_rejects_documents_above_the_contract_limit(client: TestClient) -> None:
-    response = client.post("/api/v1/analyze", json={"document_text": "a" * 100_001})
+def test_analyze_rejects_documents_above_the_contract_limit(
+    authenticated_client: TestClient,
+) -> None:
+    response = authenticated_client.post("/api/v1/analyze", json={"document_text": "a" * 100_001})
 
     assert response.status_code == 422
 
 
-def test_analyze_returns_legal_disclaimer(client: TestClient) -> None:
-    response = client.post("/api/v1/analyze", json={"document_text": "Example agreement."})
+def test_analyze_returns_legal_disclaimer(authenticated_client: TestClient) -> None:
+    response = authenticated_client.post(
+        "/api/v1/analyze", json={"document_text": "Example agreement."}
+    )
 
     assert response.status_code == 200
     assert response.json() == {
@@ -30,6 +34,13 @@ def test_analyze_returns_legal_disclaimer(client: TestClient) -> None:
 
 def test_protected_routes_reject_requests_without_a_bearer_token(client: TestClient) -> None:
     response = client.get("/api/v1/me")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Missing bearer token."}
+
+
+def test_analyze_rejects_requests_without_a_bearer_token(client: TestClient) -> None:
+    response = client.post("/api/v1/analyze", json={"document_text": "Example agreement."})
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Missing bearer token."}
@@ -46,6 +57,19 @@ def test_local_frontend_origin_receives_cors_headers(client: TestClient) -> None
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_github_pages_origin_receives_cors_headers(client: TestClient) -> None:
+    response = client.options(
+        "/api/v1/analyze",
+        headers={
+            "Origin": "https://k1lst1x.github.io",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://k1lst1x.github.io"
 
 
 def test_profile_defaults_to_token_name_when_not_stored(

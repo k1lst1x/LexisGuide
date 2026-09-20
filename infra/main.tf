@@ -1,5 +1,11 @@
 terraform {
   required_version = ">= 1.6.0"
+
+  # Deployment uses an S3 backend configured at `terraform init` time. Keeping
+  # credentials and the bucket name out of source lets local validation use
+  # `terraform init -backend=false`.
+  backend "s3" {}
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -102,7 +108,176 @@ resource "aws_cognito_user_pool_client" "web" {
   depends_on = [aws_cognito_identity_provider.google, aws_cognito_identity_provider.apple]
 }
 
+data "aws_iam_policy_document" "api_lambda_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "api_lambda" {
+  name               = "${var.project_name}-api-lambda"
+  assume_role_policy = data.aws_iam_policy_document.api_lambda_assume_role.json
+}
+
+resource "aws_cloudwatch_log_group" "api_lambda" {
+  name              = "/aws/lambda/${var.project_name}-api"
+  retention_in_days = 30
+}
+
+data "aws_iam_policy_document" "api_lambda" {
+  statement {
+    sid = "WriteApplicationLogs"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
+    ]
+    resources = ["${aws_cloudwatch_log_group.api_lambda.arn}:*"]
+  }
+
+  statement {
+    sid = "AccessOwnUserRecords"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:Query",
+    ]
+    resources = [aws_dynamodb_table.user_data.arn]
+  }
+
+  dynamic "statement" {
+    for_each = var.agentcore_runtime_arn == "" ? [] : [var.agentcore_runtime_arn]
+    content {
+      sid       = "InvokeLexisGuideAgent"
+      actions   = ["bedrock-agentcore:InvokeAgentRuntime"]
+      resources = [statement.value]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "api_lambda" {
+  name   = "${var.project_name}-api-runtime"
+  role   = aws_iam_role.api_lambda.id
+  policy = data.aws_iam_policy_document.api_lambda.json
+}
+
+resource "aws_lambda_function" "api" {
+  function_name    = "${var.project_name}-api"
+  role             = aws_iam_role.api_lambda.arn
+  runtime          = "python3.12"
+  handler          = "app.lambda_handler.handler"
+  filename         = var.api_lambda_artifact_path
+  source_code_hash = filebase64sha256(var.api_lambda_artifact_path)
+  architectures    = ["x86_64"]
+  memory_size      = 1024
+  timeout          = 29
+
+  environment {
+    variables = {
+      COGNITO_USER_POOL_ID        = aws_cognito_user_pool.main.id
+      COGNITO_USER_POOL_CLIENT_ID = aws_cognito_user_pool_client.web.id
+      USER_DATA_TABLE             = aws_dynamodb_table.user_data.name
+      AGENTCORE_RUNTIME_ARN       = var.agentcore_runtime_arn
+      CORS_ALLOW_ORIGINS          = join(",", var.api_allowed_origins)
+    }
+  }
+
+  depends_on = [
+    aws_cloudwatch_log_group.api_lambda,
+    aws_iam_role_policy.api_lambda,
+  ]
+}
+
+resource "aws_apigatewayv2_api" "api" {
+  name          = "${var.project_name}-http-api"
+  protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_credentials = true
+    allow_headers     = ["Authorization", "Content-Type"]
+    allow_methods     = ["GET", "POST", "PUT", "OPTIONS"]
+    allow_origins     = var.api_allowed_origins
+    max_age           = 86400
+  }
+}
+
+resource "aws_apigatewayv2_integration" "api" {
+  api_id                 = aws_apigatewayv2_api.api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.api.invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_authorizer" "cognito" {
+  api_id           = aws_apigatewayv2_api.api.id
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+  name             = "${var.project_name}-cognito"
+
+  jwt_configuration {
+    audience = [aws_cognito_user_pool_client.web.id]
+    issuer   = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.main.id}"
+  }
+}
+
+resource "aws_apigatewayv2_route" "api" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "$default"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Health remains public for uptime checks. All application routes pass through
+# Cognito at the gateway, and FastAPI validates the ID token again in depth.
+resource "aws_apigatewayv2_route" "health" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "GET /api/v1/health"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_cloudwatch_log_group" "api_gateway" {
+  name              = "/aws/apigateway/${var.project_name}-http-api"
+  retention_in_days = 30
+}
+
+resource "aws_apigatewayv2_stage" "api" {
+  api_id      = aws_apigatewayv2_api.api.id
+  name        = "$default"
+  auto_deploy = true
+
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_gateway.arn
+    format = jsonencode({
+      requestId = "$context.requestId"
+      ip        = "$context.identity.sourceIp"
+      method    = "$context.httpMethod"
+      path      = "$context.path"
+      status    = "$context.status"
+      latency   = "$context.responseLatency"
+      userAgent = "$context.identity.userAgent"
+    })
+  }
+}
+
+resource "aws_lambda_permission" "api_gateway" {
+  statement_id  = "AllowApiGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*"
+}
+
 output "cognito_user_pool_id" { value = aws_cognito_user_pool.main.id }
 output "cognito_user_pool_client_id" { value = aws_cognito_user_pool_client.web.id }
-output "cognito_domain" { value = aws_cognito_user_pool_domain.main.domain }
+output "cognito_domain" {
+  value = "${aws_cognito_user_pool_domain.main.domain}.auth.${var.aws_region}.amazoncognito.com"
+}
 output "user_data_table_name" { value = aws_dynamodb_table.user_data.name }
+output "api_base_url" { value = aws_apigatewayv2_api.api.api_endpoint }

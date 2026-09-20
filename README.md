@@ -16,8 +16,10 @@ without unexpected major upgrades.
 ## Repository layout
 
 ```text
-backend/   FastAPI API and tests
-frontend/  React web application
+frontend/          React web application, deployed to GitHub Pages
+backend/           FastAPI API and tests, packaged as an AWS Lambda
+agentcore/runtime/ AgentCore service that performs the model invocation
+infra/             Terraform for Cognito, DynamoDB, Lambda, and API Gateway
 ```
 
 ## Live landing page
@@ -27,6 +29,20 @@ each push to `main` at https://k1lst1x.github.io/LexisGuide/.
 
 The repository also runs backend tests, frontend linting/builds, and CodeQL on
 every push and pull request. Dependabot opens weekly dependency-update PRs.
+
+## Production architecture
+
+GitHub Pages hosts only the React application. It calls the FastAPI Lambda through
+an API Gateway HTTP API. API Gateway and the API both verify the Cognito ID token;
+the API accesses only the caller's DynamoDB records and invokes the configured
+AgentCore runtime with its own IAM role. The browser never receives AWS service
+credentials.
+
+`/api/v1/analyze` requires authentication in production. The local dashboard still
+shows its built-in quick scan when no API is available, so the demo remains usable
+without cloud credentials.
+
+See [AWS_AUTH_SETUP.md](AWS_AUTH_SETUP.md) for the one-time AWS and GitHub setup.
 
 ## Run locally
 
@@ -56,10 +72,10 @@ PDF-rendering dependency and the GitHub Actions runners.
 The Vite development server proxies `/api` to the backend by default. To use a
 deployed API instead, set `VITE_API_BASE_URL` (see `frontend/.env.example`).
 
-## API contract (initial)
+## API contract
 
 `GET /api/v1/health` returns service status.
 
-`POST /api/v1/analyze` accepts a document's plain text and returns an empty,
-typed `findings` list for now. The route is deliberately a safe stub: it does not
-claim to have analyzed a legal document until the analysis pipeline is implemented.
+`POST /api/v1/analyze` requires a Cognito ID token and accepts document text. When
+AgentCore is configured, it returns the document-grounded review; otherwise the
+local development API returns a safe empty result rather than fabricating analysis.

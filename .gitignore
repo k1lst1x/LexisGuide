@@ -169,6 +169,7 @@ __pycache__/
 node_modules/
 dist/
 .vite/
+.build/
 
 # Environment files
 .env

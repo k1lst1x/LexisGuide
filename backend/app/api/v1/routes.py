@@ -88,7 +88,9 @@ async def health_check() -> HealthResponse:
     response_model_exclude_none=True,
     response_model_exclude_defaults=True,
 )
-async def analyze_document(payload: AnalyzeRequest) -> AnalyzeResponse:
+async def analyze_document(
+    payload: AnalyzeRequest, _user: dict[str, str] = Depends(current_user)
+) -> AnalyzeResponse:
     """Review a document when Bedrock is configured; retain a safe local stub otherwise."""
     agent = configured_agent()
     if agent is None:

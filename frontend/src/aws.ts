@@ -25,8 +25,9 @@ const region = import.meta.env.VITE_AWS_REGION ?? localDefaults?.region
 const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID ?? localDefaults?.userPoolId
 const userPoolClientId = import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID ?? localDefaults?.userPoolClientId
 const domain = import.meta.env.VITE_COGNITO_DOMAIN ?? localDefaults?.domain
-const redirectSignIn = import.meta.env.VITE_AUTH_REDIRECT_SIGN_IN ?? `${window.location.origin}/auth/callback`
-const redirectSignOut = import.meta.env.VITE_AUTH_REDIRECT_SIGN_OUT ?? window.location.origin
+const applicationUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString().replace(/\/$/, '')
+const redirectSignIn = import.meta.env.VITE_AUTH_REDIRECT_SIGN_IN ?? `${applicationUrl}/auth/callback`
+const redirectSignOut = import.meta.env.VITE_AUTH_REDIRECT_SIGN_OUT ?? applicationUrl
 
 export const authConfigured = Boolean(region && userPoolId && userPoolClientId && domain)
 

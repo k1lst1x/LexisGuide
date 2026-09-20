@@ -1,7 +1,9 @@
 aws_region            = "us-east-1"
 cognito_domain_prefix = "lexisguide-your-unique-domain"
-callback_urls         = ["http://localhost:5173/auth/callback", "https://your-domain.com/auth/callback"]
-logout_urls           = ["http://localhost:5173", "https://your-domain.com"]
+# The defaults in variables.tf include localhost and GitHub Pages. Override only
+# if you add a custom domain.
+# callback_urls       = ["http://localhost:5173/auth/callback", "https://k1lst1x.github.io/LexisGuide/auth/callback"]
+# logout_urls         = ["http://localhost:5173", "https://k1lst1x.github.io/LexisGuide"]
 google_client_id      = ""
 google_client_secret  = ""
 apple_client_id       = ""

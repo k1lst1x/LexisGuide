@@ -80,9 +80,6 @@ class LegalDocumentAgent:
         user_context: str | None = None,
         goals: str | None = None,
     ) -> dict[str, Any]:
-        if not self.model_id:
-            raise RuntimeError("BEDROCK_MODEL_ID is not configured")
-
         request = {
             "action": action,
             "jurisdiction": jurisdiction or "Not provided",
@@ -102,6 +99,9 @@ class LegalDocumentAgent:
             raw = response["response"].read()
             parsed = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
             return parsed.get("result", parsed) if isinstance(parsed, dict) else parsed
+
+        if not self.model_id:
+            raise RuntimeError("BEDROCK_MODEL_ID is not configured")
 
         response = self.client.converse(
             modelId=self.model_id,

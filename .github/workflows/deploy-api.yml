@@ -1,0 +1,106 @@
+name: Deploy production API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/**
+      - infra/**
+      - .github/workflows/deploy-api.yml
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Package and deploy API
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_cognito_domain_prefix: ${{ vars.COGNITO_DOMAIN_PREFIX }}
+      TF_VAR_agentcore_runtime_arn: ${{ vars.AGENTCORE_RUNTIME_ARN }}
+      TF_VAR_google_client_id: ${{ vars.GOOGLE_CLIENT_ID }}
+      TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      TF_VAR_apple_client_id: ${{ vars.APPLE_CLIENT_ID }}
+      TF_VAR_apple_team_id: ${{ vars.APPLE_TEAM_ID }}
+      TF_VAR_apple_key_id: ${{ vars.APPLE_KEY_ID }}
+      TF_VAR_apple_private_key: ${{ secrets.APPLE_PRIVATE_KEY }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Check deployment configuration
+        run: |
+          test -n "$TF_STATE_BUCKET"
+          test -n "$TF_VAR_cognito_domain_prefix"
+          test -n "$AWS_DEPLOY_ROLE_ARN"
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
+      - name: Build Lambda package
+        run: backend/scripts/build_lambda_package.sh "$GITHUB_WORKSPACE/.build/lexisguide-api.zip"
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: '1.6.6'
+      - name: Initialize remote Terraform state
+        working-directory: infra
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=lexisguide/production/terraform.tfstate" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="encrypt=true"
+      - name: Apply production infrastructure
+        working-directory: infra
+        run: terraform apply -input=false -auto-approve -var="api_lambda_artifact_path=$GITHUB_WORKSPACE/.build/lexisguide-api.zip"
+      - name: Read deployment outputs
+        id: outputs
+        working-directory: infra
+        run: |
+          echo "api_base_url=$(terraform output -raw api_base_url)" >> "$GITHUB_OUTPUT"
+          echo "cognito_user_pool_id=$(terraform output -raw cognito_user_pool_id)" >> "$GITHUB_OUTPUT"
+          echo "cognito_user_pool_client_id=$(terraform output -raw cognito_user_pool_client_id)" >> "$GITHUB_OUTPUT"
+          echo "cognito_domain=$(terraform output -raw cognito_domain)" >> "$GITHUB_OUTPUT"
+      - name: Update Pages configuration
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh variable set VITE_API_BASE_URL --repo "$GITHUB_REPOSITORY" --body "${{ steps.outputs.outputs.api_base_url }}"
+          gh variable set VITE_AWS_REGION --repo "$GITHUB_REPOSITORY" --body "$AWS_REGION"
+          gh variable set VITE_COGNITO_USER_POOL_ID --repo "$GITHUB_REPOSITORY" --body "${{ steps.outputs.outputs.cognito_user_pool_id }}"
+          gh variable set VITE_COGNITO_USER_POOL_CLIENT_ID --repo "$GITHUB_REPOSITORY" --body "${{ steps.outputs.outputs.cognito_user_pool_client_id }}"
+          gh variable set VITE_COGNITO_DOMAIN --repo "$GITHUB_REPOSITORY" --body "${{ steps.outputs.outputs.cognito_domain }}"
+      - name: Trigger Pages deployment with the deployed API configuration
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME"
+      - name: Publish deployment summary
+        working-directory: infra
+        run: |
+          {
+            echo '## Production API deployed'
+            echo ''
+            echo 'The workflow updated the GitHub Pages configuration and triggered a Pages deployment.'
+            echo ''
+            echo "- \`VITE_API_BASE_URL\`: \`$(terraform output -raw api_base_url)\`"
+            echo "- \`VITE_AWS_REGION\`: \`$AWS_REGION\`"
+            echo "- \`VITE_COGNITO_USER_POOL_ID\`: \`$(terraform output -raw cognito_user_pool_id)\`"
+            echo "- \`VITE_COGNITO_USER_POOL_CLIENT_ID\`: \`$(terraform output -raw cognito_user_pool_client_id)\`"
+            echo "- \`VITE_COGNITO_DOMAIN\`: \`$(terraform output -raw cognito_domain)\`"
+          } >> "$GITHUB_STEP_SUMMARY"

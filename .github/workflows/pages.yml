@@ -17,6 +17,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+      VITE_AWS_REGION: ${{ vars.AWS_REGION }}
+      VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+      VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ vars.VITE_COGNITO_USER_POOL_CLIENT_ID }}
+      VITE_COGNITO_DOMAIN: ${{ vars.VITE_COGNITO_DOMAIN }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -29,6 +35,13 @@ jobs:
       - name: Configure GitHub Pages
         id: pages
         uses: actions/configure-pages@v6
+      - name: Validate production configuration
+        run: |
+          test -n "$VITE_API_BASE_URL"
+          test -n "$VITE_AWS_REGION"
+          test -n "$VITE_COGNITO_USER_POOL_ID"
+          test -n "$VITE_COGNITO_USER_POOL_CLIENT_ID"
+          test -n "$VITE_COGNITO_DOMAIN"
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
