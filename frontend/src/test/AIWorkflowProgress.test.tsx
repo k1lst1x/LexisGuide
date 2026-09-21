@@ -17,31 +17,28 @@ describe('AIWorkflowProgress', () => {
       />
     )
 
-    expect(screen.getByText('AI Autonomous Engine Active')).toBeInTheDocument()
-    expect(screen.getByText('Research Document & Notice Requirements')).toBeInTheDocument()
-    expect(screen.getByText('Extract agency details & case references')).toBeInTheDocument()
-    expect(screen.getByText('Design System Architecture & Rule Packs')).toBeInTheDocument()
-    expect(screen.getByText('Implementation Planning & Plain-Language Audit')).toBeInTheDocument()
+    expect(screen.getByText('Review in progress')).toBeInTheDocument()
+    expect(screen.getByText('Read the document and identify its context')).toBeInTheDocument()
+    expect(screen.getByText('Extract key parties, dates, and terms')).toBeInTheDocument()
+    expect(screen.getByText('Flag potentially unfair or unclear clauses')).toBeInTheDocument()
+    expect(screen.getByText('Compare findings with applicable guidance')).toBeInTheDocument()
 
-    const inProgressBadges = screen.getAllByText('in-progress')
+    const inProgressBadges = screen.getAllByText('Working')
     expect(inProgressBadges.length).toBeGreaterThan(0)
 
-    const pendingBadges = screen.getAllByText('pending')
+    const pendingBadges = screen.getAllByText('Next')
     expect(pendingBadges.length).toBeGreaterThan(0)
   })
 
-  it('switches to Project Tasks preset matching the user screenshot', async () => {
-    const user = userEvent.setup()
+  it('renders the project-plan preset when that workflow was requested', () => {
     render(
       <AIWorkflowProgress
         isOpen={true}
         onClose={vi.fn()}
-        mode="document-audit"
+        mode="project-plan"
         autoCloseDelay={0}
       />
     )
-
-    await user.click(screen.getByRole('button', { name: /Project Tasks/i }))
 
     expect(screen.getByText('Research Project Requirements')).toBeInTheDocument()
     expect(screen.getByText('Interview stakeholders')).toBeInTheDocument()
@@ -96,7 +93,7 @@ describe('AIWorkflowProgress', () => {
       await vi.advanceTimersByTimeAsync(100)
     }
     expect(onComplete).toHaveBeenCalledOnce()
-    expect(screen.getByText('Execution Complete')).toBeInTheDocument()
+    expect(screen.getByText('Review complete')).toBeInTheDocument()
 
     await vi.advanceTimersByTimeAsync(300)
     expect(onClose).toHaveBeenCalledOnce()
