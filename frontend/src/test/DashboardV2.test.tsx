@@ -254,6 +254,19 @@ describe('DashboardV2', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 
+  it('returns a document-grounded chat response when the deployed AI is unavailable', async () => {
+    window.localStorage.clear()
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Open LexisGuide assistant' }))
+    await user.type(screen.getByRole('textbox', { name: 'Ask LexisGuide' }), 'What should I do about this deadline?')
+    await user.click(screen.getByRole('button', { name: 'Send question' }))
+
+    expect((await screen.findAllByRole('button', { name: 'Open evidence' }, { timeout: 3_000 })).length).toBeGreaterThan(1)
+    expect(screen.getAllByText('Appeal filing deadline is vague')).not.toHaveLength(0)
+  })
+
   it('switches dashboard subpages using the persistent top navigation buttons', async () => {
     const user = userEvent.setup()
     render(<DashboardV2 onClose={vi.fn()} />)

@@ -89,7 +89,7 @@ function addRipple(e: React.MouseEvent<HTMLElement>) {
    APP
    ═════════════════════════════════════════════════════════════════ */
 export function App() {
-  const [splashDone, setSplashDone] = useState(false)
+  const [splashDone, setSplashDone] = useState(() => window.localStorage.getItem(WORKSPACE_KEY) === 'open' || window.location.pathname.endsWith('/dashboard') || window.location.hash === '#dashboard')
   const [authOpen, setAuthOpen] = useState(false)
   const [dashOpen, setDashOpen] = useState(false)
   const [sessionReady, setSessionReady] = useState(false)

@@ -47,14 +47,12 @@ describe('App', () => {
   })
 
   it('restores the last workspace even when local sign-in has no Cognito session', async () => {
-    const user = userEvent.setup()
     authMocks.cognitoGetCurrentUser.mockResolvedValue(null)
     window.localStorage.setItem('lexisguide:workspace', 'open')
     window.localStorage.setItem('lexisguide:workspace-user', JSON.stringify({ email: 'saved@example.com', username: 'saved@example.com' }))
     window.localStorage.setItem('lexisguide:last-section', 'documents')
 
     render(<App />)
-    await user.click(screen.getByRole('button', { name: 'Complete splash' }))
 
     expect(await screen.findByRole('heading', { name: 'Documents' })).toBeInTheDocument()
   })
