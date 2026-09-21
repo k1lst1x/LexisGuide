@@ -41,9 +41,16 @@ type SampleDoc = {
 type NavItem = 'overview' | 'linter' | 'documents' | 'chain' | 'team' | 'settings'
 type WorkspaceSummary = { id: string; name: string; owner_id: string; created_at: string; role: string }
 type WorkspaceMember = { user_id: string; email: string; name: string; role: string; joined_at: string }
+type WorkspaceMessage = { id: string; user: string; text: string; time: string; saved?: boolean }
+type WorkspaceTask = { id: string; title: string; detail: string; completed: boolean }
 
 const LAST_SECTION_KEY = 'lexisguide:last-section'
 const DOCUMENT_TUTORIAL_SEEN_KEY = 'lexisguide:document-tutorial-seen'
+const MESSAGE_STORAGE_KEY = 'lexisguide:space-messages'
+const defaultWorkspaceMessages: WorkspaceMessage[] = [
+  { id: 'message-elena', user: 'Elena Moritz (Legal Aid)', text: 'The appeal deadline is completely missing in v1. We should add a 30-day requirement.', time: '10:14 AM' },
+  { id: 'message-agency', user: 'Agency Reviewer', text: 'Agreed. Updating notice to include deadline date of Oct 14, 2026.', time: '10:28 AM' },
+]
 
 /* ───────── Sample Data ───────── */
 const sampleDocs: SampleDoc[] = [
@@ -512,11 +519,22 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [, setTutorialStep] = useState(0)
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [tutorialSeen, setTutorialSeen] = useState(() => window.localStorage.getItem(DOCUMENT_TUTORIAL_SEEN_KEY) === '1')
-  const [comments, setComments] = useState<Array<{ user: string; text: string; time: string }>>([
-    { user: 'Elena Moritz (Legal Aid)', text: 'The appeal deadline is completely missing in v1. We should add a 30-day requirement.', time: '10:14 AM' },
-    { user: 'Agency Reviewer', text: 'Agreed. Updating notice to include deadline date of Oct 14, 2026.', time: '10:28 AM' },
-  ])
+  const [comments, setComments] = useState<WorkspaceMessage[]>(() => {
+    try {
+      const stored = window.localStorage.getItem(MESSAGE_STORAGE_KEY)
+      const parsed = stored ? JSON.parse(stored) : null
+      return Array.isArray(parsed) && parsed.every((message) => typeof message?.id === 'string' && typeof message?.text === 'string') ? parsed : defaultWorkspaceMessages
+    } catch { return defaultWorkspaceMessages }
+  })
   const [newComment, setNewComment] = useState('')
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
+  const [messageReactions, setMessageReactions] = useState<Record<string, string[]>>({})
+  const [messageFilter, setMessageFilter] = useState<'all' | 'mentions'>('all')
+  const [spaceTasks, setSpaceTasks] = useState<WorkspaceTask[]>([
+    { id: 'task-deadline', title: 'Clarify the appeal deadline', detail: 'Linked to document review', completed: false },
+    { id: 'task-destination', title: 'Confirm the filing destination', detail: 'Assigned to review queue', completed: false },
+    { id: 'task-authority', title: 'Verify issuing authority', detail: 'Completed', completed: true },
+  ])
   const [messageSearchOpen, setMessageSearchOpen] = useState(false)
   const [messageSearch, setMessageSearch] = useState('')
   const [messageNotice, setMessageNotice] = useState('')
@@ -691,6 +709,10 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   useEffect(() => {
     window.localStorage.setItem(LAST_SECTION_KEY, activeNav)
   }, [activeNav])
+
+  useEffect(() => {
+    window.localStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(comments))
+  }, [comments])
 
   useEffect(() => {
     sectionTitleTimerRef.current = window.setTimeout(() => setSectionTitleExpanded(false), 1200)
@@ -987,8 +1009,29 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newComment.trim()) return
-    setComments([...comments, { user: 'You (Reviewer)', text: newComment.trim(), time: 'Just now' }])
+    setComments((current) => [...current, { id: `message-${Date.now()}`, user: 'You (Reviewer)', text: newComment.trim(), time: 'Just now', saved: true }])
     setNewComment('')
+    setEmojiPickerOpen(false)
+  }
+
+  const addEmojiToMessage = (emoji: string) => {
+    setNewComment((current) => `${current}${current ? ' ' : ''}${emoji}`)
+    setEmojiPickerOpen(false)
+  }
+
+  const toggleMessageReaction = (messageId: string, emoji: string) => {
+    setMessageReactions((current) => {
+      const reactions = current[messageId] || []
+      return { ...current, [messageId]: reactions.includes(emoji) ? reactions.filter((reaction) => reaction !== emoji) : [...reactions, emoji] }
+    })
+  }
+
+  const toggleSavedMessage = (messageId: string) => {
+    setComments((current) => current.map((message) => message.id === messageId ? { ...message, saved: !message.saved } : message))
+  }
+
+  const toggleSpaceTask = (taskId: string) => {
+    setSpaceTasks((current) => current.map((task) => task.id === taskId ? { ...task, completed: !task.completed } : task))
   }
 
   const selectedFindingObj = selectedDoc.findings.find(f => f.id === activeFinding)
@@ -2199,7 +2242,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                 <aside className="d2-message-rail" aria-label="Chats">
                   <div className="d2-message-rail-head"><div><span className="d2-eyebrow">MESSAGES</span><h2>Conversations</h2></div><button aria-label="New chat" className="d2-message-plus" onClick={() => setMessageNotice('New chat started. Add a topic to begin.')}>+</button></div>
                   <button className="d2-message-quick-search" onClick={() => setMessageSearchOpen(true)}><span>⌕</span> Search <kbd>⌘K</kbd></button>
-                  <div className="d2-space-shortcuts"><button onClick={() => setMessageNotice('Showing all conversations.')}><span>◷</span> All</button><button onClick={() => setMessageNotice('You have no new mentions.')}><span>@</span> Mentions</button></div>
+                  <div className="d2-space-shortcuts"><button className={messageFilter === 'all' ? 'd2-space-shortcut-active' : ''} onClick={() => { setMessageFilter('all'); setMessageNotice('Showing all messages in this space.') }}><span>◷</span> All</button><button className={messageFilter === 'mentions' ? 'd2-space-shortcut-active' : ''} onClick={() => { setMessageFilter('mentions'); setMessageNotice('Showing messages that mention you.') }}><span>@</span> Mentions</button></div>
                   <div className="d2-message-section-label">SPACES</div>
                   <button className="d2-conversation d2-conversation-active"><span className="d2-conversation-icon">#</span><span><strong>Document review</strong><small>{selectedDoc.status}</small></span><b>{comments.length}</b></button>
                   <button className="d2-conversation" onClick={() => setMessageNotice('Questions are ready for the next discussion.')}><span className="d2-conversation-icon">?</span><span><strong>Questions</strong><small>Get a second opinion</small></span></button>
@@ -2213,30 +2256,32 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
                   <div className="d2-space-tabs" role="tablist" aria-label="Document review workspace">
                     <button role="tab" aria-selected={messageWorkspaceTab === 'chat'} className={messageWorkspaceTab === 'chat' ? 'd2-space-tab-active' : ''} onClick={() => setMessageWorkspaceTab('chat')}>Chat</button>
                     <button role="tab" aria-selected={messageWorkspaceTab === 'files'} className={messageWorkspaceTab === 'files' ? 'd2-space-tab-active' : ''} onClick={() => setMessageWorkspaceTab('files')}>Files <span>1</span></button>
-                    <button role="tab" aria-selected={messageWorkspaceTab === 'tasks'} className={messageWorkspaceTab === 'tasks' ? 'd2-space-tab-active' : ''} onClick={() => setMessageWorkspaceTab('tasks')}>Tasks <span>{potentialRiskCount}</span></button>
+                    <button role="tab" aria-selected={messageWorkspaceTab === 'tasks'} className={messageWorkspaceTab === 'tasks' ? 'd2-space-tab-active' : ''} onClick={() => setMessageWorkspaceTab('tasks')}>Tasks <span>{spaceTasks.filter((task) => !task.completed).length}</span></button>
                   </div>
                   {messageWorkspaceTab === 'chat' && <>
                     <div className="d2-thread-context"><span className="d2-thread-context-icon">{documentKind(selectedDoc.type).icon}</span><div><small>IN REVIEW</small><strong>{documentDisplayName(selectedDoc)}</strong></div><button onClick={() => setActiveNav('documents')}>Open →</button></div>
                     <div className="d2-chat-messages">
                       <div className="d2-message-day">Today</div>
-                      {comments.map((c, idx) => {
+                      {comments.filter((comment) => messageFilter === 'all' || comment.text.includes('@')).map((c, idx) => {
                         const isMine = c.user.startsWith('You')
                         const initial = isMine ? (userEmail?.[0].toUpperCase() || 'Y') : c.user.startsWith('Elena') ? 'E' : 'A'
-                        return <div key={`${c.time}-${idx}`} className={`d2-chat-msg ${isMine ? 'd2-chat-msg-mine' : ''}`}>
-                          <div className="d2-chat-avatar">{initial}</div><div className="d2-chat-bubble"><div className="d2-chat-msg-header"><strong>{c.user}</strong><span>{c.time}</span></div><p>{c.text}</p>{idx === 0 && <button className="d2-message-reference" onClick={() => setActiveNav('documents')}>↗ Review: appeal deadline</button>}</div>
+                        const reactions = messageReactions[c.id] || []
+                        return <div key={c.id} className={`d2-chat-msg ${isMine ? 'd2-chat-msg-mine' : ''} ${c.saved ? 'd2-chat-msg-saved' : ''}`}>
+                          <div className="d2-chat-avatar">{initial}</div><div className="d2-chat-bubble"><div className="d2-chat-msg-header"><strong>{c.user}</strong><span>{c.time}</span>{isMine && <em className="d2-message-saved-status"><i /> Saved</em>}</div><p>{c.text}</p>{idx === 0 && <button className="d2-message-reference" onClick={() => setActiveNav('documents')}>↗ Review: appeal deadline</button>}<div className="d2-message-bubble-actions"><button type="button" aria-label={`React to ${c.user}'s message`} onClick={() => toggleMessageReaction(c.id, '👍')}>👍</button>{reactions.map((reaction) => <button type="button" key={reaction} className="d2-message-reaction-active" aria-label={`Remove ${reaction} reaction`} onClick={() => toggleMessageReaction(c.id, reaction)}>{reaction}</button>)}<button type="button" aria-label={c.saved ? 'Unsave message' : 'Save message'} className={c.saved ? 'd2-message-save-active' : ''} onClick={() => toggleSavedMessage(c.id)}>{c.saved ? '★' : '☆'}</button></div></div>
                         </div>
                       })}
+                      {messageFilter === 'mentions' && !comments.some((comment) => comment.text.includes('@')) && <div className="d2-message-empty-state"><strong>No mentions yet</strong><span>When a teammate uses @, it will appear here.</span><button onClick={() => setMessageFilter('all')}>Show all messages</button></div>}
                     </div>
                     <form onSubmit={handleAddComment} className="d2-chat-form">
                       <button type="button" aria-label="Add an attachment" className="d2-composer-tool" onClick={() => { setMessageWorkspaceTab('files'); setMessageNotice('Choose a document from the Files tab to share it here.') }}>+</button>
                       <input type="text" placeholder="Type a message..." value={newComment} onChange={(e) => setNewComment(e.target.value)} className="d2-chat-input" />
-                      <button type="button" aria-label="Add an emoji" className="d2-composer-tool" onClick={() => setNewComment(`${newComment} ✓`)}>☺</button>
+                      <div className="d2-emoji-picker-wrap"><button type="button" aria-label="Add an emoji" aria-expanded={emojiPickerOpen} className="d2-composer-tool" onClick={() => setEmojiPickerOpen((open) => !open)}>☺</button>{emojiPickerOpen && <div className="d2-emoji-picker" role="menu" aria-label="Emoji picker">{['👍', '✅', '⚖️', '📌', '👀', '💬', '👏', '❗'].map((emoji) => <button type="button" key={emoji} role="menuitem" onClick={() => addEmojiToMessage(emoji)}>{emoji}</button>)}</div>}</div>
                       <button type="submit" className="d2-chat-send">Send <span>↗</span></button>
                     </form>
                     <p className="d2-composer-note">Enter to send · Use @ to mention a teammate.</p>
                   </>}
                   {messageWorkspaceTab === 'files' && <section className="d2-space-tab-panel" aria-label="Shared files"><div className="d2-space-tab-panel-heading"><div><span className="d2-eyebrow">SHARED FILES</span><h3>Files in this space</h3><p>Open a document or jump back to its review.</p></div><button className="d2-action-btn d2-btn-sm" onClick={() => setActiveNav('documents')}>+ Add file</button></div><button className="d2-space-file-card" onClick={() => setActiveNav('documents')}><span>{documentKind(selectedDoc.type).icon}</span><div><strong>{documentDisplayName(selectedDoc)}</strong><small>Shared with this space · {potentialRiskCount} review items</small></div><b>Open →</b></button></section>}
-                  {messageWorkspaceTab === 'tasks' && <section className="d2-space-tab-panel" aria-label="Shared tasks"><div className="d2-space-tab-panel-heading"><div><span className="d2-eyebrow">REVIEW TASKS</span><h3>Keep the review moving</h3><p>Tasks stay connected to the document and this conversation.</p></div><button className="d2-action-btn d2-btn-sm" onClick={() => setMessageNotice('New task ready to assign.')}>+ New task</button></div><div className="d2-space-task-list"><button onClick={() => setActiveNav('documents')}><i />Clarify the appeal deadline <small>Linked to document review</small><span>Open →</span></button><button onClick={() => setActiveNav('linter')}><i />Confirm the filing destination <small>Assigned to review queue</small><span>Open →</span></button><button onClick={() => setActiveNav('documents')}><i className="d2-space-task-complete" />Verify issuing authority <small>Completed</small><span>View →</span></button></div></section>}
+                  {messageWorkspaceTab === 'tasks' && <section className="d2-space-tab-panel" aria-label="Shared tasks"><div className="d2-space-tab-panel-heading"><div><span className="d2-eyebrow">REVIEW TASKS</span><h3>Keep the review moving</h3><p>Tasks stay connected to the document and this conversation.</p></div><button className="d2-action-btn d2-btn-sm" onClick={() => setSpaceTasks((current) => [...current, { id: `task-${Date.now()}`, title: 'New review task', detail: 'Created in this space', completed: false }])}>+ New task</button></div><div className="d2-space-task-list">{spaceTasks.map((task) => <button key={task.id} className={task.completed ? 'd2-space-task-done' : ''} onClick={() => toggleSpaceTask(task.id)} aria-pressed={task.completed}><i className={task.completed ? 'd2-space-task-complete' : ''} />{task.title}<small>{task.completed ? 'Completed · click to reopen' : task.detail}</small><span>{task.completed ? 'Done' : 'Mark done'}</span></button>)}</div></section>}
                 </section>
 
                 {messageDetailsOpen && <aside className="d2-message-info" aria-label="Details">
