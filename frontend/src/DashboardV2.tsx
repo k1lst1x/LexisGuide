@@ -43,6 +43,7 @@ type WorkspaceSummary = { id: string; name: string; owner_id: string; created_at
 type WorkspaceMember = { user_id: string; email: string; name: string; role: string; joined_at: string }
 type WorkspaceMessage = { id: string; user: string; text: string; time: string; saved?: boolean; attachment?: string }
 type WorkspaceTask = { id: string; title: string; detail: string; completed: boolean }
+type AssistantAction = 'evidence' | 'task' | 'message' | 'assign' | 'due-date' | 'policy'
 type AssistantMessage = { id: string; role: 'assistant' | 'user'; text: string; findings?: Array<{ title: string; severity: string }> }
 
 const LAST_SECTION_KEY = 'lexisguide:last-section'
@@ -64,7 +65,7 @@ const assistantPageGuidance: Record<NavItem, string> = {
 }
 const assistantQuickPrompts: Record<NavItem, string[]> = {
   overview: ['Explain this document rating', 'What should I review first?'],
-  linter: ['Explain the selected finding', 'What is the next priority?'],
+  linter: ['Explain this finding in plain language', 'Show exact document evidence', 'Draft a 30-day deadline revision', 'Create task for Elena', 'What could happen if we do nothing?'],
   documents: ['Explain the highlighted language', 'How do I add a document?'],
   chain: ['What changed in this review?', 'How do versions work?'],
   team: ['How do I share this review?', 'How do I create a task?'],
@@ -592,6 +593,8 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [hoveredImpact, setHoveredImpact] = useState<'critical' | 'warning' | 'pass' | null>(null)
   const [documentSort, setDocumentSort] = useState<'priority' | 'score-low' | 'score-high' | 'name'>('priority')
   const [assistantOpen, setAssistantOpen] = useState(false)
+  const [assistantScopeOpen, setAssistantScopeOpen] = useState(false)
+  const [assistantServiceState, setAssistantServiceState] = useState<'unknown' | 'available' | 'limited'>('unknown')
   const [assistantInput, setAssistantInput] = useState('')
   const [assistantLoading, setAssistantLoading] = useState(false)
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>(() => {
@@ -919,7 +922,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
       `Current document excerpt:\n${selectedDoc.text.slice(0, 6000)}`,
       `Workspace documents:\n${workspaceDocumentContext}`,
       `User question: ${trimmed}`,
-      'Answer in 2–4 short sentences. Name the relevant LexisGuide page when it helps. If a document needs professional legal advice, say so clearly.',
+      'Answer in a compact, evidence-first format: Finding, Evidence, Why it matters, Rule, Next action, Confidence. Name the relevant LexisGuide page when it helps. If a fact is missing, say what to clarify. If a document needs professional legal advice, say so clearly.',
     ].join('\n\n')
 
     let answer = ''
@@ -936,9 +939,13 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
         const data = await response.json()
         answer = data.summary || data.overall_assessment || ''
         findings = data.findings?.slice(0, 2).map((finding: { title?: string; severity?: string }) => ({ title: finding.title || 'Review point', severity: finding.severity || 'warning' }))
+        setAssistantServiceState('available')
+      } else {
+        setAssistantServiceState('limited')
       }
     } catch {
       // The local context-aware guide remains available when the deployment is unavailable.
+      setAssistantServiceState('limited')
     }
 
     assistantMessageIdRef.current += 1
@@ -1171,6 +1178,12 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     { severity: 'pass', label: 'Verified', count: passCount, percent: checkedPercent },
   ]
   const isDemoMode = !documents.some((document) => document.id.startsWith('upload-'))
+  const assistantMode = isDemoMode ? 'demo' : assistantServiceState === 'limited' ? 'limited' : 'secure'
+  const assistantModeCopy = assistantMode === 'demo'
+    ? 'Demo workspace — sample findings'
+    : assistantMode === 'limited'
+      ? 'Limited mode — AI analysis unavailable'
+      : 'Secure review — connected to your documents'
   const workspaceSearchQuery = workspaceSearch.trim().toLowerCase()
   const matchingDocuments = (workspaceSearchQuery
     ? documents.filter((document) => [document.title, document.type, document.status, document.agency].some((value) => value.toLowerCase().includes(workspaceSearchQuery)))
@@ -1190,6 +1203,41 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
     setActiveNav('documents')
     setWorkspaceSearchOpen(false)
     setWorkspaceSearch('')
+  }
+
+  const runAssistantAction = (action: AssistantAction) => {
+    const finding = selectedFindingObj || selectedDoc.findings[0]
+    if (action === 'evidence') {
+      setActiveFinding(finding?.id || null)
+      setActiveNav('documents')
+      return
+    }
+    if (action === 'policy') {
+      setActiveFinding(finding?.id || null)
+      setActiveNav('linter')
+      return
+    }
+    if (action === 'message') {
+      setActiveNav('team')
+      setMessageWorkspaceTab('chat')
+      setNewComment(`@Elena Could we review “${finding?.title || documentDisplayName(selectedDoc)}”? `)
+      window.setTimeout(() => chatInputRef.current?.focus(), 0)
+      return
+    }
+    const taskTitle = action === 'assign'
+      ? `Elena: review ${finding?.title || documentDisplayName(selectedDoc)}`
+      : action === 'due-date'
+        ? `Add a due date for ${finding?.title || 'this review'}`
+        : `Review ${finding?.title || documentDisplayName(selectedDoc)}`
+    setSpaceTasks((current) => [...current, {
+      id: `assistant-task-${Date.now()}`,
+      title: taskTitle,
+      detail: action === 'assign' ? 'Assigned to Elena · created by LexisGuide assistant' : action === 'due-date' ? 'Due date needed · created by LexisGuide assistant' : 'Linked to current document · created by LexisGuide assistant',
+      completed: false,
+    }])
+    setMessageNotice(action === 'assign' ? 'A task for Elena was added to this review.' : action === 'due-date' ? 'A due-date task was added to this review.' : 'A review task was added to this workspace.')
+    setActiveNav('team')
+    setMessageWorkspaceTab('tasks')
   }
 
   const handleRealtimeTextChange = (newText: string) => {
@@ -1234,7 +1282,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
 
 
   return (
-    <div className={`d2-root ${sectionTitleExpanded ? 'd2-section-title-expanded' : 'd2-section-title-compact'}`}>
+    <div className={`d2-root ${sectionTitleExpanded ? 'd2-section-title-expanded' : 'd2-section-title-compact'} ${assistantOpen ? 'd2-assistant-docked' : ''}`}>
       {/* ───── Sidebar ───── */}
       <aside className={`d2-sidebar ${collapsed ? 'd2-sidebar-collapsed' : ''}`}>
         <div className="d2-sidebar-top">
@@ -2491,15 +2539,23 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
       </div>
 
       <section className={`d2-assistant ${assistantOpen ? 'd2-assistant-open' : ''}`} aria-label="LexisGuide assistant">
+        {assistantOpen && <button className="d2-assistant-backdrop" type="button" aria-label="Close assistant" onClick={() => setAssistantOpen(false)} />}
         {assistantOpen && <div className="d2-assistant-panel" role="dialog" aria-modal="false" aria-label="Ask LexisGuide">
           <header className="d2-assistant-header">
             <span className="d2-assistant-mark" aria-hidden="true">✦</span>
-            <div><strong>LexisGuide assistant</strong><small><i /> Knows this page and your documents</small></div>
+            <div><strong>LexisGuide assistant</strong><small><i /> Context-aware workspace guide</small></div>
             <button type="button" aria-label="Close assistant" onClick={() => setAssistantOpen(false)}>×</button>
           </header>
-          <div className="d2-assistant-context"><span>Viewing</span><strong>{navItems.find((item) => item.key === activeNav)?.label}</strong><span>·</span><strong>{documentDisplayName(selectedDoc)}</strong></div>
+          <div className="d2-assistant-reference">
+            <span>Using: <strong>{documentDisplayName(selectedDoc)}</strong></span>
+            <button type="button" onClick={() => setAssistantScopeOpen((open) => !open)} aria-expanded={assistantScopeOpen}>
+              <span>Scope: <strong>{findingTotal} findings · 1 document · current review workspace</strong></span><b aria-hidden="true">⌄</b>
+            </button>
+          </div>
+          {assistantScopeOpen && <div className="d2-assistant-scope" role="status"><strong>Assistant access for this answer</strong><span>Current page: {navItems.find((item) => item.key === activeNav)?.label}</span><span>Current document: {documentDisplayName(selectedDoc)}</span><span>Review data: {findingTotal} linked finding{findingTotal === 1 ? '' : 's'}</span></div>}
+          <div className={`d2-assistant-mode d2-assistant-mode-${assistantMode}`}><i /><strong>{assistantModeCopy}</strong><span>{assistantMode === 'demo' ? 'These are practice documents, not your personal files.' : assistantMode === 'limited' ? 'General navigation help remains available.' : 'Answers use the active document and review workspace.'}</span></div>
           <div className="d2-assistant-messages" aria-live="polite">
-            {assistantMessages.map((message) => <article key={message.id} className={`d2-assistant-message d2-assistant-message-${message.role}`}><p>{message.text}</p>{message.findings?.length ? <div className="d2-assistant-findings">{message.findings.map((finding, index) => <button key={`${finding.title}-${index}`} type="button" onClick={() => setActiveNav('linter')}><i className={`d2-sev-dot d2-sev-${/critical|high/i.test(finding.severity) ? 'critical' : /pass|low/i.test(finding.severity) ? 'pass' : 'warning'}`} />{finding.title}</button>)}</div> : null}</article>)}
+            {assistantMessages.map((message) => <article key={message.id} className={`d2-assistant-message d2-assistant-message-${message.role}`}><p>{message.text}</p>{message.findings?.length ? <div className="d2-assistant-findings">{message.findings.map((finding, index) => <button key={`${finding.title}-${index}`} type="button" onClick={() => { const matchingFinding = selectedDoc.findings.find((candidate) => candidate.title === finding.title); setActiveFinding(matchingFinding?.id || activeFinding); setActiveNav('linter') }}><i className={`d2-sev-dot d2-sev-${/critical|high/i.test(finding.severity) ? 'critical' : /pass|low/i.test(finding.severity) ? 'pass' : 'warning'}`} />{finding.title}</button>)}</div> : null}{message.role === 'assistant' && <div className="d2-assistant-actions" aria-label="Assistant follow-up actions"><button type="button" onClick={() => runAssistantAction('evidence')}>Open source passage</button><button type="button" onClick={() => runAssistantAction('task')}>Create task</button><button type="button" onClick={() => runAssistantAction('message')}>Draft message</button><button type="button" onClick={() => runAssistantAction('assign')}>Assign to Elena</button><button type="button" onClick={() => runAssistantAction('due-date')}>Add due date</button><button type="button" onClick={() => runAssistantAction('policy')}>Compare against rule</button></div>}</article>)}
             {assistantLoading && <article className="d2-assistant-message d2-assistant-message-assistant d2-assistant-thinking"><span /><span /><span /> Looking at the current workspace…</article>}
           </div>
           <div className="d2-assistant-suggestions" aria-label="Suggested questions">{assistantQuickPrompts[activeNav].map((prompt) => <button type="button" key={prompt} onClick={() => void askAssistant(prompt)}>{prompt}</button>)}</div>
@@ -2510,7 +2566,7 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
           <p className="d2-assistant-note">Guidance only—not legal advice. Review important decisions with a qualified professional.</p>
         </div>}
         <button type="button" className="d2-assistant-launcher" onClick={() => setAssistantOpen((open) => !open)} aria-label={assistantOpen ? 'Close LexisGuide assistant' : 'Open LexisGuide assistant'} aria-expanded={assistantOpen}>
-          <span aria-hidden="true">✦</span><em>Ask LexisGuide</em>
+          <span aria-hidden="true">✦</span><em>Ask about this review</em>
         </button>
       </section>
 
