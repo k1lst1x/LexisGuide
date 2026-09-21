@@ -32,6 +32,49 @@ def test_analyze_returns_legal_disclaimer(authenticated_client: TestClient) -> N
     }
 
 
+def test_analyze_rejects_requests_when_the_ai_review_quota_is_exhausted(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class UnexpectedAgent:
+        def review(self, *_: object, **__: object) -> dict[str, object]:
+            raise AssertionError("The model must not be called after rate limiting.")
+
+    monkeypatch.setattr(routes, "configured_agent", lambda: UnexpectedAgent())
+    monkeypatch.setattr(routes, "consume_review_quota", lambda _: False)
+
+    response = authenticated_client.post(
+        "/api/v1/analyze", json={"document_text": "Example agreement."}
+    )
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "60"
+    assert response.json() == {"detail": "Review limit reached. Please try again shortly."}
+
+
+def test_analyze_reserves_quota_for_a_configured_agent(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Agent:
+        def review(self, *_: object, **__: object) -> dict[str, object]:
+            return {
+                "findings": [],
+                "disclaimer": "LexisGuide provides general information, not legal advice.",
+            }
+
+    quota_subjects: list[str] = []
+    monkeypatch.setattr(routes, "configured_agent", lambda: Agent())
+    monkeypatch.setattr(
+        routes, "consume_review_quota", lambda subject: quota_subjects.append(subject) or True
+    )
+
+    response = authenticated_client.post(
+        "/api/v1/analyze", json={"document_text": "Example agreement."}
+    )
+
+    assert response.status_code == 200
+    assert quota_subjects == ["user-123"]
+
+
 def test_protected_routes_reject_requests_without_a_bearer_token(client: TestClient) -> None:
     response = client.get("/api/v1/me")
 

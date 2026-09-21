@@ -1,6 +1,7 @@
 from typing import Any
 
 import pytest
+from botocore.exceptions import ClientError
 
 from app import storage
 
@@ -17,6 +18,7 @@ class FakeTable:
         self.put_requests: list[dict[str, Any]] = []
         self.query_requests: list[dict[str, Any]] = []
         self.delete_requests: list[dict[str, Any]] = []
+        self.update_requests: list[dict[str, Any]] = []
 
     def get_item(self, **kwargs: Any) -> dict[str, Any]:
         self.get_requests.append(kwargs)
@@ -33,6 +35,9 @@ class FakeTable:
 
     def delete_item(self, **kwargs: Any) -> None:
         self.delete_requests.append(kwargs)
+
+    def update_item(self, **kwargs: Any) -> None:
+        self.update_requests.append(kwargs)
 
 
 @pytest.fixture
@@ -111,6 +116,7 @@ def test_workspace_invites_use_a_direct_key_and_are_consumed_once(
     assert invite["token"] == "invite-token"
     assert created_table.put_requests[0]["Item"]["PK"] == "INVITE#invite-token"
     assert created_table.put_requests[0]["Item"]["SK"] == "META"
+    assert created_table.put_requests[0]["Item"]["expires_at"] > 0
 
     consuming_table = FakeTable(
         get_responses=[
@@ -142,3 +148,43 @@ def test_workspace_invites_use_a_direct_key_and_are_consumed_once(
         "MEMBER#member-123",
         "WORKSPACE#workspace-123",
     ]
+
+
+def test_expired_workspace_invites_cannot_be_redeemed(table: FakeTable) -> None:
+    table.get_responses = [
+        {
+            "Item": {
+                "PK": "INVITE#expired-token",
+                "SK": "META",
+                "workspace_id": "workspace-123",
+                "expires_at": 1,
+            }
+        }
+    ]
+
+    assert storage.consume_workspace_invite("expired-token", {"sub": "member-123"}) is None
+    assert table.delete_requests == []
+    assert table.put_requests == []
+
+
+def test_review_quota_uses_an_atomic_expiring_counter(table: FakeTable) -> None:
+    assert storage.consume_review_quota("user-123") is True
+
+    request = table.update_requests[0]
+    assert request["Key"]["PK"].startswith("RATE#REVIEW#")
+    assert request["Key"]["SK"].startswith("WINDOW#")
+    assert request["ExpressionAttributeValues"][":increment"] == 1
+    assert request["ExpressionAttributeValues"][":expires_at"] > 0
+
+
+def test_review_quota_rejects_a_conditional_limit_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FullQuotaTable(FakeTable):
+        def update_item(self, **kwargs: Any) -> None:
+            raise ClientError(
+                {"Error": {"Code": "ConditionalCheckFailedException", "Message": "limit reached"}},
+                "UpdateItem",
+            )
+
+    monkeypatch.setattr(storage, "_table", lambda: FullQuotaTable())
+
+    assert storage.consume_review_quota("user-123") is False

@@ -49,6 +49,61 @@ variable "api_allowed_origins" {
   ]
 }
 
+variable "review_rate_limit_per_window" {
+  description = "Maximum expensive AI reviews one authenticated user can start per fixed window."
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.review_rate_limit_per_window >= 1 && var.review_rate_limit_per_window <= 1000
+    error_message = "review_rate_limit_per_window must be between 1 and 1000."
+  }
+}
+
+variable "review_rate_limit_window_seconds" {
+  description = "Length in seconds of the per-user AI review rate-limit window."
+  type        = number
+  default     = 60
+
+  validation {
+    condition     = var.review_rate_limit_window_seconds >= 1 && var.review_rate_limit_window_seconds <= 3600
+    error_message = "review_rate_limit_window_seconds must be between 1 and 3600."
+  }
+}
+
+variable "api_lambda_reserved_concurrency" {
+  description = "Hard cap on concurrent API Lambda executions to bound downstream AI spend."
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.api_lambda_reserved_concurrency >= 1
+    error_message = "api_lambda_reserved_concurrency must be at least 1."
+  }
+}
+
+variable "api_gateway_throttling_burst_limit" {
+  description = "Maximum short API Gateway request burst across all routes."
+  type        = number
+  default     = 20
+
+  validation {
+    condition     = var.api_gateway_throttling_burst_limit >= 1
+    error_message = "api_gateway_throttling_burst_limit must be at least 1."
+  }
+}
+
+variable "api_gateway_throttling_rate_limit" {
+  description = "Sustained API Gateway requests per second across all routes."
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.api_gateway_throttling_rate_limit >= 1
+    error_message = "api_gateway_throttling_rate_limit must be at least 1."
+  }
+}
+
 variable "google_client_id" {
   type    = string
   default = ""

@@ -7,6 +7,7 @@ from review_contract import ReviewResult
 from app.auth import current_user
 from app.legal_agent import configured_agent
 from app.storage import (
+    consume_review_quota,
     consume_workspace_invite,
     create_workspace,
     create_workspace_invite,
@@ -108,6 +109,12 @@ async def analyze_document(
         return AnalyzeResponse(
             findings=[],
             disclaimer="LexisGuide provides general information, not legal advice.",
+        )
+    if not consume_review_quota(_user["sub"]):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Review limit reached. Please try again shortly.",
+            headers={"Retry-After": "60"},
         )
     result = agent.review(
         payload.document_text,

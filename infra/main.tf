@@ -33,6 +33,12 @@ resource "aws_dynamodb_table" "user_data" {
     name = "SK"
     type = "S"
   }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
   point_in_time_recovery { enabled = true }
   server_side_encryption { enabled = true }
 }
@@ -146,6 +152,7 @@ data "aws_iam_policy_document" "api_lambda" {
       "dynamodb:GetItem",
       "dynamodb:PutItem",
       "dynamodb:Query",
+      "dynamodb:UpdateItem",
     ]
     resources = [aws_dynamodb_table.user_data.arn]
   }
@@ -167,23 +174,26 @@ resource "aws_iam_role_policy" "api_lambda" {
 }
 
 resource "aws_lambda_function" "api" {
-  function_name    = "${var.project_name}-api"
-  role             = aws_iam_role.api_lambda.arn
-  runtime          = "python3.12"
-  handler          = "app.lambda_handler.handler"
-  filename         = var.api_lambda_artifact_path
-  source_code_hash = filebase64sha256(var.api_lambda_artifact_path)
-  architectures    = ["x86_64"]
-  memory_size      = 1024
-  timeout          = 29
+  function_name                  = "${var.project_name}-api"
+  role                           = aws_iam_role.api_lambda.arn
+  runtime                        = "python3.12"
+  handler                        = "app.lambda_handler.handler"
+  filename                       = var.api_lambda_artifact_path
+  source_code_hash               = filebase64sha256(var.api_lambda_artifact_path)
+  architectures                  = ["x86_64"]
+  memory_size                    = 1024
+  timeout                        = 29
+  reserved_concurrent_executions = var.api_lambda_reserved_concurrency
 
   environment {
     variables = {
-      COGNITO_USER_POOL_ID        = aws_cognito_user_pool.main.id
-      COGNITO_USER_POOL_CLIENT_ID = aws_cognito_user_pool_client.web.id
-      USER_DATA_TABLE             = aws_dynamodb_table.user_data.name
-      AGENTCORE_RUNTIME_ARN       = var.agentcore_runtime_arn
-      CORS_ALLOW_ORIGINS          = join(",", var.api_allowed_origins)
+      COGNITO_USER_POOL_ID             = aws_cognito_user_pool.main.id
+      COGNITO_USER_POOL_CLIENT_ID      = aws_cognito_user_pool_client.web.id
+      USER_DATA_TABLE                  = aws_dynamodb_table.user_data.name
+      AGENTCORE_RUNTIME_ARN            = var.agentcore_runtime_arn
+      CORS_ALLOW_ORIGINS               = join(",", var.api_allowed_origins)
+      REVIEW_RATE_LIMIT_PER_WINDOW     = var.review_rate_limit_per_window
+      REVIEW_RATE_LIMIT_WINDOW_SECONDS = var.review_rate_limit_window_seconds
     }
   }
 
@@ -252,6 +262,11 @@ resource "aws_apigatewayv2_stage" "api" {
   api_id      = aws_apigatewayv2_api.api.id
   name        = "$default"
   auto_deploy = true
+
+  default_route_settings {
+    throttling_burst_limit = var.api_gateway_throttling_burst_limit
+    throttling_rate_limit  = var.api_gateway_throttling_rate_limit
+  }
 
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_gateway.arn

@@ -2,14 +2,29 @@ from __future__ import annotations
 
 import os
 import secrets
-from datetime import UTC, datetime
+import time
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
+from hashlib import sha256
 from typing import Any
 from uuid import uuid4
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
+
+INVITE_TTL_SECONDS = 24 * 60 * 60
+REVIEW_RATE_LIMIT_WINDOW_SECONDS = 60
+REVIEW_RATE_LIMIT_PER_WINDOW = 10
+
+
+def _bounded_positive_int(name: str, default: int, maximum: int) -> int:
+    """Read a deployment setting without allowing an invalid value to disable a guardrail."""
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return value if 0 < value <= maximum else default
 
 
 @lru_cache
@@ -114,14 +129,52 @@ def list_workspace_members(workspace_id: str) -> list[dict[str, Any]]:
     return response.get("Items", [])
 
 
+def consume_review_quota(user_id: str) -> bool:
+    """Atomically reserve one bounded Bedrock review per authenticated user.
+
+    The durable counter works across warm Lambda instances. Its partition key uses
+    a hash so user identifiers are not exposed in operational table views.
+    """
+    window_seconds = _bounded_positive_int(
+        "REVIEW_RATE_LIMIT_WINDOW_SECONDS", REVIEW_RATE_LIMIT_WINDOW_SECONDS, 3_600
+    )
+    request_limit = _bounded_positive_int(
+        "REVIEW_RATE_LIMIT_PER_WINDOW", REVIEW_RATE_LIMIT_PER_WINDOW, 1_000
+    )
+    now = int(time.time())
+    window_start = now - (now % window_seconds)
+    subject_hash = sha256(user_id.encode("utf-8")).hexdigest()
+
+    try:
+        _table().update_item(
+            Key={
+                "PK": f"RATE#REVIEW#{subject_hash}",
+                "SK": f"WINDOW#{window_start}",
+            },
+            UpdateExpression="SET expires_at = :expires_at ADD request_count :increment",
+            ConditionExpression="attribute_not_exists(request_count) OR request_count < :limit",
+            ExpressionAttributeValues={
+                ":expires_at": window_start + window_seconds + 300,
+                ":increment": 1,
+                ":limit": request_limit,
+            },
+        )
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return False
+        raise
+    return True
+
+
 def create_workspace_invite(workspace_id: str, inviter_id: str) -> dict[str, Any]:
     token = secrets.token_urlsafe(18)
-    now = datetime.now(UTC).isoformat()
+    now = datetime.now(UTC)
     invite = {
         "token": token,
         "workspace_id": workspace_id,
         "created_by": inviter_id,
-        "created_at": now,
+        "created_at": now.isoformat(),
+        "expires_at": int((now + timedelta(seconds=INVITE_TTL_SECONDS)).timestamp()),
     }
     # The random token is the partition key so joining is a constant-time read.
     # This avoids a table-wide Scan, which would both scale poorly and require
@@ -137,12 +190,17 @@ def consume_workspace_invite(token: str, user: dict[str, str]) -> dict[str, Any]
     if not invite:
         return None
 
+    now_timestamp = int(time.time())
+    expires_at = invite.get("expires_at")
+    if not isinstance(expires_at, int) or expires_at <= now_timestamp:
+        return None
+
     try:
         # A conditional deletion gives the token one-use semantics even when
         # two browsers submit it at the same time.
         table.delete_item(
             Key=invite_key,
-            ConditionExpression=Attr("PK").exists(),
+            ConditionExpression=Attr("PK").exists() & Attr("expires_at").gt(now_timestamp),
         )
     except ClientError as error:
         if error.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
