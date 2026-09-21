@@ -7098,3 +7098,205 @@ html, body {
 /* Review actions read as two separate controls, not a single dense block. */
 .d2-review-toolbar { display: flex; align-items: center; justify-content: flex-start; min-height: 58px; margin: 0 0 16px; padding: 0; }.d2-review-summary { display: inline-flex; align-items: center; justify-content: flex-start; gap: 24px; }.d2-finding-count { display: inline-flex; align-items: center; min-height: 42px; padding-right: 24px; border-right: 1px solid rgba(42,40,36,.11); color: #706e67; font-size: 15px; font-weight: 760; letter-spacing: -.015em; font-variant-numeric: tabular-nums; }.d2-review-toolbar .d2-action-primary { min-height: 46px; padding: 0 19px; border-radius: 12px; color: #fff !important; background: #1d1d1b !important; box-shadow: none; font-size: 14px; font-weight: 780; letter-spacing: -.01em; transition: transform .2s cubic-bezier(.2,.8,.2,1), background .2s ease, box-shadow .2s ease; }.d2-review-toolbar .d2-action-primary:hover:not(:disabled) { background: #34322e !important; box-shadow: 0 7px 15px rgba(42,40,36,.14); transform: translateY(-1px); }.d2-review-toolbar .d2-action-primary:active:not(:disabled) { transform: translateY(0) scale(.985); }
 @media (max-width: 620px) { .d2-review-toolbar { min-height: 62px; padding-inline: 0; }.d2-review-summary { width: 100%; justify-content: space-between; gap: 12px; }.d2-finding-count { min-height: 44px; padding-right: 12px; font-size: 15px; }.d2-review-toolbar .d2-action-primary { min-height: 44px; padding-inline: 16px; border-radius: 12px; font-size: 13px; } }
+
+/* Messages: keep collaboration controls compact and let the complete page scroll. */
+.d2-content:has(.d2-messages-page) {
+  display: block;
+  overflow: auto;
+}
+.d2-messages-page {
+  display: flex;
+  min-height: 100%;
+  height: auto;
+  gap: 12px;
+  padding-bottom: 28px;
+}
+.d2-messages-page .d2-message-workspace {
+  flex: 0 0 auto;
+  min-height: 600px;
+  height: clamp(600px, calc(100vh - 248px), 720px);
+}
+.d2-shared-workspace-card {
+  padding: 12px 16px;
+  border-radius: 12px;
+}
+.d2-shared-workspace-heading { gap: 16px; }
+.d2-shared-workspace-heading h2 {
+  margin: 2px 0 3px;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.2;
+  letter-spacing: -.02em;
+}
+.d2-shared-workspace-heading p { font-size: 10px; line-height: 1.35; }
+.d2-shared-workspace-live { padding-top: 2px; font-size: 9px; }
+.d2-shared-workspace-controls { gap: 7px; margin-top: 10px; }
+.d2-shared-workspace-controls select,
+.d2-shared-workspace-controls input {
+  height: 34px;
+  padding-inline: 9px;
+  border-radius: 7px;
+  font-size: 10px;
+}
+.d2-shared-workspace-controls select { width: 220px; }
+.d2-shared-workspace-controls input,
+.d2-shared-workspace-controls input[aria-label="Workspace invite code"] { width: 175px; }
+.d2-shared-workspace-controls .d2-action-btn {
+  min-height: 34px;
+  padding-inline: 11px;
+  border-radius: 7px;
+  font-size: 10px;
+}
+.d2-shared-workspace-members {
+  gap: 5px;
+  margin-top: 9px;
+  padding-top: 8px;
+  font-size: 9px;
+}
+.d2-shared-member-chip { padding: 3px 6px; font-size: 8px; }
+.d2-shared-workspace-notice { margin-top: 8px; font-size: 9px; }
+@media (max-width: 920px) {
+  .d2-shared-workspace-controls select { width: min(220px, 100%); }
+  .d2-shared-workspace-controls input,
+  .d2-shared-workspace-controls input[aria-label="Workspace invite code"] { width: min(175px, calc(50% - 4px)); }
+}
+@media (max-width: 780px) {
+  .d2-messages-page .d2-message-workspace { min-height: auto; height: auto; }
+}
+
+/* Space-oriented collaboration layout: conversation list, focused work area, and details. */
+.d2-message-workspace {
+  grid-template-columns: 248px minmax(0, 1fr) 292px;
+  border-radius: 12px;
+}
+.d2-message-workspace.d2-message-workspace-details-closed {
+  grid-template-columns: 248px minmax(0, 1fr);
+}
+.d2-message-rail { padding: 16px 11px 13px; }
+.d2-message-rail-head { padding: 0 5px 12px; }
+.d2-message-rail-head h2 { font-size: 14px; }
+.d2-message-quick-search { min-height: 34px; margin-bottom: 13px; }
+.d2-space-shortcuts { display: grid; gap: 2px; margin: 0 0 13px; }
+.d2-space-shortcuts button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  color: #706e67;
+  background: transparent;
+  font: 700 10px/1 var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: color .16s ease, background .16s ease;
+}
+.d2-space-shortcuts button span { width: 14px; color: #9d5e17; font-size: 12px; text-align: center; }
+.d2-space-shortcuts button:hover { color: #292824; background: rgba(42,40,36,.055); }
+.d2-message-section-label { padding-bottom: 6px; }
+.d2-message-section-label-dm { margin-top: 13px; }
+.d2-conversation { border-radius: 6px; }
+.d2-conversation-active { color: #292824; background: #e9e6dc; box-shadow: inset 3px 0 #b8701f; }
+.d2-conversation:hover { background: #f0eee7; }
+.d2-message-thread-head { min-height: 68px; padding-right: 21px; padding-left: 21px; }
+.d2-thread-hash { width: 31px; height: 31px; border-radius: 7px; color: #9d5e17; background: #f7ead6; font-size: 16px; }
+.d2-thread-title h2 { color: #292824; font-size: 14px; }
+.d2-thread-title p { color: #817d75; font-size: 10px; }
+.d2-thread-actions button { border-radius: 6px; }
+.d2-space-tabs {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 42px;
+  padding: 0 21px;
+  border-bottom: 1px solid rgba(42,40,36,.10);
+}
+.d2-space-tabs button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: stretch;
+  padding: 1px 0 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: #817d75;
+  background: transparent;
+  font: 750 10px/1 var(--font-sans);
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease;
+}
+.d2-space-tabs button:hover { color: #514e47; }
+.d2-space-tabs .d2-space-tab-active { border-bottom-color: #b8701f; color: #292824; }
+.d2-space-tabs span { display: grid; place-items: center; min-width: 16px; height: 16px; border-radius: 8px; color: #9d5e17; background: #fbf1e2; font-size: 8px; }
+.d2-message-thread .d2-chat-messages { padding: 18px 21px 12px; gap: 13px; }
+.d2-message-thread .d2-chat-form { margin: 0 19px; }
+.d2-composer-note { margin: 7px 21px 13px; }
+.d2-space-tab-panel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  padding: 23px 24px;
+  overflow: auto;
+}
+.d2-space-tab-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; padding-bottom: 18px; border-bottom: 1px solid rgba(42,40,36,.09); }
+.d2-space-tab-panel-heading .d2-eyebrow { margin-bottom: 5px; }
+.d2-space-tab-panel-heading h3 { margin: 0; color: #292824; font: 700 18px/1.15 var(--font-serif); letter-spacing: -.025em; }
+.d2-space-tab-panel-heading p { margin: 5px 0 0; color: #817d75; font-size: 10px; line-height: 1.45; }
+.d2-space-file-card {
+  display: grid;
+  grid-template-columns: 37px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  margin-top: 15px;
+  padding: 12px;
+  border: 1px solid rgba(42,40,36,.12);
+  border-radius: 8px;
+  color: #292824;
+  background: #fffefa;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.d2-space-file-card:hover { border-color: rgba(184,112,31,.5); box-shadow: 0 7px 16px rgba(42,40,36,.07); transform: translateY(-1px); }
+.d2-space-file-card > span { display: grid; place-items: center; width: 37px; height: 37px; border-radius: 7px; color: #9d5e17; background: #f7ead6; font-size: 16px; }
+.d2-space-file-card div { display: grid; min-width: 0; gap: 4px; }.d2-space-file-card strong, .d2-space-file-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.d2-space-file-card strong { font-size: 11px; }.d2-space-file-card small { color: #817d75; font-size: 9px; }.d2-space-file-card b { color: #9d5e17; font-size: 10px; white-space: nowrap; }
+.d2-space-task-list { display: grid; padding-top: 7px; }.d2-space-task-list button { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 12px 2px; border: 0; border-bottom: 1px solid rgba(42,40,36,.08); color: #292824; background: transparent; font: 700 11px/1.2 var(--font-sans); text-align: left; cursor: pointer; }.d2-space-task-list i { width: 13px; height: 13px; border: 1px solid #bcb8ae; border-radius: 3px; }.d2-space-task-list i.d2-space-task-complete { border-color: #4b9267; background: #4b9267; box-shadow: inset 0 0 0 3px #fffefa; }.d2-space-task-list small { grid-column: 2; color: #817d75; font-size: 9px; font-weight: 600; }.d2-space-task-list span { grid-column: 3; grid-row: 1 / span 2; color: #9d5e17; font-size: 9px; }.d2-space-task-list button:hover { color: #9d5e17; }
+.d2-message-info { padding: 17px 15px; }.d2-message-info-head { padding-bottom: 14px; }.d2-message-info-head h2 { font-size: 14px; }.d2-message-info section { padding: 14px 0; }
+@media (max-width: 1240px) { .d2-message-workspace, .d2-message-workspace.d2-message-workspace-details-closed { grid-template-columns: 225px minmax(0, 1fr); }.d2-message-info { display: none; } }
+@media (max-width: 780px) { .d2-message-workspace, .d2-message-workspace.d2-message-workspace-details-closed { grid-template-columns: 1fr; }.d2-space-tabs { padding-inline: 16px; }.d2-space-tab-panel { min-height: 390px; padding: 18px 16px; }.d2-message-thread .d2-chat-messages { padding-inline: 16px; }.d2-message-thread .d2-chat-form { margin-inline: 16px; } }
+
+/* A compact, Gmail-like space bar keeps setup out of the conversation flow. */
+.d2-messages-page { gap: 8px; }
+.d2-messages-page .d2-page-header { min-height: 44px; margin: 0; }
+.d2-messages-page .d2-page-title { font-size: 24px; }
+.d2-messages-page .d2-section-header-copy > p { display: none; }
+.d2-messages-page .d2-section-header-copy .d2-eyebrow { margin-bottom: 3px; }
+.d2-shared-workspace-card { padding: 0; overflow: hidden; border-radius: 10px; }
+.d2-space-utility-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 16px; min-height: 52px; padding: 0 14px 0 12px; }
+.d2-space-utility-identity { display: flex; align-items: center; min-width: 0; gap: 9px; }.d2-space-utility-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; color: #9d5e17; background: #f6e8d1; font-size: 15px; font-weight: 800; }.d2-space-utility-identity div { display: grid; min-width: 0; gap: 2px; }.d2-space-utility-identity strong { overflow: hidden; color: #292824; font-size: 11px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }.d2-space-utility-identity small { display: inline-flex; align-items: center; gap: 5px; color: #817d75; font-size: 9px; font-weight: 650; }.d2-space-utility-identity small i { width: 6px; height: 6px; border-radius: 50%; background: #4b9267; box-shadow: 0 0 0 3px rgba(75,146,103,.1); }
+.d2-space-utility-members { display: inline-flex; align-items: center; gap: 7px; color: #817d75; font-size: 9px; font-weight: 700; white-space: nowrap; }.d2-space-utility-members .d2-member-stack i { border-color: #fffefa; }.d2-space-manage-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 28px; padding: 0 9px; border: 1px solid rgba(42,40,36,.12); border-radius: 6px; color: #514e47; background: #fffefa; font: 750 9px/1 var(--font-sans); cursor: pointer; transition: border-color .16s ease, background .16s ease, color .16s ease; }.d2-space-manage-btn:hover { border-color: rgba(184,112,31,.45); color: #9d5e17; background: #fbf5e9; }.d2-space-manage-btn span { color: #9d5e17; font-size: 12px; }
+.d2-shared-workspace-setup { padding: 10px 14px 12px; border-top: 1px solid rgba(42,40,36,.09); background: #fbfaf7; animation: d2-space-setup-in .18s ease both; }.d2-shared-workspace-setup-copy { display: flex; align-items: baseline; gap: 9px; }.d2-shared-workspace-setup-copy .d2-eyebrow { margin: 0; font-size: 8px; }.d2-shared-workspace-setup-copy p { margin: 0; color: #817d75; font-size: 9px; }.d2-shared-workspace-setup .d2-shared-workspace-controls { margin-top: 8px; }@keyframes d2-space-setup-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.d2-messages-page .d2-message-workspace { height: clamp(620px, calc(100dvh - 174px), 820px); min-height: 620px; grid-template-columns: 214px minmax(0, 1fr) 258px; }.d2-messages-page .d2-message-workspace.d2-message-workspace-details-closed { grid-template-columns: 214px minmax(0, 1fr); }.d2-message-rail { padding-inline: 9px; }.d2-message-rail-head { padding-inline: 4px; }.d2-message-rail-footer { padding-top: 11px; }.d2-message-info { padding: 15px 13px; }.d2-message-info section { padding-block: 12px; }.d2-message-thread .d2-chat-messages { padding-right: 24px; padding-left: 24px; }
+@media (max-width: 1240px) { .d2-messages-page .d2-message-workspace, .d2-messages-page .d2-message-workspace.d2-message-workspace-details-closed { grid-template-columns: 208px minmax(0, 1fr); } }
+@media (max-width: 780px) { .d2-messages-page .d2-page-header { min-height: auto; }.d2-space-utility-bar { grid-template-columns: minmax(0, 1fr) auto; }.d2-space-utility-members { display: none; }.d2-messages-page .d2-message-workspace, .d2-messages-page .d2-message-workspace.d2-message-workspace-details-closed { min-height: 560px; height: auto; }.d2-shared-workspace-setup-copy { display: block; }.d2-shared-workspace-setup-copy p { margin-top: 4px; } }
+
+/* The collapsed class must win over the later dashboard sidebar width declaration. */
+.d2-root .d2-sidebar.d2-sidebar-collapsed {
+  width: 68px;
+  padding-inline: 8px;
+}
+.d2-sidebar.d2-sidebar-collapsed .d2-sidebar-brand {
+  justify-content: center;
+  padding-inline: 0;
+}
+.d2-sidebar.d2-sidebar-collapsed .d2-collapse-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}

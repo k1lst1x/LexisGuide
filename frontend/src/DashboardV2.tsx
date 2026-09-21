@@ -520,6 +520,9 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
   const [messageSearchOpen, setMessageSearchOpen] = useState(false)
   const [messageSearch, setMessageSearch] = useState('')
   const [messageNotice, setMessageNotice] = useState('')
+  const [messageWorkspaceTab, setMessageWorkspaceTab] = useState<'chat' | 'files' | 'tasks'>('chat')
+  const [messageDetailsOpen, setMessageDetailsOpen] = useState(true)
+  const [workspaceSetupOpen, setWorkspaceSetupOpen] = useState(false)
   const [remediating, setRemediating] = useState(false)
   const [aiWorkflowOpen, setAiWorkflowOpen] = useState(false)
   const [aiWorkflowMode, setAiWorkflowMode] = useState<'document-audit' | 'remediation' | 'project-plan'>('document-audit')
@@ -1077,9 +1080,9 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
       <aside className={`d2-sidebar ${collapsed ? 'd2-sidebar-collapsed' : ''}`}>
         <div className="d2-sidebar-top">
           <div className="d2-sidebar-brand">
-            <span className="d2-sidebar-mark">L</span>
+            {!collapsed && <span className="d2-sidebar-mark">L</span>}
             {!collapsed && <div className="d2-sidebar-brand-copy"><strong>LexisGuide</strong><span>Document workspace</span></div>}
-            <button className="d2-collapse-btn" onClick={() => setCollapsed(!collapsed)} aria-label="Toggle sidebar">
+            <button className="d2-collapse-btn" type="button" onClick={() => setCollapsed((isCollapsed) => !isCollapsed)} aria-label="Toggle sidebar" aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
               {icons.collapse}
             </button>
           </div>
@@ -2168,62 +2171,80 @@ export function DashboardV2({ onClose, onSignOut, userEmail }: { onClose: () => 
               </div>
 
               <section className="d2-shared-workspace-card" aria-label="Shared workspace access">
-                <div className="d2-shared-workspace-heading"><div><span className="d2-eyebrow">SHARED WORKSPACE</span><h2>{activeWorkspace?.name || 'Create or join a workspace'}</h2><p>Invite teammates with AWS Cognito accounts and collaborate on the same documents and review notes.</p></div><span className="d2-shared-workspace-live"><i /> Authenticated collaboration</span></div>
-                <div className="d2-shared-workspace-controls">
-                  <select aria-label="Choose workspace" value={activeWorkspace?.id || ''} onChange={(event) => { const workspace = workspaces.find((item) => item.id === event.target.value) || null; setActiveWorkspace(workspace) }}>
-                    <option value="">No workspace selected</option>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} · {workspace.role}</option>)}
-                  </select>
-                  <input aria-label="New workspace name" value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder="New workspace name" />
-                  <button className="d2-action-btn d2-btn-sm" onClick={() => void createSharedWorkspace()}>Create</button>
-                  <button className="d2-action-btn d2-btn-sm" disabled={!activeWorkspace} onClick={() => void inviteToWorkspace()}>Create invite</button>
-                  <input aria-label="Workspace invite code" value={workspaceInviteCode} onChange={(event) => setWorkspaceInviteCode(event.target.value)} placeholder="Paste invite code" />
-                  <button className="d2-action-btn d2-btn-sm" onClick={() => void joinSharedWorkspace()}>Join</button>
+                <div className="d2-space-utility-bar">
+                  <div className="d2-space-utility-identity"><span className="d2-space-utility-icon">#</span><div><strong>{activeWorkspace?.name || 'Document review'}</strong><small><i /> Shared space · {workspaceMembers.length || (userEmail ? 3 : 2)} members</small></div></div>
+                  <div className="d2-space-utility-members" aria-label="Space members"><div className="d2-member-stack"><i>E</i><i>A</i>{userEmail && <i>{userEmail[0].toUpperCase()}</i>}</div><span>{workspaceMembers.length ? `${workspaceMembers.length} members` : 'Private space'}</span></div>
+                  <button className="d2-space-manage-btn" aria-expanded={workspaceSetupOpen} onClick={() => setWorkspaceSetupOpen((open) => !open)}>{workspaceSetupOpen ? 'Done' : 'Manage'} <span>{workspaceSetupOpen ? '↑' : '⌄'}</span></button>
                 </div>
-                {activeWorkspace && <div className="d2-shared-workspace-members"><span>{workspaceMembers.length} member{workspaceMembers.length === 1 ? '' : 's'} connected</span>{workspaceMembers.slice(0, 5).map((member) => <span key={member.user_id} className="d2-shared-member-chip">{(member.email || member.name || member.user_id)[0].toUpperCase()} {member.email || member.name || 'Member'} · {member.role}</span>)}</div>}
-                {workspaceNotice && <p className="d2-shared-workspace-notice" role="status">{workspaceNotice}</p>}
+                {workspaceSetupOpen && <div className="d2-shared-workspace-setup">
+                  <div className="d2-shared-workspace-setup-copy"><span className="d2-eyebrow">SPACE ACCESS</span><p>Create a shared space, invite collaborators, or join with an invite code.</p></div>
+                  <div className="d2-shared-workspace-controls">
+                    <select aria-label="Choose workspace" value={activeWorkspace?.id || ''} onChange={(event) => { const workspace = workspaces.find((item) => item.id === event.target.value) || null; setActiveWorkspace(workspace) }}>
+                    <option value="">No workspace selected</option>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name} · {workspace.role}</option>)}
+                    </select>
+                    <input aria-label="New workspace name" value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder="New workspace name" />
+                    <button className="d2-action-btn d2-btn-sm" onClick={() => void createSharedWorkspace()}>Create</button>
+                    <button className="d2-action-btn d2-btn-sm" disabled={!activeWorkspace} onClick={() => void inviteToWorkspace()}>Create invite</button>
+                    <input aria-label="Workspace invite code" value={workspaceInviteCode} onChange={(event) => setWorkspaceInviteCode(event.target.value)} placeholder="Paste invite code" />
+                    <button className="d2-action-btn d2-btn-sm" onClick={() => void joinSharedWorkspace()}>Join</button>
+                  </div>
+                  {activeWorkspace && <div className="d2-shared-workspace-members"><span>{workspaceMembers.length} member{workspaceMembers.length === 1 ? '' : 's'} connected</span>{workspaceMembers.slice(0, 5).map((member) => <span key={member.user_id} className="d2-shared-member-chip">{(member.email || member.name || member.user_id)[0].toUpperCase()} {member.email || member.name || 'Member'} · {member.role}</span>)}</div>}
+                  {workspaceNotice && <p className="d2-shared-workspace-notice" role="status">{workspaceNotice}</p>}
+                </div>}
               </section>
 
               {messageNotice && <div className="d2-message-notice" role="status"><span>✓</span>{messageNotice}<button aria-label="Dismiss message" onClick={() => setMessageNotice('')}>×</button></div>}
 
-              <div className="d2-message-workspace">
+              <div className={`d2-message-workspace ${messageDetailsOpen ? '' : 'd2-message-workspace-details-closed'}`}>
                 <aside className="d2-message-rail" aria-label="Chats">
-                  <div className="d2-message-rail-head"><div><span className="d2-eyebrow">INBOX</span><h2>Chats</h2></div><button aria-label="New chat" className="d2-message-plus" onClick={() => setMessageNotice('New chat started. Add a topic to begin.')}>+</button></div>
+                  <div className="d2-message-rail-head"><div><span className="d2-eyebrow">MESSAGES</span><h2>Conversations</h2></div><button aria-label="New chat" className="d2-message-plus" onClick={() => setMessageNotice('New chat started. Add a topic to begin.')}>+</button></div>
                   <button className="d2-message-quick-search" onClick={() => setMessageSearchOpen(true)}><span>⌕</span> Search <kbd>⌘K</kbd></button>
-                  <div className="d2-message-section-label">WORKSPACE</div>
-                  <button className="d2-conversation d2-conversation-active"><span className="d2-conversation-icon">#</span><span><strong>Review</strong><small>{selectedDoc.status}</small></span><b>{comments.length}</b></button>
+                  <div className="d2-space-shortcuts"><button onClick={() => setMessageNotice('Showing all conversations.')}><span>◷</span> All</button><button onClick={() => setMessageNotice('You have no new mentions.')}><span>@</span> Mentions</button></div>
+                  <div className="d2-message-section-label">SPACES</div>
+                  <button className="d2-conversation d2-conversation-active"><span className="d2-conversation-icon">#</span><span><strong>Document review</strong><small>{selectedDoc.status}</small></span><b>{comments.length}</b></button>
                   <button className="d2-conversation" onClick={() => setMessageNotice('Questions are ready for the next discussion.')}><span className="d2-conversation-icon">?</span><span><strong>Questions</strong><small>Get a second opinion</small></span></button>
+                  <div className="d2-message-section-label d2-message-section-label-dm">DIRECT MESSAGES</div>
                   <button className="d2-conversation" onClick={() => setMessageNotice('Your saved updates will appear here.')}><span className="d2-conversation-icon">✦</span><span><strong>Updates</strong><small>Follow-up reminders</small></span></button>
                   <div className="d2-message-rail-footer"><div className="d2-member-stack"><i>E</i><i>A</i>{userEmail && <i>{userEmail[0].toUpperCase()}</i>}</div><span>{userEmail ? '3 online' : '2 online'}</span></div>
                 </aside>
 
                 <section className="d2-message-thread" aria-label="Review chat">
-                  <header className="d2-message-thread-head"><div className="d2-thread-title"><span className="d2-thread-hash">#</span><div><h2>Review</h2><p>{userEmail ? '3 people' : '2 people'} · Document support</p></div></div><div className="d2-thread-actions"><button aria-label="Search this conversation" onClick={() => setMessageSearchOpen(true)}>⌕</button><button aria-label="Thread information" onClick={() => setMessageNotice('Details are open on the right.')}>ⓘ</button><button aria-label="More conversation actions" onClick={() => setMessageNotice('Chat tools are ready when you need them.')}>•••</button></div></header>
-                  <div className="d2-thread-context"><span className="d2-thread-context-icon">{documentKind(selectedDoc.type).icon}</span><div><small>IN REVIEW</small><strong>{documentDisplayName(selectedDoc)}</strong></div><button onClick={() => setActiveNav('documents')}>Open →</button></div>
-                  <div className="d2-chat-messages">
-                    <div className="d2-message-day">Today</div>
-                    {comments.map((c, idx) => {
-                      const isMine = c.user.startsWith('You')
-                      const initial = isMine ? (userEmail?.[0].toUpperCase() || 'Y') : c.user.startsWith('Elena') ? 'E' : 'A'
-                      return <div key={`${c.time}-${idx}`} className={`d2-chat-msg ${isMine ? 'd2-chat-msg-mine' : ''}`}>
-                        <div className="d2-chat-avatar">{initial}</div><div className="d2-chat-bubble"><div className="d2-chat-msg-header"><strong>{c.user}</strong><span>{c.time}</span></div><p>{c.text}</p>{idx === 0 && <button className="d2-message-reference" onClick={() => setActiveNav('documents')}>↗ Review: appeal deadline</button>}</div>
-                      </div>
-                    })}
+                  <header className="d2-message-thread-head"><div className="d2-thread-title"><span className="d2-thread-hash">#</span><div><h2>Document review</h2><p>{userEmail ? '3 people' : '2 people'} · Shared space</p></div></div><div className="d2-thread-actions"><button aria-label="Search this conversation" onClick={() => setMessageSearchOpen(true)}>⌕</button><button aria-label="Thread information" onClick={() => setMessageDetailsOpen(true)}>ⓘ</button><button aria-label="More conversation actions" onClick={() => setMessageNotice('Chat tools are ready when you need them.')}>•••</button></div></header>
+                  <div className="d2-space-tabs" role="tablist" aria-label="Document review workspace">
+                    <button role="tab" aria-selected={messageWorkspaceTab === 'chat'} className={messageWorkspaceTab === 'chat' ? 'd2-space-tab-active' : ''} onClick={() => setMessageWorkspaceTab('chat')}>Chat</button>
+                    <button role="tab" aria-selected={messageWorkspaceTab === 'files'} className={messageWorkspaceTab === 'files' ? 'd2-space-tab-active' : ''} onClick={() => setMessageWorkspaceTab('files')}>Files <span>1</span></button>
+                    <button role="tab" aria-selected={messageWorkspaceTab === 'tasks'} className={messageWorkspaceTab === 'tasks' ? 'd2-space-tab-active' : ''} onClick={() => setMessageWorkspaceTab('tasks')}>Tasks <span>{potentialRiskCount}</span></button>
                   </div>
-                  <form onSubmit={handleAddComment} className="d2-chat-form">
-                    <button type="button" aria-label="Add an attachment" className="d2-composer-tool" onClick={() => setMessageNotice('Attachments can be added from the Documents workspace.')}>+</button>
-                    <input type="text" placeholder="Type a message..." value={newComment} onChange={(e) => setNewComment(e.target.value)} className="d2-chat-input" />
-                    <button type="button" aria-label="Add an emoji" className="d2-composer-tool" onClick={() => setNewComment(`${newComment} ✓`)}>☺</button>
-                    <button type="submit" className="d2-chat-send">Send <span>↗</span></button>
-                  </form>
-                  <p className="d2-composer-note">Enter to send · Linked to this review.</p>
+                  {messageWorkspaceTab === 'chat' && <>
+                    <div className="d2-thread-context"><span className="d2-thread-context-icon">{documentKind(selectedDoc.type).icon}</span><div><small>IN REVIEW</small><strong>{documentDisplayName(selectedDoc)}</strong></div><button onClick={() => setActiveNav('documents')}>Open →</button></div>
+                    <div className="d2-chat-messages">
+                      <div className="d2-message-day">Today</div>
+                      {comments.map((c, idx) => {
+                        const isMine = c.user.startsWith('You')
+                        const initial = isMine ? (userEmail?.[0].toUpperCase() || 'Y') : c.user.startsWith('Elena') ? 'E' : 'A'
+                        return <div key={`${c.time}-${idx}`} className={`d2-chat-msg ${isMine ? 'd2-chat-msg-mine' : ''}`}>
+                          <div className="d2-chat-avatar">{initial}</div><div className="d2-chat-bubble"><div className="d2-chat-msg-header"><strong>{c.user}</strong><span>{c.time}</span></div><p>{c.text}</p>{idx === 0 && <button className="d2-message-reference" onClick={() => setActiveNav('documents')}>↗ Review: appeal deadline</button>}</div>
+                        </div>
+                      })}
+                    </div>
+                    <form onSubmit={handleAddComment} className="d2-chat-form">
+                      <button type="button" aria-label="Add an attachment" className="d2-composer-tool" onClick={() => { setMessageWorkspaceTab('files'); setMessageNotice('Choose a document from the Files tab to share it here.') }}>+</button>
+                      <input type="text" placeholder="Type a message..." value={newComment} onChange={(e) => setNewComment(e.target.value)} className="d2-chat-input" />
+                      <button type="button" aria-label="Add an emoji" className="d2-composer-tool" onClick={() => setNewComment(`${newComment} ✓`)}>☺</button>
+                      <button type="submit" className="d2-chat-send">Send <span>↗</span></button>
+                    </form>
+                    <p className="d2-composer-note">Enter to send · Use @ to mention a teammate.</p>
+                  </>}
+                  {messageWorkspaceTab === 'files' && <section className="d2-space-tab-panel" aria-label="Shared files"><div className="d2-space-tab-panel-heading"><div><span className="d2-eyebrow">SHARED FILES</span><h3>Files in this space</h3><p>Open a document or jump back to its review.</p></div><button className="d2-action-btn d2-btn-sm" onClick={() => setActiveNav('documents')}>+ Add file</button></div><button className="d2-space-file-card" onClick={() => setActiveNav('documents')}><span>{documentKind(selectedDoc.type).icon}</span><div><strong>{documentDisplayName(selectedDoc)}</strong><small>Shared with this space · {potentialRiskCount} review items</small></div><b>Open →</b></button></section>}
+                  {messageWorkspaceTab === 'tasks' && <section className="d2-space-tab-panel" aria-label="Shared tasks"><div className="d2-space-tab-panel-heading"><div><span className="d2-eyebrow">REVIEW TASKS</span><h3>Keep the review moving</h3><p>Tasks stay connected to the document and this conversation.</p></div><button className="d2-action-btn d2-btn-sm" onClick={() => setMessageNotice('New task ready to assign.')}>+ New task</button></div><div className="d2-space-task-list"><button onClick={() => setActiveNav('documents')}><i />Clarify the appeal deadline <small>Linked to document review</small><span>Open →</span></button><button onClick={() => setActiveNav('linter')}><i />Confirm the filing destination <small>Assigned to review queue</small><span>Open →</span></button><button onClick={() => setActiveNav('documents')}><i className="d2-space-task-complete" />Verify issuing authority <small>Completed</small><span>View →</span></button></div></section>}
                 </section>
 
-                <aside className="d2-message-info" aria-label="Details">
-                  <div className="d2-message-info-head"><h2>Details</h2><button aria-label="Close details" onClick={() => setMessageNotice('Details remain available from Messages.')}>×</button></div>
+                {messageDetailsOpen && <aside className="d2-message-info" aria-label="Details">
+                  <div className="d2-message-info-head"><h2>Space details</h2><button aria-label="Close details" onClick={() => setMessageDetailsOpen(false)}>×</button></div>
                   <section><span className="d2-eyebrow">DOCUMENT</span><button className="d2-info-document" onClick={() => setActiveNav('documents')}><span>{documentKind(selectedDoc.type).icon}</span><div><strong>{documentDisplayName(selectedDoc)}</strong><small>{potentialRiskCount ? `${potentialRiskCount} items to review` : 'All checks complete'}</small></div><b>›</b></button></section>
                   <section><span className="d2-eyebrow">PEOPLE</span><div className="d2-info-person"><i className="d2-person-elena">E</i><div><strong>Elena Moritz</strong><small>Legal Aid Director · Online</small></div></div><div className="d2-info-person"><i className="d2-person-agency">A</i><div><strong>Agency Reviewer</strong><small>Compliance Officer · Online</small></div></div>{userEmail && <div className="d2-info-person"><i className="d2-person-you">{userEmail[0].toUpperCase()}</i><div><strong>You</strong><small>{userEmail}</small></div></div>}</section>
                   <section><span className="d2-eyebrow">ACTIONS</span><button className="d2-info-action" onClick={() => setActiveNav('linter')}>! Items to review <b>›</b></button><button className="d2-info-action" onClick={() => setActiveNav('chain')}>◌ Activity <b>›</b></button></section>
-                </aside>
+                </aside>}
               </div>
 
               {messageSearchOpen && <div className="d2-message-search-overlay" role="dialog" aria-modal="true" aria-label="Search messages"><button className="d2-message-search-backdrop" aria-label="Close message search" onClick={() => setMessageSearchOpen(false)} /><div className="d2-message-search-panel"><div className="d2-search-field"><span>⌕</span><input autoFocus placeholder="Search chats, people, or documents..." value={messageSearch} onChange={(event) => setMessageSearch(event.target.value)} /><button aria-label="Close search" onClick={() => setMessageSearchOpen(false)}>×</button></div><div className="d2-search-tabs"><button className="d2-search-tab-active">All</button><button>Chats</button><button>People</button><button>Docs</button></div><div className="d2-search-results"><small>WORKSPACE</small><button onClick={() => { setMessageSearchOpen(false); setActiveNav('documents') }}><span className="d2-search-result-icon">{documentKind(selectedDoc.type).icon}</span><div><strong>{documentDisplayName(selectedDoc)}</strong><p>Open this document</p></div><b>↵</b></button><button onClick={() => { setMessageSearchOpen(false); setMessageNotice('Review chat selected.') }}><span className="d2-search-result-icon">#</span><div><strong>Review</strong><p>{comments.length} messages · {userEmail ? '3' : '2'} people</p></div><b>↵</b></button><button onClick={() => { setMessageSearchOpen(false); setMessageNotice('Elena Moritz is available in this workspace.') }}><span className="d2-search-result-avatar">E</span><div><strong>Elena Moritz</strong><p>Legal Aid Director</p></div><b>↵</b></button></div><footer><kbd>↑↓</kbd> Move <kbd>↵</kbd> Select <span><kbd>esc</kbd> Close</span></footer></div></div>}
