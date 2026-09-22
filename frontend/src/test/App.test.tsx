@@ -37,7 +37,7 @@ describe('App', () => {
     render(<App />)
     await user.click(screen.getByRole('button', { name: 'Complete splash' }))
 
-    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Account menu' }))
     expect(await screen.findByText('person@example.com')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Sign Out & Exit' }))
@@ -77,7 +77,7 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'Sign In' }))
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
     expect(window.localStorage.getItem('lexisguide:workspace')).toBe('open')
     expect(JSON.parse(window.localStorage.getItem('lexisguide:workspace-user') ?? '{}')).toEqual({
       email: 'user@lexisguide.gov',
