@@ -37,9 +37,9 @@ function Shell({ onClose, onSignOut }: { onClose: () => void; onSignOut?: () => 
     <div className={`ws ${collapsed ? 'is-collapsed' : ''}`}>
       <aside className="ws-side" aria-label="Workspace navigation">
         <div className="ws-brand">
-          <span className="ws-brand-mark" aria-hidden="true">
+          <button type="button" className="ws-brand-mark" onClick={() => ws.go('overview')} aria-label="Open Home" title="Open Home">
             <svg viewBox="0 0 32 32" width="18" height="18"><path d="M6 26C6 15 13 6 27 5c-1 13-9 21-21 21Z" fill="currentColor" /><path d="M9 23c4-5 8-9 14-13" stroke="#fffaeb" strokeWidth="1.6" strokeLinecap="round" fill="none" /></svg>
-          </span>
+          </button>
           {!collapsed && <span className="ws-brand-name">LexisGuide</span>}
           <button type="button" className="ws-icon-btn" onClick={() => setCollapsed((v) => !v)} aria-label="Toggle sidebar" aria-expanded={!collapsed}><PanelLeft size={16} /></button>
         </div>
