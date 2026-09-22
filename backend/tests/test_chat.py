@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from lexisguide_assistant import ChatReply
 
 from app.api.v1 import routes
-from app.chat_agent import AssistantClient, runtime_session_id
+from app.chat_agent import AssistantClient, AssistantUnavailableError, runtime_session_id
 
 CHAT = {
     "conversation_id": "conv-12345678",
@@ -31,6 +31,8 @@ def test_chat_replies_with_a_per_user_session_and_marks_the_user_signed_in(
     authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls = []
+    releases = []
+    lease = object()
 
     class Assistant:
         def chat(self, request, session_id):
@@ -39,6 +41,8 @@ def test_chat_replies_with_a_per_user_session_and_marks_the_user_signed_in(
 
     monkeypatch.setattr(routes, "configured_assistant", lambda: Assistant())
     monkeypatch.setattr(routes, "consume_chat_quota", lambda _: True)
+    monkeypatch.setattr(routes, "acquire_remote_operation", lambda _: lease)
+    monkeypatch.setattr(routes, "release_remote_operation", releases.append)
 
     response = authenticated_client.post("/api/v1/chat", json=CHAT)
 
@@ -47,6 +51,7 @@ def test_chat_replies_with_a_per_user_session_and_marks_the_user_signed_in(
     request, session_id = calls[0]
     assert request.context.signed_in is True
     assert session_id == runtime_session_id("user-123", "conv-12345678")
+    assert releases == [lease]
 
 
 def test_chat_is_rate_limited(
@@ -61,6 +66,45 @@ def test_chat_is_rate_limited(
     response = authenticated_client.post("/api/v1/chat", json=CHAT)
     assert response.status_code == 429
     assert response.headers["retry-after"] == "60"
+
+
+def test_chat_rejects_when_shared_remote_capacity_is_full(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Assistant:
+        def chat(self, *_):
+            raise AssertionError("The assistant must not be called when shared capacity is full.")
+
+    monkeypatch.setattr(routes, "configured_assistant", lambda: Assistant())
+    monkeypatch.setattr(routes, "consume_chat_quota", lambda _: True)
+    monkeypatch.setattr(routes, "acquire_remote_operation", lambda _: None)
+
+    response = authenticated_client.post("/api/v1/chat", json=CHAT)
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "60"
+    assert response.json() == {"detail": "The AI service is busy. Please try again shortly."}
+
+
+def test_chat_releases_shared_capacity_when_the_remote_agent_fails(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lease = object()
+    releases: list[object] = []
+
+    class Assistant:
+        def chat(self, *_):
+            raise AssistantUnavailableError("upstream unavailable")
+
+    monkeypatch.setattr(routes, "configured_assistant", lambda: Assistant())
+    monkeypatch.setattr(routes, "consume_chat_quota", lambda _: True)
+    monkeypatch.setattr(routes, "acquire_remote_operation", lambda _: lease)
+    monkeypatch.setattr(routes, "release_remote_operation", releases.append)
+
+    response = authenticated_client.post("/api/v1/chat", json=CHAT)
+
+    assert response.status_code == 502
+    assert releases == [lease]
 
 
 @pytest.mark.parametrize(

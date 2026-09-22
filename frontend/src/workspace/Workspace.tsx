@@ -27,7 +27,7 @@ const NAV: Array<{ group: string; items: Array<{ key: NavItem; label: string; ic
 ]
 const ALL_NAV = [...NAV.flatMap((g) => g.items), { key: 'settings' as NavItem, label: 'Settings', icon: Settings }]
 
-function Shell({ onClose, onSignOut }: { onClose: () => void; onSignOut?: () => void }) {
+function Shell({ onClose, onSignOut, userEmail }: { onClose: () => void; onSignOut?: () => void; userEmail?: string }) {
   const ws = useWorkspace()
   const [collapsed, setCollapsed] = useState(false)
   const current = ALL_NAV.find((item) => item.key === ws.nav) ?? ALL_NAV[0]
@@ -100,7 +100,7 @@ function Shell({ onClose, onSignOut }: { onClose: () => void; onSignOut?: () => 
         </main>
       </div>
 
-      <WorkspaceChat />
+      <WorkspaceChat userEmail={userEmail} />
       <AddDocument />
       {ws.notice && <div className="ws-toast" role="status">{ws.notice}<button type="button" aria-label="Dismiss" onClick={() => ws.setNotice('')}>×</button></div>}
 
@@ -116,7 +116,7 @@ function Shell({ onClose, onSignOut }: { onClose: () => void; onSignOut?: () => 
 export function Workspace({ onClose, onSignOut, userEmail }: { onClose: () => void; onSignOut?: () => void; userEmail?: string }) {
   return (
     <WorkspaceProvider userEmail={userEmail}>
-      <Shell onClose={onClose} onSignOut={onSignOut} />
+      <Shell onClose={onClose} onSignOut={onSignOut} userEmail={userEmail} />
     </WorkspaceProvider>
   )
 }

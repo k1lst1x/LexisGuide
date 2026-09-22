@@ -67,6 +67,39 @@ variable "chat_rate_limit_per_window" {
   }
 }
 
+variable "statute_rate_limit_per_window" {
+  description = "Maximum authenticated lawfirm.dev statute lookups per user per 60-second window."
+  type        = number
+  default     = 20
+
+  validation {
+    condition     = var.statute_rate_limit_per_window >= 1 && var.statute_rate_limit_per_window <= 1000
+    error_message = "statute_rate_limit_per_window must be between 1 and 1000."
+  }
+}
+
+variable "remote_operation_per_user_concurrency" {
+  description = "Maximum concurrent AgentCore, Bedrock, or statute-provider operations per authenticated user."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.remote_operation_per_user_concurrency >= 1 && var.remote_operation_per_user_concurrency <= 8
+    error_message = "remote_operation_per_user_concurrency must be between 1 and 8."
+  }
+}
+
+variable "remote_operation_global_concurrency" {
+  description = "Shared concurrent AgentCore, Bedrock, and statute-provider operations; keep below Lambda concurrency."
+  type        = number
+  default     = 8
+
+  validation {
+    condition     = var.remote_operation_global_concurrency >= 1 && var.remote_operation_global_concurrency <= 100
+    error_message = "remote_operation_global_concurrency must be between 1 and 100."
+  }
+}
+
 variable "api_allowed_origins" {
   description = "Exact browser origins permitted to call the API with credentials."
   type        = list(string)

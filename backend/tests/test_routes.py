@@ -62,10 +62,14 @@ def test_analyze_reserves_quota_for_a_configured_agent(
             }
 
     quota_subjects: list[str] = []
+    releases: list[object] = []
+    lease = object()
     monkeypatch.setattr(routes, "configured_agent", lambda: Agent())
     monkeypatch.setattr(
         routes, "consume_review_quota", lambda subject: quota_subjects.append(subject) or True
     )
+    monkeypatch.setattr(routes, "acquire_remote_operation", lambda _: lease)
+    monkeypatch.setattr(routes, "release_remote_operation", releases.append)
 
     response = authenticated_client.post(
         "/api/v1/analyze", json={"document_text": "Example agreement."}
@@ -73,6 +77,27 @@ def test_analyze_reserves_quota_for_a_configured_agent(
 
     assert response.status_code == 200
     assert quota_subjects == ["user-123"]
+    assert releases == [lease]
+
+
+def test_analyze_rejects_when_shared_remote_capacity_is_full(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class UnexpectedAgent:
+        def review(self, *_: object, **__: object) -> dict[str, object]:
+            raise AssertionError("The model must not be called when shared capacity is full.")
+
+    monkeypatch.setattr(routes, "configured_agent", lambda: UnexpectedAgent())
+    monkeypatch.setattr(routes, "consume_review_quota", lambda _: True)
+    monkeypatch.setattr(routes, "acquire_remote_operation", lambda _: None)
+
+    response = authenticated_client.post(
+        "/api/v1/analyze", json={"document_text": "Example agreement."}
+    )
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "60"
+    assert response.json() == {"detail": "The AI service is busy. Please try again shortly."}
 
 
 def test_protected_routes_reject_requests_without_a_bearer_token(client: TestClient) -> None:

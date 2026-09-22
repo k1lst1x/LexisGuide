@@ -11,8 +11,10 @@ from app.chat_agent import AssistantUnavailableError, configured_assistant, runt
 from app.lawfirm import LawFirmResponseError, LawFirmUnavailableError, configured_lawfirm_client
 from app.legal_agent import configured_agent
 from app.storage import (
+    acquire_remote_operation,
     consume_chat_quota,
     consume_review_quota,
+    consume_statute_quota,
     consume_workspace_invite,
     create_workspace,
     create_workspace_invite,
@@ -22,6 +24,7 @@ from app.storage import (
     list_workspace_members,
     list_workspaces,
     put_profile,
+    release_remote_operation,
     save_record,
     set_workspace_linked_document,
 )
@@ -139,13 +142,23 @@ async def analyze_document(
             detail="Review limit reached. Please try again shortly.",
             headers={"Retry-After": "60"},
         )
-    result = agent.review(
-        payload.document_text,
-        action=payload.action,
-        jurisdiction=payload.jurisdiction,
-        user_context=payload.user_context,
-        goals=payload.goals,
-    )
+    lease = acquire_remote_operation(_user["sub"])
+    if lease is None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="The AI service is busy. Please try again shortly.",
+            headers={"Retry-After": "60"},
+        )
+    try:
+        result = agent.review(
+            payload.document_text,
+            action=payload.action,
+            jurisdiction=payload.jurisdiction,
+            user_context=payload.user_context,
+            goals=payload.goals,
+        )
+    finally:
+        release_remote_operation(lease)
     return AnalyzeResponse(**result)
 
 
@@ -164,6 +177,13 @@ async def chat(payload: ChatPayload, user: dict[str, str] = Depends(current_user
             detail="Message limit reached. Please try again shortly.",
             headers={"Retry-After": "60"},
         )
+    lease = acquire_remote_operation(user["sub"])
+    if lease is None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="The AI service is busy. Please try again shortly.",
+            headers={"Retry-After": "60"},
+        )
     request = ChatRequest(
         messages=payload.messages,
         context=payload.context.model_copy(update={"signed_in": True}),
@@ -175,6 +195,8 @@ async def chat(payload: ChatPayload, user: dict[str, str] = Depends(current_user
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="The assistant could not answer right now.",
         ) from error
+    finally:
+        release_remote_operation(lease)
 
 
 @router.get("/statutes/lookup", response_model=StatuteLookup)
@@ -190,6 +212,19 @@ async def lookup_statute(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Statute lookup is not configured.",
+        )
+    if not consume_statute_quota(_user["sub"]):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Statute lookup limit reached. Please try again shortly.",
+            headers={"Retry-After": "60"},
+        )
+    lease = acquire_remote_operation(_user["sub"])
+    if lease is None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="The statute service is busy. Please try again shortly.",
+            headers={"Retry-After": "60"},
         )
     try:
         return StatuteLookup(result=client.lookup_statute(jurisdiction, citation, as_of))
@@ -207,6 +242,8 @@ async def lookup_statute(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="The statute source is temporarily unavailable.",
         ) from error
+    finally:
+        release_remote_operation(lease)
 
 
 @router.get("/me", response_model=UserProfile)

@@ -177,6 +177,15 @@ def test_review_quota_uses_an_atomic_expiring_counter(table: FakeTable) -> None:
     assert request["ExpressionAttributeValues"][":expires_at"] > 0
 
 
+def test_statute_quota_uses_a_separate_atomic_expiring_counter(table: FakeTable) -> None:
+    assert storage.consume_statute_quota("user-123") is True
+
+    request = table.update_requests[0]
+    assert request["Key"]["PK"].startswith("RATE#STATUTE#")
+    assert request["Key"]["SK"].startswith("WINDOW#")
+    assert request["ExpressionAttributeValues"][":increment"] == 1
+
+
 def test_review_quota_rejects_a_conditional_limit_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     class FullQuotaTable(FakeTable):
         def update_item(self, **kwargs: Any) -> None:
@@ -188,3 +197,57 @@ def test_review_quota_rejects_a_conditional_limit_failure(monkeypatch: pytest.Mo
     monkeypatch.setattr(storage, "_table", lambda: FullQuotaTable())
 
     assert storage.consume_review_quota("user-123") is False
+
+
+def test_remote_operation_claims_global_and_user_slots_then_releases_them(
+    table: FakeTable,
+) -> None:
+    lease = storage.acquire_remote_operation("user-123")
+
+    assert lease is not None
+    assert len(table.put_requests) == 2
+    assert table.put_requests[0]["Item"]["PK"] == "REMOTE#GLOBAL"
+    assert table.put_requests[1]["Item"]["PK"].startswith("REMOTE#USER#")
+    assert all(request["ConditionExpression"] is not None for request in table.put_requests)
+
+    storage.release_remote_operation(lease)
+
+    assert len(table.delete_requests) == 2
+    assert all(request["ConditionExpression"] is not None for request in table.delete_requests)
+
+
+def test_remote_operation_rejects_when_all_slots_are_held(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FullSlotsTable(FakeTable):
+        def put_item(self, **kwargs: Any) -> None:
+            raise ClientError(
+                {"Error": {"Code": "ConditionalCheckFailedException", "Message": "slot held"}},
+                "PutItem",
+            )
+
+    monkeypatch.setattr(storage, "_table", lambda: FullSlotsTable())
+    monkeypatch.setenv("REMOTE_OPERATION_GLOBAL_CONCURRENCY", "1")
+
+    assert storage.acquire_remote_operation("user-123") is None
+
+
+def test_remote_operation_releases_global_slot_when_user_slots_are_full(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class UserSlotsFullTable(FakeTable):
+        def put_item(self, **kwargs: Any) -> None:
+            self.put_requests.append(kwargs)
+            if kwargs["Item"]["PK"].startswith("REMOTE#USER#"):
+                raise ClientError(
+                    {"Error": {"Code": "ConditionalCheckFailedException", "Message": "slot held"}},
+                    "PutItem",
+                )
+
+    fake_table = UserSlotsFullTable()
+    monkeypatch.setattr(storage, "_table", lambda: fake_table)
+    monkeypatch.setenv("REMOTE_OPERATION_PER_USER_CONCURRENCY", "1")
+
+    assert storage.acquire_remote_operation("user-123") is None
+    assert len(fake_table.delete_requests) == 1
+    assert fake_table.delete_requests[0]["Key"]["PK"] == "REMOTE#GLOBAL"

@@ -42,15 +42,19 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Complete splash' }))
 
     expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
+    window.localStorage.setItem('lexisguide:chat-workspace:person@example.com', JSON.stringify({ turns: [{ role: 'user', content: 'Sensitive question' }] }))
+    window.localStorage.setItem('lexisguide:space-messages', JSON.stringify({ personal: [{ text: 'Sensitive message' }] }))
     await user.click(screen.getByRole('button', { name: 'Account menu' }))
     expect(await screen.findByText('person@example.com')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Sign Out & Exit' }))
 
     expect(authMocks.cognitoSignOut).toHaveBeenCalledOnce()
     expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
+    expect(window.localStorage.getItem('lexisguide:chat-workspace:person@example.com')).toBeNull()
+    expect(window.localStorage.getItem('lexisguide:space-messages')).toBeNull()
   })
 
-  it('restores the last workspace even when local sign-in has no Cognito session', async () => {
+  it('does not restore a cached workspace identity when no Cognito session exists', async () => {
     authMocks.cognitoGetCurrentUser.mockResolvedValue(null)
     window.localStorage.setItem('lexisguide:workspace', 'open')
     window.localStorage.setItem('lexisguide:workspace-user', JSON.stringify({ email: 'saved@example.com', username: 'saved@example.com' }))
@@ -58,7 +62,39 @@ describe('App', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Documents' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
+    expect(window.localStorage.getItem('lexisguide:workspace-user')).toBeNull()
+    expect(window.localStorage.getItem('lexisguide:last-section')).toBeNull()
+  })
+
+  it('clears stale workspace data without relying on a cached identity marker', async () => {
+    authMocks.cognitoGetCurrentUser.mockResolvedValue(null)
+    window.localStorage.setItem('lexisguide:workspace', 'open')
+    window.localStorage.setItem('lexisguide:space-messages', JSON.stringify({ personal: [{ text: 'Prior user message' }] }))
+    window.localStorage.setItem('lexisguide:chat-workspace:prior@example.com', JSON.stringify({ turns: [{ role: 'user', content: 'Prior user chat' }] }))
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
+    expect(window.localStorage.getItem('lexisguide:space-messages')).toBeNull()
+    expect(window.localStorage.getItem('lexisguide:chat-workspace:prior@example.com')).toBeNull()
+  })
+
+  it('clears unscoped workspace data before opening a different Cognito user session', async () => {
+    authMocks.cognitoGetCurrentUser.mockResolvedValue({ email: 'new@example.com', username: 'new@example.com' })
+    window.localStorage.setItem('lexisguide:workspace', 'open')
+    window.localStorage.setItem('lexisguide:space-messages', JSON.stringify({ personal: [{ text: 'Prior user message' }] }))
+    window.localStorage.setItem('lexisguide:chat-workspace:prior@example.com', JSON.stringify({ turns: [{ role: 'user', content: 'Prior user chat' }] }))
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
+    expect(window.localStorage.getItem('lexisguide:space-messages')).toBeNull()
+    expect(window.localStorage.getItem('lexisguide:chat-workspace:prior@example.com')).toBeNull()
+    expect(JSON.parse(window.localStorage.getItem('lexisguide:workspace-user') ?? '{}')).toEqual({
+      email: 'new@example.com',
+      username: 'new@example.com',
+    })
   })
 
   it('renders the landing page for an unknown hosted route', async () => {
