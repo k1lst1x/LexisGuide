@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import { AtSign, Bookmark, FileText, Hash, Info, Paperclip, Plus, Reply, Search, Send, Smile, X } from 'lucide-react'
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { AtSign, Bookmark, Check, Copy, FileText, Hash, Info, KeyRound, Paperclip, Plus, Reply, Search, Send, Smile, UsersRound, X } from 'lucide-react'
 import { useWorkspace } from '../store'
-import { documentDisplayName, documentKind, openFindings } from '../data'
+import { documentDisplayName, documentKind, openFindings, type SampleDoc } from '../data'
 import { Empty } from '../ui'
 
 const EMOJI = ['👍', '✅', '👀', '🙏', '⚠️', '🎉']
@@ -10,9 +10,49 @@ const PEOPLE = [
   { name: 'Agency Reviewer', role: 'Compliance Officer', initial: 'A' },
 ]
 
+const PANE_LIMITS = {
+  rail: { min: 208, max: 360 },
+  details: { min: 260, max: 420 },
+  thread: 360,
+  handles: 24,
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), Math.max(min, max))
+}
+
 function initialOf(user: string, userEmail?: string) {
   if (user.startsWith('You')) return (userEmail?.[0] || 'Y').toUpperCase()
   return user[0]?.toUpperCase() ?? '?'
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** Turns names such as “Benefits decision · #8942-B” into an in-chat review link. */
+function MessageText({ text, documents, onOpen }: { text: string; documents: SampleDoc[]; onOpen: (document: SampleDoc) => void }) {
+  const mentions = new Map<string, SampleDoc>()
+  documents.forEach((document) => {
+    ;[documentDisplayName(document), document.title].filter(Boolean).forEach((name) => mentions.set(name.toLowerCase(), document))
+  })
+  const names = [...mentions.keys()].sort((a, b) => b.length - a.length)
+  if (!names.length) return <p>{text}</p>
+  const expression = new RegExp(`(${names.map(escapeRegExp).join('|')})`, 'gi')
+  const parts = text.split(expression)
+  if (parts.length === 1) return <p>{text}</p>
+  return (
+    <p>
+      {parts.map((part, index) => {
+        const document = mentions.get(part.toLowerCase())
+        return document ? (
+          <button key={`${document.id}-${index}`} type="button" className="ws-document-mention" onClick={() => onOpen(document)} aria-label={`Open ${documentDisplayName(document)} in Review`}>
+            <FileText size={12} /> {part}
+          </button>
+        ) : part
+      })}
+    </p>
+  )
 }
 
 function SpaceAccess() {
@@ -20,24 +60,41 @@ function SpaceAccess() {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [invite, setInvite] = useState('')
+  const [copied, setCopied] = useState(false)
+  const create = async (event: FormEvent) => {
+    event.preventDefault()
+    const workspace = await ws.createWorkspace(name)
+    if (!workspace) return
+    setName('')
+    const newInvite = await ws.createInvite(workspace.id)
+    if (newInvite) setInvite(newInvite)
+  }
+  const copyInvite = async () => {
+    if (!invite) return
+    try {
+      await navigator.clipboard.writeText(invite)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      ws.setNotice('Copy the group code manually.')
+    }
+  }
   return (
     <section className="ws-msg-section" aria-label="Shared workspace access">
-      <h3>Space access</h3>
-      <p className="ws-muted">Create a shared space, invite signed-in teammates, or join with a code.</p>
-      {ws.workspaces.length > 0 && (
-        <select aria-label="Choose workspace" value={ws.activeWorkspace?.id || ''} onChange={(event) => void ws.selectWorkspace(event.target.value)}>
-          <option value="">No workspace selected</option>
-          {ws.workspaces.map((w) => <option key={w.id} value={w.id}>{w.name} · {w.role}</option>)}
-        </select>
-      )}
-      <form className="ws-inline-form" onSubmit={(event) => { event.preventDefault(); void ws.createWorkspace(name); setName('') }}>
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="New workspace name" aria-label="New workspace name" />
-        <button type="submit" className="ws-btn ws-btn-sm" disabled={!name.trim()}>Create</button>
+      <header className="ws-space-head"><h3>Shared workspace</h3><UsersRound size={14} /></header>
+      <p className="ws-muted">Create a group for your review, then share a one-time code with signed-in teammates.</p>
+      {ws.workspaces.length > 0 && <select aria-label="Choose workspace" value={ws.activeWorkspace?.id || ''} onChange={(event) => void ws.selectWorkspace(event.target.value)}>
+        <option value="">Choose a workspace</option>
+        {ws.workspaces.map((w) => <option key={w.id} value={w.id}>{w.name} · {w.role}</option>)}
+      </select>}
+      {ws.activeWorkspace && <div className="ws-space-current"><span>Active group</span><strong>{ws.activeWorkspace.name}</strong><button type="button" className="ws-link" onClick={async () => setInvite((await ws.createInvite()) || '')}><KeyRound size={13} /> New code</button></div>}
+      <form className="ws-inline-form" onSubmit={create}>
+        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Name a new group" aria-label="New workspace name" maxLength={80} />
+        <button type="submit" className="ws-btn ws-btn-sm" disabled={!name.trim()}><Plus size={13} /> Create</button>
       </form>
-      <button type="button" className="ws-btn ws-btn-sm ws-btn-block" disabled={!ws.activeWorkspace} onClick={async () => setInvite((await ws.createInvite()) || '')}>Create invite code</button>
-      {invite && <code className="ws-invite">{invite}</code>}
+      {invite && <div className="ws-invite-card" role="status"><span>Group code</span><code>{invite}</code><button type="button" className="ws-btn ws-btn-sm" onClick={() => void copyInvite()}>{copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}</button></div>}
       <form className="ws-inline-form" onSubmit={(event) => { event.preventDefault(); void ws.joinWorkspace(code); setCode('') }}>
-        <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="Paste invite code" aria-label="Workspace invite code" />
+        <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="Enter a group code" aria-label="Workspace invite code" autoCapitalize="none" />
         <button type="submit" className="ws-btn ws-btn-sm" disabled={!code.trim()}>Join</button>
       </form>
       {ws.members.length > 0 && <p className="ws-muted">{ws.members.length} member{ws.members.length === 1 ? '' : 's'}: {ws.members.slice(0, 4).map((m) => m.email || m.name).join(', ')}</p>}
@@ -55,9 +112,12 @@ export function MessagesView() {
   const [attachOpen, setAttachOpen] = useState(false)
   const [attachment, setAttachment] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(true)
+  const [railWidth, setRailWidth] = useState(240)
+  const [detailsWidth, setDetailsWidth] = useState(300)
   const [newTask, setNewTask] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
   const { refreshWorkspaces } = ws
 
   useEffect(() => { void refreshWorkspaces() }, [refreshWorkspaces])
@@ -73,30 +133,94 @@ export function MessagesView() {
     : []
   const send = () => { ws.sendMessage(ws.draft, attachment); setAttachment(null); setEmojiOpen(false) }
   const linked = ws.selected
+  const workspaceName = ws.activeWorkspace?.name ?? 'Personal workspace'
+
+  const beginResize = (pane: 'rail' | 'details', event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !gridRef.current) return
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = pane === 'rail' ? railWidth : detailsWidth
+    const bounds = gridRef.current.getBoundingClientRect()
+    const otherWidth = pane === 'rail' ? (detailsOpen ? detailsWidth : 0) : railWidth
+    const limits = PANE_LIMITS[pane]
+    const availableMax = bounds.width - otherWidth - PANE_LIMITS.thread - PANE_LIMITS.handles
+    const maximum = Math.min(limits.max, availableMax)
+
+    const onMove = (move: PointerEvent) => {
+      const delta = move.clientX - startX
+      const next = pane === 'rail' ? startWidth + delta : startWidth - delta
+      const size = clamp(next, limits.min, maximum)
+      if (pane === 'rail') setRailWidth(size)
+      else setDetailsWidth(size)
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', stop)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', stop, { once: true })
+  }
+
+  const resizeWithKeyboard = (pane: 'rail' | 'details', event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    const direction = event.key === 'ArrowRight' ? 1 : -1
+    const limits = PANE_LIMITS[pane]
+    const current = pane === 'rail' ? railWidth : detailsWidth
+    const next = pane === 'rail' ? current + direction * 16 : current - direction * 16
+    if (pane === 'rail') setRailWidth(clamp(next, limits.min, limits.max))
+    else setDetailsWidth(clamp(next, limits.min, limits.max))
+  }
 
   return (
     <div className="ws-page ws-messages">
-      <div className={`ws-msg-grid ${detailsOpen ? '' : 'no-details'}`}>
+      <div
+        ref={gridRef}
+        className={`ws-msg-grid ${detailsOpen ? 'is-details-open' : 'is-details-closed'}`}
+        style={{ '--ws-rail-width': `${railWidth}px`, '--ws-details-width': `${detailsWidth}px` } as CSSProperties}
+      >
         <aside className="ws-msg-rail" aria-label="Conversations">
           <div className="ws-msg-rail-head"><h1>Messages</h1><button type="button" className="ws-icon-btn" aria-label="Search this space" onClick={() => setSearchOpen(true)}><Search size={16} /></button></div>
+          {ws.workspaces.length > 0 && <>
+            <span className="ws-rail-label">Workspaces</span>
+            <div className="ws-workspace-list" aria-label="Your workspaces">
+              {ws.workspaces.map((workspace) => {
+                const active = workspace.id === ws.activeWorkspace?.id
+                return (
+                  <button key={workspace.id} type="button" className={`ws-workspace-item ${active ? 'is-active' : ''}`} aria-pressed={active} onClick={() => void ws.selectWorkspace(workspace.id)} title={`Open ${workspace.name}`}>
+                    <i>{workspace.name.trim().slice(0, 1).toUpperCase()}</i>
+                    <span><strong>{workspace.name}</strong><small>{workspace.role === 'owner' ? 'Owner' : workspace.role === 'local' ? 'Local group' : 'Member'}</small></span>
+                    {active && <Check size={14} aria-label="Active workspace" />}
+                  </button>
+                )
+              })}
+            </div>
+          </>}
           <span className="ws-rail-label">Channels</span>
           <button type="button" className="ws-channel is-active"><Hash size={15} /><span>Review</span><em>{ws.comments.length}</em></button>
           <button type="button" className="ws-channel" onClick={() => ws.setNotice('Questions is ready for your next discussion.')}><Hash size={15} /><span>Questions</span></button>
           <button type="button" className="ws-channel" onClick={() => ws.setNotice('Your saved updates will appear here.')}><Hash size={15} /><span>Updates</span></button>
-          <span className="ws-rail-label">People</span>
-          {PEOPLE.map((p) => (
-            <button key={p.name} type="button" className="ws-channel" onClick={() => { ws.setDraft(`@${p.name.split(' ')[0]} `); ws.focusComposer() }}>
-              <i className="ws-avatar ws-avatar-sm">{p.initial}</i><span>{p.name}</span><b className="ws-online" aria-label="Online" />
-            </button>
-          ))}
         </aside>
+
+        <div
+          className="ws-pane-resizer ws-pane-resizer-rail"
+          role="separator"
+          aria-label="Resize channel list"
+          aria-orientation="vertical"
+          aria-valuemin={PANE_LIMITS.rail.min}
+          aria-valuemax={PANE_LIMITS.rail.max}
+          aria-valuenow={Math.round(railWidth)}
+          tabIndex={0}
+          onPointerDown={(event) => beginResize('rail', event)}
+          onKeyDown={(event) => resizeWithKeyboard('rail', event)}
+        />
 
         <section className="ws-thread" aria-label="Review chat">
           <header className="ws-thread-head">
-            <div><h2><Hash size={17} /> Review</h2><p>{ws.userEmail ? '3 people' : '2 people'} · about {documentDisplayName(linked)}</p></div>
+            <div><h2><Hash size={17} /> Review</h2><p>{workspaceName} · {ws.userEmail ? '3 people' : '2 people'} · about {documentDisplayName(linked)}</p></div>
             <div className="ws-thread-tools">
               <button type="button" className="ws-icon-btn" aria-label="Search this conversation" onClick={() => setSearchOpen(true)}><Search size={16} /></button>
-              <button type="button" className="ws-icon-btn" aria-label="Toggle details" aria-pressed={detailsOpen} onClick={() => setDetailsOpen((v) => !v)}><Info size={16} /></button>
+              <button type="button" className="ws-icon-btn" aria-label={detailsOpen ? 'Close details' : 'Open details'} title={detailsOpen ? 'Close details' : 'Open details'} aria-pressed={detailsOpen} onClick={() => setDetailsOpen((v) => !v)}><Info size={16} /></button>
             </div>
           </header>
           <div className="ws-tabs" role="tablist" aria-label="Space sections">
@@ -123,7 +247,7 @@ export function MessagesView() {
                     <i className="ws-avatar">{initialOf(message.user, ws.userEmail)}</i>
                     <div className="ws-msg-body">
                       <header><strong>{message.user}</strong><small>{message.time}</small></header>
-                      <p>{message.text}</p>
+                      <MessageText text={message.text} documents={ws.documents} onOpen={ws.openInReview} />
                       {message.attachment && <button type="button" className="ws-attachment" onClick={() => ws.openInReview(message.attachment!)}><FileText size={13} /> {documentDisplayName(ws.documents.find((d) => d.id === message.attachment) ?? ws.selected)}</button>}
                       <div className="ws-msg-actions">
                         {['👍', '✅'].map((emoji) => (
@@ -136,7 +260,7 @@ export function MessagesView() {
                   </article>
                 )
               })}
-              {!shown.length && <Empty title={filter === 'mentions' ? 'No mentions yet' : 'Nothing saved yet'}>{filter === 'mentions' ? 'When a teammate uses @, it will appear here.' : 'Save a message to find it here later.'}</Empty>}
+              {!shown.length && <Empty title={filter === 'all' ? `No messages in ${workspaceName}` : filter === 'mentions' ? 'No mentions yet' : 'Nothing saved yet'}>{filter === 'all' ? 'Start this group conversation by sending the first message.' : filter === 'mentions' ? 'When a teammate uses @, it will appear here.' : 'Save a message to find it here later.'}</Empty>}
               <div ref={endRef} />
             </div>
             <form className="ws-composer" onSubmit={(event) => { event.preventDefault(); send() }}>
@@ -198,22 +322,36 @@ export function MessagesView() {
           )}
         </section>
 
-        {detailsOpen && (
-          <aside className="ws-msg-details" aria-label="Details">
-            <section className="ws-msg-section">
-              <h3>Linked document</h3>
-              <button type="button" className="ws-linked" onClick={() => ws.openInReview(linked)}>
-                <span className="ws-doc-icon">{documentKind(linked.type).icon}</span>
-                <span><strong>{documentDisplayName(linked)}</strong><small>{openFindings(linked, ws.resolved[linked.id]).length} items to review</small></span>
-              </button>
-            </section>
-            <section className="ws-msg-section">
-              <h3>People</h3>
-              {PEOPLE.map((p) => <div key={p.name} className="ws-person"><i className="ws-avatar ws-avatar-sm">{p.initial}</i><span><strong>{p.name}</strong><small>{p.role} · Online</small></span></div>)}
-            </section>
-            <SpaceAccess />
-          </aside>
-        )}
+        <div
+          className="ws-pane-resizer ws-pane-resizer-details"
+          role="separator"
+          aria-label="Resize details panel"
+          aria-orientation="vertical"
+          aria-valuemin={PANE_LIMITS.details.min}
+          aria-valuemax={PANE_LIMITS.details.max}
+          aria-valuenow={Math.round(detailsWidth)}
+          tabIndex={detailsOpen ? 0 : -1}
+          onPointerDown={(event) => beginResize('details', event)}
+          onKeyDown={(event) => resizeWithKeyboard('details', event)}
+        />
+        <aside className="ws-msg-details" aria-label="Details" aria-hidden={!detailsOpen}>
+          <header className="ws-msg-details-head">
+            <span>Details</span>
+            <button type="button" className="ws-icon-btn" aria-label="Close details" onClick={() => setDetailsOpen(false)}><X size={15} /></button>
+          </header>
+          <section className="ws-msg-section">
+            <h3>Linked document</h3>
+            <button type="button" className="ws-linked" onClick={() => ws.openInReview(linked)}>
+              <span className="ws-doc-icon">{documentKind(linked.type).icon}</span>
+              <span><strong>{documentDisplayName(linked)}</strong><small>{openFindings(linked, ws.resolved[linked.id]).length} items to review</small></span>
+            </button>
+          </section>
+          <section className="ws-msg-section">
+            <h3>People</h3>
+            {PEOPLE.map((p) => <div key={p.name} className="ws-person"><i className="ws-avatar ws-avatar-sm">{p.initial}</i><span><strong>{p.name}</strong><small>{p.role} · Online</small></span></div>)}
+          </section>
+          <SpaceAccess />
+        </aside>
       </div>
 
       {searchOpen && (

@@ -1,6 +1,6 @@
 /* Workspace state: documents, the active review, resolutions, collaboration,
    and the actions every view shares. Views read it with useWorkspace(). */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   LAST_SECTION_KEY, MESSAGE_STORAGE_KEY, cleanExtractedText, defaultTasks, defaultWorkspaceMessages, documentDisplayName,
   extractDocumentText, fileTitle, openFindings, sampleDocs,
@@ -9,6 +9,8 @@ import {
 import { reviewNewDocument, runDocumentAction, workspaceRequest } from './api'
 
 const RESOLVED_KEY = 'lexisguide:resolved-findings'
+const LOCAL_WORKSPACES_KEY = 'lexisguide:local-workspaces'
+const PERSONAL_WORKSPACE_ID = 'personal'
 const NAV_KEYS: NavItem[] = ['overview', 'documents', 'linter', 'chain', 'team', 'settings']
 
 export type AddStage = 'idle' | 'reading' | 'checking' | 'scoring' | 'done' | 'error'
@@ -20,6 +22,27 @@ function readJson<T>(key: string, fallback: T, valid: (value: unknown) => boolea
     const parsed = raw ? JSON.parse(raw) : null
     return valid(parsed) ? parsed as T : fallback
   } catch { return fallback }
+}
+
+function localWorkspaces() {
+  return readJson<WorkspaceSummary[]>(LOCAL_WORKSPACES_KEY, [], (value) => Array.isArray(value) && value.every((item) =>
+    typeof item?.id === 'string' && item.id.startsWith('local-') && typeof item.name === 'string'))
+}
+
+function saveLocalWorkspaces(workspaces: WorkspaceSummary[]) {
+  try { window.localStorage.setItem(LOCAL_WORKSPACES_KEY, JSON.stringify(workspaces.filter((item) => item.id.startsWith('local-')))) } catch { /* optional browser storage */ }
+}
+
+function messageGroups() {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(MESSAGE_STORAGE_KEY) || 'null') as unknown
+    const validMessages = (value: unknown): value is WorkspaceMessage[] => Array.isArray(value) && value.every((message) =>
+      typeof message?.id === 'string' && typeof message?.text === 'string')
+    // Upgrade the previous single-conversation storage format without losing it.
+    if (validMessages(raw)) return { [PERSONAL_WORKSPACE_ID]: raw }
+    if (raw && typeof raw === 'object' && !Array.isArray(raw) && Object.values(raw).every(validMessages)) return raw as Record<string, WorkspaceMessage[]>
+  } catch { /* start with the sample conversation */ }
+  return { [PERSONAL_WORKSPACE_ID]: defaultWorkspaceMessages }
 }
 
 function useWorkspaceState(userEmail?: string) {
@@ -39,15 +62,15 @@ function useWorkspaceState(userEmail?: string) {
   const [addStage, setAddStage] = useState<AddStage>('idle')
   const [addMessage, setAddMessage] = useState('')
 
-  const [comments, setComments] = useState<WorkspaceMessage[]>(() => readJson(MESSAGE_STORAGE_KEY, defaultWorkspaceMessages,
-    (v) => Array.isArray(v) && v.every((m) => typeof m?.id === 'string' && typeof m?.text === 'string')))
-  const [reactions, setReactions] = useState<Record<string, string[]>>({})
+  const [messagesByWorkspace, setMessagesByWorkspace] = useState<Record<string, WorkspaceMessage[]>>(messageGroups)
+  const [reactionsByWorkspace, setReactionsByWorkspace] = useState<Record<string, Record<string, string[]>>>({})
   const [tasks, setTasks] = useState<WorkspaceTask[]>(defaultTasks)
   const [draft, setDraft] = useState('')
   const [messageTab, setMessageTab] = useState<'chat' | 'files' | 'tasks'>('chat')
 
-  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>(localWorkspaces)
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceSummary | null>(null)
+  const activeWorkspaceRef = useRef<WorkspaceSummary | null>(null)
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [workspaceNotice, setWorkspaceNotice] = useState('')
   const [assistantOpen, setAssistantOpen] = useState(false)
@@ -61,12 +84,16 @@ function useWorkspaceState(userEmail?: string) {
   const focusComposer = useCallback(() => setComposerFocus((n) => n + 1), [])
 
   const selected = documents.find((doc) => doc.id === selectedId) ?? documents[0]
+  const activeMessageWorkspace = activeWorkspace?.id ?? PERSONAL_WORKSPACE_ID
+  const comments = messagesByWorkspace[activeMessageWorkspace] ?? []
+  const reactions = reactionsByWorkspace[activeMessageWorkspace] ?? {}
   const activeFinding = selected.findings.find((finding) => finding.id === activeFindingId) ?? null
   const isDemo = !documents.some((doc) => doc.id.startsWith('upload-'))
 
   useEffect(() => { window.localStorage.setItem(LAST_SECTION_KEY, nav) }, [nav])
-  useEffect(() => { window.localStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(comments)) }, [comments])
+  useEffect(() => { window.localStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(messagesByWorkspace)) }, [messagesByWorkspace])
   useEffect(() => { window.localStorage.setItem(RESOLVED_KEY, JSON.stringify(resolved)) }, [resolved])
+  useEffect(() => { activeWorkspaceRef.current = activeWorkspace }, [activeWorkspace])
   useEffect(() => {
     if (!notice) return
     const timer = window.setTimeout(() => setNotice(''), 5200)
@@ -181,20 +208,27 @@ function useWorkspaceState(userEmail?: string) {
   const sendMessage = useCallback((text: string, attachment?: string | null) => {
     const trimmed = text.trim()
     if (!trimmed) return
-    setComments((current) => [...current, { id: `message-${Date.now()}`, user: 'You (Reviewer)', text: trimmed, time: 'Just now', saved: false, attachment: attachment || undefined }])
+    setMessagesByWorkspace((current) => ({
+      ...current,
+      [activeMessageWorkspace]: [...(current[activeMessageWorkspace] ?? []), { id: `message-${Date.now()}`, user: 'You (Reviewer)', text: trimmed, time: 'Just now', saved: false, attachment: attachment || undefined }],
+    }))
     setDraft('')
-  }, [])
+  }, [activeMessageWorkspace])
 
   const toggleReaction = useCallback((messageId: string, emoji: string) => {
-    setReactions((current) => {
-      const list = current[messageId] ?? []
-      return { ...current, [messageId]: list.includes(emoji) ? list.filter((item) => item !== emoji) : [...list, emoji] }
+    setReactionsByWorkspace((current) => {
+      const group = current[activeMessageWorkspace] ?? {}
+      const list = group[messageId] ?? []
+      return { ...current, [activeMessageWorkspace]: { ...group, [messageId]: list.includes(emoji) ? list.filter((item) => item !== emoji) : [...list, emoji] } }
     })
-  }, [])
+  }, [activeMessageWorkspace])
 
   const toggleSaved = useCallback((messageId: string) => {
-    setComments((current) => current.map((m) => m.id === messageId ? { ...m, saved: !m.saved } : m))
-  }, [])
+    setMessagesByWorkspace((current) => ({
+      ...current,
+      [activeMessageWorkspace]: (current[activeMessageWorkspace] ?? []).map((message) => message.id === messageId ? { ...message, saved: !message.saved } : message),
+    }))
+  }, [activeMessageWorkspace])
 
   const addTask = useCallback((title: string, detail: string) => {
     setTasks((current) => [...current, { id: `task-${Date.now()}-${current.length}`, title, detail, completed: false }])
@@ -215,29 +249,76 @@ function useWorkspaceState(userEmail?: string) {
   const refreshWorkspaces = useCallback(async () => {
     try {
       const next = await workspaceRequest<WorkspaceSummary[]>('/workspaces')
-      setWorkspaces(next)
-      const workspace = next[0] ?? null
-      setActiveWorkspace((current) => next.find((item) => item.id === current?.id) ?? workspace)
-      const target = workspace
+      // A just-created DynamoDB membership can take a moment to appear in a
+      // normal-consistency query. Retain client-created groups until the API
+      // reports them, rather than making the sidebar briefly lose the group.
+      setWorkspaces((current) => {
+        const returned = new Set(next.map((item) => item.id))
+        const merged = [...next, ...current.filter((item) => !returned.has(item.id))]
+        saveLocalWorkspaces(merged)
+        return merged
+      })
+      const active = activeWorkspaceRef.current
+      const target = next.find((item) => item.id === active?.id) ?? active ?? next[0] ?? null
+      setActiveWorkspace(target)
       if (target) setMembers(await workspaceRequest<WorkspaceMember[]>(`/workspaces/${target.id}/members`))
+      else setMembers([])
     } catch (error) {
+      setWorkspaces((current) => {
+        const local = localWorkspaces()
+        const merged = [...current, ...local.filter((item) => !current.some((existing) => existing.id === item.id))]
+        return merged
+      })
       setWorkspaceNotice(error instanceof Error ? error.message : 'Shared workspace is unavailable.')
     }
   }, [])
 
-  const createWorkspace = useCallback(async (name: string) => {
-    if (!name.trim()) return
+  const createWorkspace = useCallback(async (name: string): Promise<WorkspaceSummary | null> => {
+    if (name.trim().length < 2) {
+      setWorkspaceNotice('Use at least 2 characters for the workspace name.')
+      return null
+    }
     try {
       const workspace = await workspaceRequest<WorkspaceSummary>('/workspaces', { method: 'POST', body: JSON.stringify({ name: name.trim() }) })
+      setWorkspaces((current) => {
+        const next = [workspace, ...current.filter((item) => item.id !== workspace.id)]
+        saveLocalWorkspaces(next)
+        return next
+      })
+      activeWorkspaceRef.current = workspace
+      setActiveWorkspace(workspace)
+      setMembers([])
       setWorkspaceNotice(`Workspace “${workspace.name}” created.`)
-      await refreshWorkspaces()
-    } catch (error) { setWorkspaceNotice(error instanceof Error ? error.message : 'Could not create workspace.') }
-  }, [refreshWorkspaces])
+      return workspace
+    } catch {
+      const workspace: WorkspaceSummary = {
+        id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: name.trim(),
+        owner_id: 'local',
+        created_at: new Date().toISOString(),
+        role: 'local',
+      }
+      setWorkspaces((current) => {
+        const next = [workspace, ...current]
+        saveLocalWorkspaces(next)
+        return next
+      })
+      activeWorkspaceRef.current = workspace
+      setActiveWorkspace(workspace)
+      setMembers([])
+      setWorkspaceNotice(`Workspace “${workspace.name}” was created on this device. Sign in to invite teammates.`)
+      return workspace
+    }
+  }, [])
 
-  const createInvite = useCallback(async (): Promise<string | null> => {
-    if (!activeWorkspace) return null
+  const createInvite = useCallback(async (workspaceId = activeWorkspace?.id): Promise<string | null> => {
+    if (!workspaceId) return null
+    if (workspaceId.startsWith('local-')) {
+      setWorkspaceNotice('Sign in to create a group code that teammates can use.')
+      return null
+    }
     try {
-      const invite = await workspaceRequest<{ invite_code: string }>(`/workspaces/${activeWorkspace.id}/invites`, { method: 'POST' })
+      const invite = await workspaceRequest<{ invite_code: string }>(`/workspaces/${workspaceId}/invites`, { method: 'POST' })
       setWorkspaceNotice('Invite code created. Share it with a signed-in teammate.')
       return invite.invite_code
     } catch (error) { setWorkspaceNotice(error instanceof Error ? error.message : 'Could not create invite.'); return null }
@@ -247,13 +328,21 @@ function useWorkspaceState(userEmail?: string) {
     if (!code.trim()) return
     try {
       const workspace = await workspaceRequest<WorkspaceSummary>('/workspaces/join', { method: 'POST', body: JSON.stringify({ invite_code: code.trim() }) })
+      setWorkspaces((current) => {
+        const next = [workspace, ...current.filter((item) => item.id !== workspace.id)]
+        saveLocalWorkspaces(next)
+        return next
+      })
+      activeWorkspaceRef.current = workspace
+      setActiveWorkspace(workspace)
+      setMembers([])
       setWorkspaceNotice(`Joined “${workspace.name}”.`)
-      await refreshWorkspaces()
     } catch (error) { setWorkspaceNotice(error instanceof Error ? error.message : 'Could not join workspace.') }
-  }, [refreshWorkspaces])
+  }, [])
 
   const selectWorkspace = useCallback(async (id: string) => {
     const workspace = workspaces.find((item) => item.id === id) ?? null
+    activeWorkspaceRef.current = workspace
     setActiveWorkspace(workspace)
     if (!workspace) { setMembers([]); return }
     try { setMembers(await workspaceRequest<WorkspaceMember[]>(`/workspaces/${workspace.id}/members`)) } catch { setMembers([]) }
