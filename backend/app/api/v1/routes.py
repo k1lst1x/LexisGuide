@@ -1,12 +1,14 @@
+from datetime import date
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from lexisguide_assistant import ChatReply, ChatRequest
 from pydantic import BaseModel, Field
 from review_contract import ReviewResult
 
 from app.auth import current_user
 from app.chat_agent import AssistantUnavailableError, configured_assistant, runtime_session_id
+from app.lawfirm import LawFirmResponseError, LawFirmUnavailableError, configured_lawfirm_client
 from app.legal_agent import configured_agent
 from app.storage import (
     consume_chat_quota,
@@ -104,6 +106,12 @@ class WorkspaceJoinResponse(Workspace):
     pass
 
 
+class StatuteLookup(BaseModel):
+    """Provider response, retained so provenance fields are never discarded."""
+
+    result: dict
+
+
 @router.get("/health", response_model=HealthResponse)
 async def health_check() -> HealthResponse:
     return HealthResponse(status="ok")
@@ -166,6 +174,38 @@ async def chat(payload: ChatPayload, user: dict[str, str] = Depends(current_user
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="The assistant could not answer right now.",
+        ) from error
+
+
+@router.get("/statutes/lookup", response_model=StatuteLookup)
+async def lookup_statute(
+    jurisdiction: str = Query(min_length=2, max_length=40),
+    citation: str = Query(min_length=1, max_length=160),
+    as_of: date | None = Query(default=None, alias="asOf"),
+    _user: dict[str, str] = Depends(current_user),
+) -> StatuteLookup:
+    """Retrieve a point-in-time statute with the provider's full provenance receipt."""
+    client = configured_lawfirm_client()
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Statute lookup is not configured.",
+        )
+    try:
+        return StatuteLookup(result=client.lookup_statute(jurisdiction, citation, as_of))
+    except LawFirmResponseError as error:
+        if error.status_code == 404:
+            raise HTTPException(
+                status_code=404, detail="No statute version is on file for that request."
+            ) from error
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The statute source could not complete the lookup.",
+        ) from error
+    except LawFirmUnavailableError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The statute source is temporarily unavailable.",
         ) from error
 
 

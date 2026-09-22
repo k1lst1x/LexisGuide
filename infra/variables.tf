@@ -50,6 +50,12 @@ variable "agentcore_assistant_runtime_arn" {
   default     = ""
 }
 
+variable "lawfirm_api_key_secret_arn" {
+  description = "Optional Secrets Manager ARN holding the rotated lawfirm.dev key (raw string or JSON api_key field)."
+  type        = string
+  default     = ""
+}
+
 variable "chat_rate_limit_per_window" {
   description = "Assistant messages each user may send per 60-second window."
   type        = number

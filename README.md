@@ -39,6 +39,16 @@ the API accesses only the caller's DynamoDB records and invokes the configured
 AgentCore runtime with its own IAM role. The browser never receives AWS service
 credentials.
 
+### Optional statute provenance source
+
+LexisGuide can retrieve point-in-time statutes from lawfirm.dev. Store a rotated
+lawfirm.dev key in AWS Secrets Manager (as a raw SecretString or JSON with an
+`api_key` field), then set `lawfirm_api_key_secret_arn` in Terraform. The Lambda
+receives only the secret ARN and reads it at runtime. Never put this key in Vite
+variables, Git, or browser code. The authenticated endpoint is
+`GET /api/v1/statutes/lookup?jurisdiction=fl&citation=768.28&asOf=2020-03-14`;
+it returns the provider response intact under `result`, including its provenance.
+
 `/api/v1/analyze` requires authentication in production. The local dashboard still
 shows its built-in quick scan when no API is available, so the demo remains usable
 without cloud credentials.
