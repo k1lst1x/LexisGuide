@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { AtSign, Bookmark, Check, Copy, FileText, Hash, Info, KeyRound, Paperclip, Plus, Reply, Search, Send, Smile, UsersRound, X } from 'lucide-react'
+import { AtSign, Bookmark, Check, Copy, FileText, Hash, Info, KeyRound, LockKeyhole, Paperclip, Plus, Reply, Search, Send, Smile, UsersRound, X } from 'lucide-react'
 import { useWorkspace } from '../store'
 import { documentDisplayName, documentKind, openFindings, type SampleDoc } from '../data'
 import { Empty } from '../ui'
@@ -59,7 +59,7 @@ function SpaceAccess() {
   const ws = useWorkspace()
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
-  const [invite, setInvite] = useState('')
+  const [invitesByWorkspace, setInvitesByWorkspace] = useState<Record<string, string>>({})
   const [copied, setCopied] = useState(false)
   const create = async (event: FormEvent) => {
     event.preventDefault()
@@ -67,12 +67,13 @@ function SpaceAccess() {
     if (!workspace) return
     setName('')
     const newInvite = await ws.createInvite(workspace.id)
-    if (newInvite) setInvite(newInvite)
+    if (newInvite) setInvitesByWorkspace((current) => ({ ...current, [workspace.id]: newInvite }))
   }
+  const activeInvite = ws.activeWorkspace ? invitesByWorkspace[ws.activeWorkspace.id] : ''
   const copyInvite = async () => {
-    if (!invite) return
+    if (!activeInvite) return
     try {
-      await navigator.clipboard.writeText(invite)
+      await navigator.clipboard.writeText(activeInvite)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1800)
     } catch {
@@ -87,12 +88,17 @@ function SpaceAccess() {
         <option value="">Choose a workspace</option>
         {ws.workspaces.map((w) => <option key={w.id} value={w.id}>{w.name} · {w.role}</option>)}
       </select>}
-      {ws.activeWorkspace && <div className="ws-space-current"><span>Active group</span><strong>{ws.activeWorkspace.name}</strong><button type="button" className="ws-link" onClick={async () => setInvite((await ws.createInvite()) || '')}><KeyRound size={13} /> New code</button></div>}
+      {ws.activeWorkspace && <div className="ws-space-current"><span>Active group</span><strong>{ws.activeWorkspace.name}</strong><button type="button" className="ws-link" onClick={async () => {
+        const workspace = ws.activeWorkspace
+        if (!workspace) return
+        const next = await ws.createInvite(workspace.id)
+        if (next) { setInvitesByWorkspace((current) => ({ ...current, [workspace.id]: next })); setCopied(false) }
+      }}><KeyRound size={13} /> {activeInvite ? 'Renew code' : 'Generate code'}</button></div>}
       <form className="ws-inline-form" onSubmit={create}>
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Name a new group" aria-label="New workspace name" maxLength={80} />
         <button type="submit" className="ws-btn ws-btn-sm" disabled={!name.trim()}><Plus size={13} /> Create</button>
       </form>
-      {invite && <div className="ws-invite-card" role="status"><span>Group code</span><code>{invite}</code><button type="button" className="ws-btn ws-btn-sm" onClick={() => void copyInvite()}>{copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}</button></div>}
+      {activeInvite && ws.activeWorkspace && <div className="ws-invite-card" role="status"><span>Group code · {ws.activeWorkspace.id.startsWith('local-') ? 'local only' : 'share with a teammate'}</span><code>{activeInvite}</code><button type="button" className="ws-btn ws-btn-sm" onClick={() => void copyInvite()}>{copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}</button></div>}
       <form className="ws-inline-form" onSubmit={(event) => { event.preventDefault(); void ws.joinWorkspace(code); setCode('') }}>
         <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="Enter a group code" aria-label="Workspace invite code" autoCapitalize="none" />
         <button type="submit" className="ws-btn ws-btn-sm" disabled={!code.trim()}>Join</button>
@@ -121,6 +127,17 @@ export function MessagesView() {
   const { refreshWorkspaces } = ws
 
   useEffect(() => { void refreshWorkspaces() }, [refreshWorkspaces])
+  useEffect(() => {
+    const refreshSharedState = () => {
+      if (document.visibilityState === 'visible') void refreshWorkspaces()
+    }
+    const poll = window.setInterval(refreshSharedState, 30_000)
+    window.addEventListener('focus', refreshSharedState)
+    return () => {
+      window.clearInterval(poll)
+      window.removeEventListener('focus', refreshSharedState)
+    }
+  }, [refreshWorkspaces])
   useEffect(() => { endRef.current?.scrollIntoView?.({ block: 'end' }) }, [ws.comments.length])
   useEffect(() => { if (ws.composerFocus) inputRef.current?.focus() }, [ws.composerFocus])
 
@@ -132,7 +149,8 @@ export function MessagesView() {
     ]
     : []
   const send = () => { ws.sendMessage(ws.draft, attachment); setAttachment(null); setEmojiOpen(false) }
-  const linked = ws.selected
+  const linked = ws.linkedDocument ?? ws.selected
+  const linkedTitle = ws.activeWorkspace?.linked_document_title || documentDisplayName(linked)
   const workspaceName = ws.activeWorkspace?.name ?? 'Personal workspace'
 
   const beginResize = (pane: 'rail' | 'details', event: ReactPointerEvent<HTMLDivElement>) => {
@@ -340,11 +358,20 @@ export function MessagesView() {
             <button type="button" className="ws-icon-btn" aria-label="Close details" onClick={() => setDetailsOpen(false)}><X size={15} /></button>
           </header>
           <section className="ws-msg-section">
-            <h3>Linked document</h3>
+            <header className="ws-linked-head"><h3>Linked document</h3>{ws.activeWorkspace && <span>{ws.canManageLinkedDocument ? 'Host controls' : 'Host controlled'}</span>}</header>
             <button type="button" className="ws-linked" onClick={() => ws.openInReview(linked)}>
               <span className="ws-doc-icon">{documentKind(linked.type).icon}</span>
-              <span><strong>{documentDisplayName(linked)}</strong><small>{openFindings(linked, ws.resolved[linked.id]).length} items to review</small></span>
+              <span><strong>{linkedTitle}</strong><small>{openFindings(linked, ws.resolved[linked.id]).length} items to review</small></span>
             </button>
+            {ws.activeWorkspace && ws.canManageLinkedDocument ? <label className="ws-linked-picker">
+              <span>Choose a document for this group</span>
+              <select value={linked.id} onChange={(event) => {
+                const document = ws.documents.find((item) => item.id === event.target.value)
+                if (document) void ws.setLinkedDocument(document)
+              }} aria-label="Choose linked document">
+                {ws.documents.map((document) => <option key={document.id} value={document.id}>{documentDisplayName(document)}</option>)}
+              </select>
+            </label> : ws.activeWorkspace ? <p className="ws-linked-readonly"><LockKeyhole size={12} /> The host chooses the linked document for this group.</p> : null}
           </section>
           <section className="ws-msg-section">
             <h3>People</h3>

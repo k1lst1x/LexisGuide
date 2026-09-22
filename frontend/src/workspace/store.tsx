@@ -10,6 +10,7 @@ import { reviewNewDocument, runDocumentAction, workspaceRequest } from './api'
 
 const RESOLVED_KEY = 'lexisguide:resolved-findings'
 const LOCAL_WORKSPACES_KEY = 'lexisguide:local-workspaces'
+const LOCAL_INVITES_KEY = 'lexisguide:local-workspace-invites'
 const PERSONAL_WORKSPACE_ID = 'personal'
 const NAV_KEYS: NavItem[] = ['overview', 'documents', 'linter', 'chain', 'team', 'settings']
 
@@ -31,6 +32,15 @@ function localWorkspaces() {
 
 function saveLocalWorkspaces(workspaces: WorkspaceSummary[]) {
   try { window.localStorage.setItem(LOCAL_WORKSPACES_KEY, JSON.stringify(workspaces.filter((item) => item.id.startsWith('local-')))) } catch { /* optional browser storage */ }
+}
+
+function createLocalInviteCode(workspaceId: string) {
+  const code = `LG-${Math.random().toString(36).slice(2, 8).toUpperCase()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+  try {
+    const current = readJson<Record<string, string>>(LOCAL_INVITES_KEY, {}, (value) => !!value && typeof value === 'object' && !Array.isArray(value))
+    window.localStorage.setItem(LOCAL_INVITES_KEY, JSON.stringify({ ...current, [workspaceId]: code }))
+  } catch { /* the code remains usable in this session */ }
+  return code
 }
 
 function messageGroups() {
@@ -118,6 +128,71 @@ function useWorkspaceState(userEmail?: string) {
   const updateDocument = useCallback((updated: SampleDoc) => {
     setDocuments((current) => current.map((doc) => doc.id === updated.id ? updated : doc))
   }, [])
+
+  const linkedDocument = activeWorkspace?.linked_document_id
+    ? documents.find((document) => document.id === activeWorkspace.linked_document_id) ?? null
+    : null
+  const canManageLinkedDocument = !activeWorkspace || activeWorkspace.role === 'owner' || activeWorkspace.role === 'local'
+
+  const setLinkedDocument = useCallback(async (document: SampleDoc) => {
+    const workspace = activeWorkspace
+    if (!workspace) {
+      setNotice('Create or select a shared workspace before linking a document.')
+      return false
+    }
+    if (workspace.role !== 'owner' && workspace.role !== 'local') {
+      setNotice('Only the workspace host can change the linked document.')
+      return false
+    }
+    const apply = (updated: WorkspaceSummary) => {
+      setWorkspaces((current) => {
+        const next = current.map((item) => item.id === updated.id ? updated : item)
+        saveLocalWorkspaces(next)
+        return next
+      })
+      activeWorkspaceRef.current = updated
+      setActiveWorkspace(updated)
+    }
+    const next = { ...workspace, linked_document_id: document.id, linked_document_title: documentDisplayName(document) }
+    if (workspace.id.startsWith('local-')) {
+      apply(next)
+      setWorkspaceNotice(`Linked “${documentDisplayName(document)}” to ${workspace.name}.`)
+      return true
+    }
+    try {
+      const updated = await workspaceRequest<WorkspaceSummary>(`/workspaces/${workspace.id}/linked-document`, {
+        method: 'PUT',
+        body: JSON.stringify({ document_id: document.id, document_title: documentDisplayName(document) }),
+      })
+      apply(updated)
+      setWorkspaceNotice(`Linked “${documentDisplayName(document)}” to ${workspace.name}.`)
+      return true
+    } catch (error) {
+      setWorkspaceNotice(error instanceof Error ? error.message : 'Could not update the linked document.')
+      return false
+    }
+  }, [activeWorkspace])
+
+  const removeDocuments = useCallback((ids: string[]) => {
+    const removeIds = new Set(ids)
+    const matches = documents.filter((doc) => removeIds.has(doc.id))
+    if (!matches.length) return false
+    if (matches.length >= documents.length) {
+      setNotice('Keep at least one document in the workspace.')
+      return false
+    }
+
+    const nextDocuments = documents.filter((doc) => !removeIds.has(doc.id))
+    setDocuments(nextDocuments)
+    setResolved((current) => Object.fromEntries(Object.entries(current).filter(([documentId]) => !removeIds.has(documentId))))
+    if (removeIds.has(selectedId)) {
+      const nextSelected = nextDocuments[0]
+      setSelectedId(nextSelected.id)
+      setActiveFindingId(openFindings(nextSelected, resolved[nextSelected.id])[0]?.id ?? nextSelected.findings[0]?.id ?? null)
+    }
+    setNotice(`${matches.length} document${matches.length === 1 ? '' : 's'} removed from this workspace.`)
+    return true
+  }, [documents, resolved, selectedId])
 
   const toggleResolved = useCallback((findingId: string) => {
     setResolved((current) => {
@@ -272,6 +347,7 @@ function useWorkspaceState(userEmail?: string) {
       })
       const active = activeWorkspaceRef.current
       const target = next.find((item) => item.id === active?.id) ?? active ?? next[0] ?? null
+      activeWorkspaceRef.current = target
       setActiveWorkspace(target)
       if (target) setMembers(await workspaceRequest<WorkspaceMember[]>(`/workspaces/${target.id}/members`))
       else setMembers([])
@@ -326,8 +402,9 @@ function useWorkspaceState(userEmail?: string) {
   const createInvite = useCallback(async (workspaceId = activeWorkspace?.id): Promise<string | null> => {
     if (!workspaceId) return null
     if (workspaceId.startsWith('local-')) {
-      setWorkspaceNotice('Sign in to create a group code that teammates can use.')
-      return null
+      const code = createLocalInviteCode(workspaceId)
+      setWorkspaceNotice('A local group code was created. Sign in to create a code that teammates can redeem.')
+      return code
     }
     try {
       const invite = await workspaceRequest<{ invite_code: string }>(`/workspaces/${workspaceId}/invites`, { method: 'POST' })
@@ -371,8 +448,8 @@ function useWorkspaceState(userEmail?: string) {
   }, [documents, resolved])
 
   return {
-    userEmail, nav, go, documents, selected, selectDocument, openInReview, activeFinding, setActiveFindingId,
-    resolved, toggleResolved, resolveAndNext, jurisdiction, setJurisdiction, busyAction, runAction, applyRewrite, editText, renameDocument,
+    userEmail, nav, go, documents, selected, selectDocument, openInReview, activeFinding, setActiveFindingId, linkedDocument, canManageLinkedDocument, setLinkedDocument,
+    resolved, toggleResolved, resolveAndNext, jurisdiction, setJurisdiction, busyAction, runAction, applyRewrite, editText, renameDocument, removeDocuments,
     notice, setNotice, addOpen, setAddOpen, addStage, setAddStage, addMessage, addDocument, isDemo, stats,
     comments, reactions, toggleReaction, toggleSaved, sendMessage, draft, setDraft, composerFocus, focusComposer, tasks, addTask, toggleTask,
     messageTab, setMessageTab, discuss,

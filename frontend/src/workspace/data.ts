@@ -36,7 +36,15 @@ export type SampleDoc = {
 }
 
 export type NavItem = 'overview' | 'linter' | 'documents' | 'chain' | 'team' | 'settings'
-export type WorkspaceSummary = { id: string; name: string; owner_id: string; created_at: string; role: string }
+export type WorkspaceSummary = {
+  id: string
+  name: string
+  owner_id: string
+  created_at: string
+  role: string
+  linked_document_id?: string | null
+  linked_document_title?: string | null
+}
 export type WorkspaceMember = { user_id: string; email: string; name: string; role: string; joined_at: string }
 export type WorkspaceMessage = { id: string; user: string; text: string; time: string; saved?: boolean; attachment?: string }
 export type WorkspaceTask = { id: string; title: string; detail: string; completed: boolean }
