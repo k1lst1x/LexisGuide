@@ -13,7 +13,22 @@ production API runs as FastAPI on AWS Lambda behind API Gateway.
    with Google and Apple. The application callback is
    `https://k1lst1x.github.io/LexisGuide/auth/callback`.
 4. Add Google OAuth and Apple developer values to terraform.tfvars. Never commit this file.
-5. Build the Lambda ZIP, then initialize, plan, and apply Terraform:
+5. If enabling statute lookup, rotate the lawfirm.dev key first, then store the replacement
+   in Secrets Manager. Use the resulting ARN—not the key—in terraform.tfvars:
+
+   ```bash
+   aws secretsmanager create-secret \
+     --name lexisguide/lawfirm-api-key \
+     --secret-string 'REPLACEMENT_KEY'
+   ```
+
+   ```hcl
+   lawfirm_api_key_secret_arn = "arn:aws:secretsmanager:REGION:ACCOUNT:secret:lexisguide/lawfirm-api-key-..."
+   ```
+
+   The API Lambda receives permission to read that secret at runtime. Do not add the
+   provider key to GitHub variables, frontend `.env` files, or Terraform variables.
+6. Build the Lambda ZIP, then initialize, plan, and apply Terraform:
 
    ```bash
    backend/scripts/build_lambda_package.sh "$PWD/.build/lexisguide-api.zip"

@@ -10,3 +10,6 @@ apple_client_id       = ""
 apple_team_id         = ""
 apple_key_id          = ""
 apple_private_key     = ""
+# Create a Secrets Manager secret containing the rotated lawfirm.dev key, then
+# set its ARN here. Do not place the key itself in this file.
+lawfirm_api_key_secret_arn = ""

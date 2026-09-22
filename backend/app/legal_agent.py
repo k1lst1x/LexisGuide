@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 from uuid import uuid4
 
 import boto3
 from review_contract import SYSTEM_PROMPT, ReviewRequest, parse_review_result
+
+from app.lawfirm import LawFirmUnavailableError, configured_lawfirm_client
+
+STATUTE_CITATION = re.compile(r"(?:§|section\s+)(\d{1,4}(?:\.\d{1,4}){1,3})", re.IGNORECASE)
 
 
 class LegalDocumentAgent:
@@ -24,6 +29,11 @@ class LegalDocumentAgent:
             else None
         )
         self.knowledge_base_id = os.getenv("BEDROCK_KNOWLEDGE_BASE_ID", "")
+        try:
+            self.lawfirm_client = configured_lawfirm_client()
+        except LawFirmUnavailableError:
+            # A source outage must not prevent a document-only review.
+            self.lawfirm_client = None
         self.retrieval_client = (
             boto3.client("bedrock-agent-runtime", region_name=os.getenv("AWS_REGION", "us-east-1"))
             if self.knowledge_base_id
@@ -44,6 +54,9 @@ class LegalDocumentAgent:
             if self.retrieval_client and self.knowledge_base_id
             else []
         )
+        authority_context = (
+            authority_context + self._retrieve_lawfirm_statutes(document_text, jurisdiction)
+        )[:8]
         request = ReviewRequest(
             action=action,
             jurisdiction=jurisdiction or "Not provided",
@@ -101,6 +114,58 @@ class LegalDocumentAgent:
                     "uri": location.get("webLocation", {}).get("url")
                     or location.get("s3Location", {}).get("uri", ""),
                     "score": str(item.get("score", "")),
+                }
+            )
+        return authorities
+
+    def _retrieve_lawfirm_statutes(
+        self, document_text: str, jurisdiction: str | None
+    ) -> list[dict[str, str]]:
+        """Fetch only explicitly cited statutes; do not guess a legal citation."""
+        if not self.lawfirm_client or not jurisdiction:
+            return []
+        citations = list(dict.fromkeys(STATUTE_CITATION.findall(document_text)))[:3]
+        authorities: list[dict[str, str]] = []
+        for citation in citations:
+            try:
+                statute = self.lawfirm_client.lookup_statute(jurisdiction, citation)
+            except LawFirmUnavailableError:
+                break
+            except Exception:
+                continue
+            meta = statute.get("_meta", {}) if isinstance(statute.get("_meta"), dict) else {}
+            source_url = str(
+                statute.get("sourceUrl") or statute.get("source_url") or meta.get("sourceUrl") or ""
+            )
+            text = str(
+                statute.get("text") or statute.get("statuteText") or statute.get("content") or ""
+            )
+            if not text or not source_url:
+                continue
+            provenance = " · ".join(
+                value
+                for value in [
+                    f"citation {citation}",
+                    str(
+                        statute.get("contentHash")
+                        or statute.get("content_hash")
+                        or meta.get("contentHash")
+                        or ""
+                    ),
+                    str(
+                        statute.get("retrievedAt")
+                        or statute.get("retrieved_at")
+                        or meta.get("retrievedAt")
+                        or ""
+                    ),
+                ]
+                if value
+            )
+            authorities.append(
+                {
+                    "text": f"{text[:18000]}\n\nProvenance: {provenance}",
+                    "uri": source_url,
+                    "score": "official statute source",
                 }
             )
         return authorities
