@@ -121,6 +121,28 @@ variable "api_gateway_throttling_rate_limit" {
   }
 }
 
+variable "api_gateway_health_throttling_burst_limit" {
+  description = "Maximum short burst allowed for the unauthenticated health-check route."
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.api_gateway_health_throttling_burst_limit >= 1
+    error_message = "api_gateway_health_throttling_burst_limit must be at least 1."
+  }
+}
+
+variable "api_gateway_health_throttling_rate_limit" {
+  description = "Sustained requests per second allowed for the unauthenticated health-check route."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.api_gateway_health_throttling_rate_limit >= 1
+    error_message = "api_gateway_health_throttling_rate_limit must be at least 1."
+  }
+}
+
 variable "google_client_id" {
   type    = string
   default = ""
