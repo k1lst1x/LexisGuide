@@ -279,6 +279,15 @@ resource "aws_apigatewayv2_stage" "api" {
     throttling_rate_limit  = var.api_gateway_throttling_rate_limit
   }
 
+  # Keep public uptime probes from consuming the protected API's route budget.
+  # This does not change the endpoint, integration, or Cognito protection on
+  # application routes; it gives only the intentional public route its own cap.
+  route_settings {
+    route_key              = "GET /api/v1/health"
+    throttling_burst_limit = var.api_gateway_health_throttling_burst_limit
+    throttling_rate_limit  = var.api_gateway_health_throttling_rate_limit
+  }
+
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_gateway.arn
     format = jsonencode({
