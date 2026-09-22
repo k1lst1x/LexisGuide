@@ -114,3 +114,70 @@
 @media (prefers-reduced-motion: reduce) {
   .cw *, .cw-launcher { animation: none !important; transition: none !important; }
 }
+
+/* ── Expanding prompt composer (assistant page) ──────────────── */
+.cw-prompt { width: 100%; margin: 0 auto; }
+.cw-prompt-card {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--cw-line);
+  border-radius: 24px;
+  background: #fffef9;
+  box-shadow: 0 6px 20px -14px rgba(27,28,20,.35);
+  overflow: hidden;
+}
+.cw-prompt.is-open .cw-prompt-card { overflow: visible; }
+.cw-prompt-card:focus-within { border-color: var(--cw-line-2); box-shadow: 0 0 0 4px rgba(0,103,79,.08); }
+
+/* The collapsed pill shows the placeholder; the real field fades in over it. */
+.cw-prompt-placeholder {
+  position: absolute;
+  inset: 0 48px 0 0;
+  padding: 0 0 0 18px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--cw-ink-45);
+  text-align: left;
+  cursor: text;
+  transition: opacity .3s ease-out;
+}
+.cw-prompt-card textarea {
+  position: absolute;
+  inset: 0 48px auto 0;
+  width: calc(100% - 48px);
+  padding: 13px 0 0 18px;
+  border: 0;
+  outline: 0 !important;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--cw-ink);
+  resize: none;
+}
+.cw-prompt-card textarea::placeholder { color: var(--cw-ink-45); }
+.cw-prompt-send {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--cw-ink);
+  color: #fff !important;
+  transition: opacity .15s, transform .2s cubic-bezier(.175,.885,.32,1.275);
+}
+.cw-prompt-send:disabled { opacity: .3; cursor: not-allowed; }
+.cw-prompt-send:not(:disabled):hover { transform: scale(1.06); }
+
+/* Reduced motion: the composer still opens, it just does not spring. */
+@media (prefers-reduced-motion: reduce) {
+  .cw-prompt, .cw-prompt-card, .cw-prompt-card textarea, .cw-prompt-placeholder { transition: none !important; }
+}
+.cw-compose-wrap { display: flex; justify-content: center; padding: 0 12px; }

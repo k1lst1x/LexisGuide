@@ -7,6 +7,7 @@ import { cognitoGetIdToken } from '../aws'
 import { apiBase } from '../workspace/api'
 import { defaultGuide } from './guide'
 import './chat.css'
+import { PromptComposer } from './PromptComposer'
 
 export type ChatContext = {
   page?: string
@@ -38,6 +39,9 @@ type Props = {
   footer?: ReactNode
   /** Render as a full-page conversation, without the floating launcher. */
   embedded?: boolean
+  /** Use the composer that springs open from a pill. Suits the roomy page,
+      not the popup, where the panel is already a fixed size. */
+  expandingComposer?: boolean
 }
 
 const MAX_HISTORY = 12
@@ -84,7 +88,7 @@ function RichText({ text }: { text: string }) {
   return <>{blocks}</>
 }
 
-export function ChatWidget({ storageKey, context, suggestions = [], fallback = defaultGuide, greeting, open: controlledOpen, onOpenChange, pendingQuestion, onSignIn, className = '', footer, embedded = false }: Props) {
+export function ChatWidget({ storageKey, context, suggestions = [], fallback = defaultGuide, greeting, open: controlledOpen, onOpenChange, pendingQuestion, onSignIn, className = '', footer, embedded = false, expandingComposer = false }: Props) {
   const [saved] = useState(() => load(storageKey))
   const [conversationId, setConversationId] = useState(saved?.conversationId ?? newId())
   const welcome: Turn = { id: 'welcome', role: 'assistant', content: greeting ?? 'Hi! I’m the LexisGuide assistant. Ask me about a notice or agreement, a legal term, or how to use LexisGuide.', local: true }
@@ -200,19 +204,30 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
           )}
           {footer}
 
-          <form className="cw-compose" onSubmit={(event) => { event.preventDefault(); void ask(input) }}>
-            <textarea
-              ref={inputRef}
-              rows={1}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void ask(input) } }}
-              placeholder="Ask anything…"
-              aria-label="Ask LexisGuide"
-              maxLength={4000}
-            />
-            <button type="submit" disabled={!input.trim() || busy} aria-label="Send question"><ArrowUp size={16} /></button>
-          </form>
+          {expandingComposer ? (
+            <div className="cw-compose-wrap">
+              <PromptComposer
+                value={input}
+                onChange={setInput}
+                onSubmit={(question) => void ask(question)}
+                busy={busy}
+              />
+            </div>
+          ) : (
+            <form className="cw-compose" onSubmit={(event) => { event.preventDefault(); void ask(input) }}>
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void ask(input) } }}
+                placeholder="Ask anything…"
+                aria-label="Ask LexisGuide"
+                maxLength={4000}
+              />
+              <button type="submit" disabled={!input.trim() || busy} aria-label="Send question"><ArrowUp size={16} /></button>
+            </form>
+          )}
           <p className="cw-foot">General information, not legal advice.</p>
         </section>
       )}

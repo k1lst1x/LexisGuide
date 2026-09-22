@@ -35,6 +35,7 @@ export function AssistantView() {
       </div>
       <ChatWidget
         embedded
+        expandingComposer
         className="cw-ai-page"
         storageKey="lexisguide:chat-assistant-page"
         suggestions={assistantQuickPrompts.assistant}
