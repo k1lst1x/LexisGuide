@@ -14,8 +14,12 @@ variable "cognito_domain_prefix" {
 
 variable "callback_urls" {
   type = list(string)
+  # 5199 is the fallback port Vite picks when 5173 is taken, so local sign-in
+  # works either way. CI and a local apply must list the same URLs or each
+  # apply reverts the other's.
   default = [
     "http://localhost:5173/auth/callback",
+    "http://localhost:5199/auth/callback",
     "https://k1lst1x.github.io/LexisGuide/auth/callback",
   ]
 }
@@ -24,6 +28,7 @@ variable "logout_urls" {
   type = list(string)
   default = [
     "http://localhost:5173",
+    "http://localhost:5199",
     "https://k1lst1x.github.io/LexisGuide",
   ]
 }

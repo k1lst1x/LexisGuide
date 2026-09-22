@@ -45,13 +45,28 @@ GitHub Actions variables:
 - `TF_STATE_BUCKET` — the state bucket name;
 - `COGNITO_DOMAIN_PREFIX` — globally unique Cognito hosted-UI prefix;
 - `AWS_REGION` — normally `us-east-1`;
-- `AGENTCORE_RUNTIME_ARN` — the ARN produced by the AgentCore deployment.
+- `AGENTCORE_RUNTIME_ARN` — the ARN produced by the AgentCore deployment;
+- `AGENTCORE_ASSISTANT_RUNTIME_ARN` — the ARN of the assistant runtime behind `/api/v1/chat`;
+- `API_LAMBDA_RESERVED_CONCURRENCY` — only on an account that cannot reserve
+  concurrency, set to `-1`. AWS keeps 10 concurrent executions unreserved per
+  account, so an account still on the default limit of 10 has nothing left to
+  reserve and every apply fails until this is set. Leave it unset otherwise.
 
 Create an AWS IAM role trusted by GitHub Actions OIDC for repository
 `k1lst1x/LexisGuide` on the `main` branch. Store its ARN as the
 `AWS_DEPLOY_ROLE_ARN` Actions secret. Grant that role only the Terraform-managed
 resources required to deploy Cognito, DynamoDB, Lambda, API Gateway, CloudWatch,
 and the state bucket; do not use long-lived AWS access keys.
+
+The deployed role is `lexisguide-github-deploy`. Its trust policy admits only
+`repo:k1lst1x/LexisGuide:ref:refs/heads/main` with audience `sts.amazonaws.com`,
+so no other repository, branch, or fork can assume it. Its permissions cover the
+state bucket, the five project services, and IAM only on roles named
+`lexisguide-*`. That IAM scope is deliberately narrow but not a privilege
+boundary: anything able to edit the deploy workflow on `main` can write an inline
+policy onto a `lexisguide-*` role. Treat push access to `main` as equivalent to
+that role's access, and add a permissions boundary before this account holds
+anything sensitive.
 
 After a successful API deployment, the workflow triggers **Deploy landing page**
 with the new values. Later backend and infrastructure changes deploy automatically
