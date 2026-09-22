@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, type ReactNode } from 'react'
+import { Hub } from 'aws-amplify/utils'
 import AuthSectionOne from '@/components/ui/auth-section-1'
 import { DashboardV2 } from './DashboardV2'
 import { SplashScreen } from './SplashScreen'
@@ -74,7 +75,7 @@ export function App() {
     setDashOpen(true)
     window.localStorage.setItem(WORKSPACE_KEY, 'open')
     window.localStorage.setItem(WORKSPACE_USER_KEY, JSON.stringify({ email, username: email }))
-    setToast(`✓ Authenticated as ${email} via AWS Cognito`)
+    setToast(`Signed in as ${email}`)
   }
 
   const handleSignOut = async () => {
@@ -86,6 +87,22 @@ export function App() {
     window.localStorage.removeItem('lexisguide:last-section')
     setToast('Signed out of AWS session.')
   }
+
+  // Google/Apple sign-in returns to /auth/callback; Amplify exchanges the code, then tells us here.
+  useEffect(() => {
+    return Hub.listen('auth', ({ payload }) => {
+      if (payload.event === 'signInWithRedirect') {
+        void cognitoGetCurrentUser().then((user) => {
+          if (user) handleAuthSuccess(user.email)
+        })
+      }
+      if (payload.event === 'signInWithRedirect_failure') setToast('Sign-in was cancelled or failed. Please try again.')
+      if (payload.event === 'signInWithRedirect' || payload.event === 'signInWithRedirect_failure') {
+        const base = import.meta.env.BASE_URL
+        if (window.location.pathname.endsWith('/auth/callback')) window.history.replaceState({}, '', base)
+      }
+    })
+  }, [])
 
   // The loader sheet fully covers the screen at ~600ms; swap screens underneath, then let it sweep away.
   const openDashboard = useCallback(() => {
@@ -115,6 +132,7 @@ export function App() {
       <AuthSectionOne
         onSuccess={handleAuthSuccess}
         onCancel={() => setAuthOpen(false)}
+        onDemo={() => { setAuthOpen(false); openDashboard() }}
         initialMode="sign-in"
       />
     )

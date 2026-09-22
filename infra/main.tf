@@ -44,8 +44,23 @@ resource "aws_dynamodb_table" "user_data" {
 }
 
 resource "aws_cognito_user_pool" "main" {
-  name                = "${var.project_name}-users"
-  username_attributes = ["email"]
+  name                     = "${var.project_name}-users"
+  username_attributes      = ["email"]
+  auto_verified_attributes = ["email"]
+
+  # Email the verification code at sign-up, and recover accounts by email.
+  verification_message_template {
+    default_email_option = "CONFIRM_WITH_CODE"
+    email_subject        = "Your LexisGuide verification code"
+    email_message        = "Your LexisGuide verification code is {####}"
+  }
+
+  account_recovery_setting {
+    recovery_mechanism {
+      name     = "verified_email"
+      priority = 1
+    }
+  }
 
   password_policy {
     minimum_length    = 12
