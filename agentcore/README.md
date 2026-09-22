@@ -1,9 +1,12 @@
 # LexisGuide AgentCore deployment
 
 This directory contains the AgentCore deployment configuration and generated CDK
-project for LexisGuide. The sole runtime source is in [`runtime/`](runtime/):
-`agentcore.json` explicitly deploys that directory as `LexisGuideLegalReviewer`.
+project for LexisGuide. `agentcore.json` deploys two runtimes:
 
-Do not add a second runtime entrypoint at this level. See
-[`runtime/README.md`](runtime/README.md) for local development and deployment
-instructions.
+- `LexisGuideLegalReviewer` from [`runtime/`](runtime/): one-shot, JSON-only
+  document review used by `/api/v1/analyze`.
+- `LexisGuideAssistant` from [`assistant/`](assistant/): the conversational agent
+  behind the chat popup, used by `/api/v1/chat`.
+
+Do not add runtime entrypoints at this level. Deploy both with `agentcore deploy -y`
+from this directory (preview first with `agentcore deploy --diff`).

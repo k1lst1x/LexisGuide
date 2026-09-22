@@ -6,6 +6,7 @@ on:
     paths:
       - backend/**
       - packages/review_contract/**
+      - packages/assistant_agent/**
       - infra/**
       - .github/workflows/deploy-api.yml
   workflow_dispatch:
@@ -30,6 +31,7 @@ jobs:
       TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
       TF_VAR_cognito_domain_prefix: ${{ vars.COGNITO_DOMAIN_PREFIX }}
       TF_VAR_agentcore_runtime_arn: ${{ vars.AGENTCORE_RUNTIME_ARN }}
+      TF_VAR_agentcore_assistant_runtime_arn: ${{ vars.AGENTCORE_ASSISTANT_RUNTIME_ARN }}
       TF_VAR_google_client_id: ${{ vars.GOOGLE_CLIENT_ID }}
       TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       TF_VAR_apple_client_id: ${{ vars.APPLE_CLIENT_ID }}

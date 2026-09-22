@@ -16,6 +16,8 @@ from botocore.exceptions import ClientError
 INVITE_TTL_SECONDS = 24 * 60 * 60
 REVIEW_RATE_LIMIT_WINDOW_SECONDS = 60
 REVIEW_RATE_LIMIT_PER_WINDOW = 10
+CHAT_RATE_LIMIT_WINDOW_SECONDS = 60
+CHAT_RATE_LIMIT_PER_WINDOW = 20
 
 
 def _bounded_positive_int(name: str, default: int, maximum: int) -> int:
@@ -135,12 +137,29 @@ def consume_review_quota(user_id: str) -> bool:
     The durable counter works across warm Lambda instances. Its partition key uses
     a hash so user identifiers are not exposed in operational table views.
     """
-    window_seconds = _bounded_positive_int(
-        "REVIEW_RATE_LIMIT_WINDOW_SECONDS", REVIEW_RATE_LIMIT_WINDOW_SECONDS, 3_600
+    return _consume_quota(
+        "REVIEW",
+        user_id,
+        _bounded_positive_int(
+            "REVIEW_RATE_LIMIT_WINDOW_SECONDS", REVIEW_RATE_LIMIT_WINDOW_SECONDS, 3_600
+        ),
+        _bounded_positive_int("REVIEW_RATE_LIMIT_PER_WINDOW", REVIEW_RATE_LIMIT_PER_WINDOW, 1_000),
     )
-    request_limit = _bounded_positive_int(
-        "REVIEW_RATE_LIMIT_PER_WINDOW", REVIEW_RATE_LIMIT_PER_WINDOW, 1_000
+
+
+def consume_chat_quota(user_id: str) -> bool:
+    """Reserve one assistant message per user, counted separately from reviews."""
+    return _consume_quota(
+        "CHAT",
+        user_id,
+        _bounded_positive_int(
+            "CHAT_RATE_LIMIT_WINDOW_SECONDS", CHAT_RATE_LIMIT_WINDOW_SECONDS, 3_600
+        ),
+        _bounded_positive_int("CHAT_RATE_LIMIT_PER_WINDOW", CHAT_RATE_LIMIT_PER_WINDOW, 1_000),
     )
+
+
+def _consume_quota(kind: str, user_id: str, window_seconds: int, request_limit: int) -> bool:
     now = int(time.time())
     window_start = now - (now % window_seconds)
     subject_hash = sha256(user_id.encode("utf-8")).hexdigest()
@@ -148,7 +167,7 @@ def consume_review_quota(user_id: str) -> bool:
     try:
         _table().update_item(
             Key={
-                "PK": f"RATE#REVIEW#{subject_hash}",
+                "PK": f"RATE#{kind}#{subject_hash}",
                 "SK": f"WINDOW#{window_start}",
             },
             UpdateExpression="SET expires_at = :expires_at ADD request_count :increment",

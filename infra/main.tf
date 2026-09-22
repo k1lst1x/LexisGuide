@@ -165,6 +165,15 @@ data "aws_iam_policy_document" "api_lambda" {
       resources = [statement.value]
     }
   }
+
+  dynamic "statement" {
+    for_each = var.agentcore_assistant_runtime_arn == "" ? [] : [var.agentcore_assistant_runtime_arn]
+    content {
+      sid       = "InvokeLexisGuideAssistant"
+      actions   = ["bedrock-agentcore:InvokeAgentRuntime"]
+      resources = [statement.value, "${statement.value}/*"]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "api_lambda" {
@@ -191,6 +200,8 @@ resource "aws_lambda_function" "api" {
       COGNITO_USER_POOL_CLIENT_ID      = aws_cognito_user_pool_client.web.id
       USER_DATA_TABLE                  = aws_dynamodb_table.user_data.name
       AGENTCORE_RUNTIME_ARN            = var.agentcore_runtime_arn
+      AGENTCORE_ASSISTANT_RUNTIME_ARN  = var.agentcore_assistant_runtime_arn
+      CHAT_RATE_LIMIT_PER_WINDOW       = var.chat_rate_limit_per_window
       CORS_ALLOW_ORIGINS               = join(",", var.api_allowed_origins)
       REVIEW_RATE_LIMIT_PER_WINDOW     = var.review_rate_limit_per_window
       REVIEW_RATE_LIMIT_WINDOW_SECONDS = var.review_rate_limit_window_seconds
