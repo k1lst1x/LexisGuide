@@ -39,10 +39,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VITE_API_BASE_URL: ${{ inputs.api_base_url || vars.VITE_API_BASE_URL }}
-      VITE_AWS_REGION: ${{ inputs.aws_region || 'us-west-2' }}
-      VITE_COGNITO_USER_POOL_ID: ${{ inputs.cognito_user_pool_id || 'us-west-2_fqK8AEvae' }}
-      VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ inputs.cognito_user_pool_client_id || '5kvv7m5p1759uadv79b67gkkia' }}
-      VITE_COGNITO_DOMAIN: ${{ inputs.cognito_domain || 'lexisguide-576884310211.auth.us-west-2.amazoncognito.com' }}
+      # Never hard-code a pool here. A push to frontend/** runs this workflow with
+      # no inputs, so a literal fallback would publish the public site wired to
+      # whichever account that literal names, and visitors would hand their
+      # credentials to it. The repository variables hold the deployed stack.
+      VITE_AWS_REGION: ${{ inputs.aws_region || vars.AWS_REGION }}
+      VITE_COGNITO_USER_POOL_ID: ${{ inputs.cognito_user_pool_id || vars.VITE_COGNITO_USER_POOL_ID }}
+      VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ inputs.cognito_user_pool_client_id || vars.VITE_COGNITO_USER_POOL_CLIENT_ID }}
+      VITE_COGNITO_DOMAIN: ${{ inputs.cognito_domain || vars.VITE_COGNITO_DOMAIN }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7

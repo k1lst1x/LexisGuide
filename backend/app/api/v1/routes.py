@@ -8,7 +8,13 @@ from review_contract import ReviewResult
 
 from app.auth import current_user
 from app.chat_agent import AssistantUnavailableError, configured_assistant, runtime_session_id
-from app.lawfirm import LawFirmResponseError, LawFirmUnavailableError, configured_lawfirm_client
+from app.lawfirm import (
+    LawFirmQuotaError,
+    LawFirmResponseError,
+    LawFirmUnavailableError,
+    configured_lawfirm_client,
+    read_bar_status,
+)
 from app.legal_agent import configured_agent
 from app.storage import (
     acquire_remote_operation,
@@ -18,13 +24,17 @@ from app.storage import (
     consume_workspace_invite,
     create_workspace,
     create_workspace_invite,
+    get_lawyer_verification,
     get_profile,
     get_workspace_membership,
     list_records,
     list_workspace_members,
     list_workspaces,
     put_profile,
+    release_lawyer_attempt,
     release_remote_operation,
+    reserve_lawyer_attempt,
+    save_lawyer_verification,
     save_record,
     set_workspace_linked_document,
 )
@@ -107,6 +117,25 @@ class WorkspaceLinkedDocument(BaseModel):
 
 class WorkspaceJoinResponse(Workspace):
     pass
+
+
+class LawyerVerificationRequest(BaseModel):
+    # Bar numbers vary by state: digits, letters, and hyphens all occur.
+    bar_number: str = Field(min_length=1, max_length=40, pattern=r"^[A-Za-z0-9-]+$")
+    jurisdiction: str = Field(min_length=2, max_length=2, pattern=r"^[A-Za-z]{2}$")
+
+
+class LawyerVerification(BaseModel):
+    verified: bool
+    attempts_used: int
+    attempts_remaining: int
+    max_attempts: int
+    bar_number: str = ""
+    jurisdiction: str = ""
+    name: str = ""
+    status: str = ""
+    admitted_on: str = ""
+    verified_at: str = ""
 
 
 class StatuteLookup(BaseModel):
@@ -244,6 +273,110 @@ async def lookup_statute(
         ) from error
     finally:
         release_remote_operation(lease)
+
+
+SUPPORT_MESSAGE = (
+    "You have used all three verification attempts. Ask support to review your bar record "
+    "in the chat at the bottom right, or email support@lexisguide.app."
+)
+
+
+@router.get("/me/lawyer-verification", response_model=LawyerVerification)
+async def read_lawyer_verification(
+    user: dict[str, str] = Depends(current_user),
+) -> LawyerVerification:
+    return LawyerVerification(**get_lawyer_verification(user["sub"]))
+
+
+@router.post("/me/lawyer-verification", response_model=LawyerVerification)
+async def verify_lawyer(
+    payload: LawyerVerificationRequest, user: dict[str, str] = Depends(current_user)
+) -> LawyerVerification:
+    """Check one bar record against lawfirm.dev and record the outcome.
+
+    A person verifies once. Further attempts exist only because the first can
+    fail, and only an answer about them spends one: a spent provider allowance
+    or an outage is returned to their balance, never shown as a rejection.
+    """
+    current = get_lawyer_verification(user["sub"])
+    if current["verified"]:
+        return LawyerVerification(**current)
+
+    client = configured_lawfirm_client()
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Bar verification is not configured.",
+        )
+    if not reserve_lawyer_attempt(user["sub"]):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=SUPPORT_MESSAGE)
+
+    lease = acquire_remote_operation(user["sub"])
+    if lease is None:
+        # A busy shared provider must not cost the person one of their attempts.
+        release_lawyer_attempt(user["sub"])
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="The verification service is busy. Please try again shortly.",
+            headers={"Retry-After": "60"},
+        )
+
+    try:
+        record = read_bar_status(client.lookup_attorney(payload.bar_number, payload.jurisdiction))
+    except LawFirmResponseError as error:
+        if error.status_code == 404:
+            # A real answer: the bar has no such record. This one counts.
+            remaining = get_lawyer_verification(user["sub"])["attempts_remaining"]
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"No {payload.jurisdiction.upper()} bar record matches number "
+                    f"{payload.bar_number}. "
+                    + (
+                        f"You have {remaining} attempt{'s' if remaining != 1 else ''} left."
+                        if remaining
+                        else SUPPORT_MESSAGE
+                    )
+                ),
+            ) from error
+        release_lawyer_attempt(user["sub"])
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The bar directory could not complete the check. This attempt was not counted.",
+        ) from error
+    except LawFirmQuotaError as error:
+        release_lawyer_attempt(user["sub"])
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Bar verification has reached its daily limit. Please try again tomorrow. "
+                "This attempt was not counted."
+            ),
+        ) from error
+    except LawFirmUnavailableError as error:
+        release_lawyer_attempt(user["sub"])
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The bar directory is temporarily unavailable. This attempt was not counted.",
+        ) from error
+    finally:
+        release_remote_operation(lease)
+
+    if not record["active"]:
+        remaining = get_lawyer_verification(user["sub"])["attempts_remaining"]
+        described = record["status"] or "not current"
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                f"That bar record is {described}, so it cannot be verified. "
+                + (
+                    f"You have {remaining} attempt{'s' if remaining != 1 else ''} left."
+                    if remaining
+                    else SUPPORT_MESSAGE
+                )
+            ),
+        )
+    return LawyerVerification(**save_lawyer_verification(user["sub"], record))
 
 
 @router.get("/me", response_model=UserProfile)

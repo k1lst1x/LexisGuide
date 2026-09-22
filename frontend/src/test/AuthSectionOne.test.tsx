@@ -170,15 +170,18 @@ describe('AuthSectionOne', () => {
     expect(onCancel).toHaveBeenCalledOnce()
   })
 
-  it('offers the demo when sign-in is not configured in this build', async () => {
+  it('offers no way in when sign-in is not configured in this build', async () => {
     const user = userEvent.setup()
-    const onDemo = vi.fn()
     cognito.configured = false
-    render(<AuthSectionOne initialMode="sign-in" onDemo={onDemo} />)
+    render(<AuthSectionOne initialMode="sign-in" />)
 
-    expect(screen.getByText("Sign-in isn't connected in this build yet.")).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Explore the demo workspace' }))
-    expect(onDemo).toHaveBeenCalledOnce()
+    expect(screen.getByText(/Sign-in isn't available in this build yet/)).toBeInTheDocument()
+    // There is no demo workspace to fall back to: the workspace is real data.
+    expect(screen.queryByRole('button', { name: /demo/i })).not.toBeInTheDocument()
+
+    await fillSignIn(user)
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(cognito.cognitoSignIn).not.toHaveBeenCalled()
   })
 
   it('switches between sign-in and sign-up from the side panel', async () => {

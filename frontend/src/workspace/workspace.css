@@ -338,6 +338,11 @@
 
 /* ───── Documents ───── */
 .ws-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.ws-assistant-page { max-width: 1080px; }
+.ws-assistant-context { display: flex; align-items: center; gap: 8px; max-width: 900px; margin: -6px auto 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--green-soft); color: var(--green); font-size: 12.5px; }
+.ws-assistant-context > span { color: var(--ink-60); }
+.ws-assistant-context strong { overflow: hidden; color: var(--ink); font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.ws-assistant-context em { margin-left: auto; color: var(--green); font-style: normal; white-space: nowrap; }
 .ws-toolbar .ws-select { margin-left: auto; }
 .ws-table { border: 1px solid var(--line); border-radius: 18px; background: var(--paper); box-shadow: var(--shadow); overflow: hidden; }
 .ws-table-head, .ws-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px 170px 100px 96px; align-items: center; gap: 16px; padding: 0 18px; }
@@ -828,3 +833,43 @@
   .ws *, .ws *::before, .ws *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
   .ch-line { stroke-dashoffset: 0; }
 }
+
+/* ── Bar verification (Settings) ─────────────────────────────── */
+.ws-verify-form { display: grid; gap: 10px; margin-top: 12px; }
+.ws-verify-form .ws-btn { justify-self: start; }
+
+.ws-verified {
+  display: grid;
+  gap: 2px;
+  margin: 10px 0 8px;
+  padding: 11px 13px;
+  border: 1px solid #cfe4d3;
+  border-left: 3px solid var(--green);
+  border-radius: 10px;
+  background: var(--green-soft);
+}
+.ws-verified strong { font-size: 13.5px; color: var(--green); }
+.ws-verified span { font-size: 12.5px; color: var(--ink); }
+
+/* The status colour carries no meaning on its own: each alert states its
+   outcome in words, so a reader who cannot separate the hues loses nothing. */
+.ws-alert {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 10px;
+  background: var(--sand);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ws-alert strong { font-size: 13.5px; }
+.ws-alert small { color: #6a6a58; }
+.ws-alert .ws-btn { justify-self: start; margin-top: 2px; }
+.ws-alert.is-critical { border-left-color: var(--red); background: #fdf3f1; }
+.ws-alert.is-critical strong { color: var(--red); }
+/* A provider outage is not the person's fault, so it reads as a caution. */
+.ws-alert.is-warning { border-left-color: var(--amber); background: #fdf8ec; }
+.ws-alert.is-warning strong { color: var(--amber); }
