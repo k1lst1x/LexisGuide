@@ -34,6 +34,9 @@ jobs:
       # reserve any, because AWS requires 10 to stay unreserved. Such an account
       # sets this variable to -1; everywhere else the safe default applies.
       TF_VAR_api_lambda_reserved_concurrency: ${{ vars.API_LAMBDA_RESERVED_CONCURRENCY || '10' }}
+      # The ARN only names the secret; the key stays in Secrets Manager and is
+      # read by the Lambda at runtime. Unset here, the statute route is disabled.
+      TF_VAR_lawfirm_api_key_secret_arn: ${{ vars.LAWFIRM_API_KEY_SECRET_ARN }}
       TF_VAR_agentcore_runtime_arn: ${{ vars.AGENTCORE_RUNTIME_ARN }}
       TF_VAR_agentcore_assistant_runtime_arn: ${{ vars.AGENTCORE_ASSISTANT_RUNTIME_ARN }}
       TF_VAR_google_client_id: ${{ vars.GOOGLE_CLIENT_ID }}
