@@ -232,11 +232,14 @@ resource "aws_lambda_function" "api" {
       USER_DATA_TABLE                  = aws_dynamodb_table.user_data.name
       AGENTCORE_RUNTIME_ARN            = var.agentcore_runtime_arn
       AGENTCORE_ASSISTANT_RUNTIME_ARN  = var.agentcore_assistant_runtime_arn
-      CHAT_RATE_LIMIT_PER_WINDOW       = var.chat_rate_limit_per_window
-      CORS_ALLOW_ORIGINS               = join(",", var.api_allowed_origins)
-      REVIEW_RATE_LIMIT_PER_WINDOW     = var.review_rate_limit_per_window
-      REVIEW_RATE_LIMIT_WINDOW_SECONDS = var.review_rate_limit_window_seconds
-      LAWFIRM_API_KEY_SECRET_ARN       = var.lawfirm_api_key_secret_arn
+      CHAT_RATE_LIMIT_PER_WINDOW                    = var.chat_rate_limit_per_window
+      STATUTE_RATE_LIMIT_PER_WINDOW                 = var.statute_rate_limit_per_window
+      REMOTE_OPERATION_PER_USER_CONCURRENCY = var.remote_operation_per_user_concurrency
+      REMOTE_OPERATION_GLOBAL_CONCURRENCY   = var.remote_operation_global_concurrency
+      CORS_ALLOW_ORIGINS                            = join(",", var.api_allowed_origins)
+      REVIEW_RATE_LIMIT_PER_WINDOW                  = var.review_rate_limit_per_window
+      REVIEW_RATE_LIMIT_WINDOW_SECONDS              = var.review_rate_limit_window_seconds
+      LAWFIRM_API_KEY_SECRET_ARN                    = var.lawfirm_api_key_secret_arn
     }
   }
 
@@ -244,6 +247,13 @@ resource "aws_lambda_function" "api" {
     aws_cloudwatch_log_group.api_lambda,
     aws_iam_role_policy.api_lambda,
   ]
+
+  lifecycle {
+    precondition {
+      condition     = var.api_lambda_reserved_concurrency == -1 || var.remote_operation_global_concurrency < var.api_lambda_reserved_concurrency
+      error_message = "remote_operation_global_concurrency must stay below api_lambda_reserved_concurrency so ordinary API requests retain capacity."
+    }
+  }
 }
 
 resource "aws_apigatewayv2_api" "api" {

@@ -5,7 +5,7 @@ import { assistantPageGuidance, assistantQuickPrompts, documentDisplayName, open
 const PAGE: Record<NavItem, string> = { overview: 'Home', documents: 'Documents', linter: 'Review', chain: 'Activity', team: 'Messages', settings: 'Settings' }
 
 /** The chat popup, given what the person is looking at in the workspace. */
-export function WorkspaceChat() {
+export function WorkspaceChat({ userEmail }: { userEmail?: string }) {
   const ws = useWorkspace()
   const doc = ws.selected
   const open = openFindings(doc, ws.resolved[doc.id])
@@ -30,7 +30,7 @@ export function WorkspaceChat() {
   return (
     <ChatWidget
       className="cw-in-workspace"
-      storageKey="lexisguide:chat-workspace"
+      storageKey={userEmail ? `lexisguide:chat-workspace:${userEmail.toLowerCase()}` : 'lexisguide:chat-guest'}
       open={ws.assistantOpen}
       onOpenChange={ws.setAssistantOpen}
       pendingQuestion={ws.assistantQuestion}

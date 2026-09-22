@@ -77,10 +77,34 @@ def test_statute_lookup_route_returns_full_provenance_payload(
                 "contentHash": "abc",
             }
 
+    lease = object()
+    releases: list[object] = []
     monkeypatch.setattr(routes, "configured_lawfirm_client", lambda: Client())
+    monkeypatch.setattr(routes, "consume_statute_quota", lambda _: True)
+    monkeypatch.setattr(routes, "acquire_remote_operation", lambda _: lease)
+    monkeypatch.setattr(routes, "release_remote_operation", releases.append)
     response = authenticated_client.get(
         "/api/v1/statutes/lookup?jurisdiction=fl&citation=768.28&asOf=2020-03-14"
     )
 
     assert response.status_code == 200
     assert response.json()["result"]["contentHash"] == "abc"
+    assert releases == [lease]
+
+
+def test_statute_lookup_rejects_when_shared_capacity_is_full(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Client:
+        def lookup_statute(self, *_: object) -> dict[str, str]:
+            raise AssertionError("The provider must not be called when shared capacity is full.")
+
+    monkeypatch.setattr(routes, "configured_lawfirm_client", lambda: Client())
+    monkeypatch.setattr(routes, "consume_statute_quota", lambda _: True)
+    monkeypatch.setattr(routes, "acquire_remote_operation", lambda _: None)
+
+    response = authenticated_client.get("/api/v1/statutes/lookup?jurisdiction=fl&citation=768.28")
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "60"
+    assert response.json() == {"detail": "The statute service is busy. Please try again shortly."}

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import secrets
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from hashlib import sha256
@@ -18,6 +19,18 @@ REVIEW_RATE_LIMIT_WINDOW_SECONDS = 60
 REVIEW_RATE_LIMIT_PER_WINDOW = 10
 CHAT_RATE_LIMIT_WINDOW_SECONDS = 60
 CHAT_RATE_LIMIT_PER_WINDOW = 20
+STATUTE_RATE_LIMIT_WINDOW_SECONDS = 60
+STATUTE_RATE_LIMIT_PER_WINDOW = 20
+REMOTE_OPERATION_PER_USER_CONCURRENCY = 2
+REMOTE_OPERATION_GLOBAL_CONCURRENCY = 8
+# The API Lambda times out after 29 seconds. A one-minute lease releases a
+# crashed invocation without allowing a live request to lose its slot early.
+REMOTE_OPERATION_LEASE_SECONDS = 60
+
+
+@dataclass(frozen=True)
+class RemoteOperationLease:
+    slots: tuple[tuple[str, str, str], ...]
 
 
 def _bounded_positive_int(name: str, default: int, maximum: int) -> int:
@@ -172,6 +185,84 @@ def consume_chat_quota(user_id: str) -> bool:
         ),
         _bounded_positive_int("CHAT_RATE_LIMIT_PER_WINDOW", CHAT_RATE_LIMIT_PER_WINDOW, 1_000),
     )
+
+
+def consume_statute_quota(user_id: str) -> bool:
+    """Reserve a bounded provider lookup for an authenticated user."""
+    return _consume_quota(
+        "STATUTE",
+        user_id,
+        _bounded_positive_int(
+            "STATUTE_RATE_LIMIT_WINDOW_SECONDS", STATUTE_RATE_LIMIT_WINDOW_SECONDS, 3_600
+        ),
+        _bounded_positive_int(
+            "STATUTE_RATE_LIMIT_PER_WINDOW", STATUTE_RATE_LIMIT_PER_WINDOW, 1_000
+        ),
+    )
+
+
+def _remote_operation_limit(name: str, default: int) -> int:
+    return _bounded_positive_int(name, default, 100)
+
+
+def _acquire_remote_slot(partition: str, limit: int) -> tuple[str, str, str] | None:
+    """Atomically claim one expiring DynamoDB slot, or return ``None`` when full."""
+    now = int(time.time())
+    lease_id = secrets.token_urlsafe(18)
+    expires_at = now + REMOTE_OPERATION_LEASE_SECONDS
+    for slot in range(limit):
+        key = {"PK": partition, "SK": f"SLOT#{slot}"}
+        try:
+            _table().put_item(
+                Item={**key, "lease_id": lease_id, "expires_at": expires_at},
+                ConditionExpression=Attr("PK").not_exists() | Attr("expires_at").lte(now),
+            )
+            return partition, key["SK"], lease_id
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                raise
+    return None
+
+
+def acquire_remote_operation(user_id: str) -> RemoteOperationLease | None:
+    """Claim global and per-user capacity for one synchronous remote operation.
+
+    Individual expiring slots make the guard self-healing if a Lambda is
+    terminated before its ``finally`` block runs. The global pool intentionally
+    stays below Lambda reserved concurrency, leaving slots for ordinary API work.
+    """
+    global_slot = _acquire_remote_slot(
+        "REMOTE#GLOBAL",
+        _remote_operation_limit(
+            "REMOTE_OPERATION_GLOBAL_CONCURRENCY", REMOTE_OPERATION_GLOBAL_CONCURRENCY
+        ),
+    )
+    if global_slot is None:
+        return None
+
+    user_slot = _acquire_remote_slot(
+        f"REMOTE#USER#{sha256(user_id.encode('utf-8')).hexdigest()}",
+        _remote_operation_limit(
+            "REMOTE_OPERATION_PER_USER_CONCURRENCY", REMOTE_OPERATION_PER_USER_CONCURRENCY
+        ),
+    )
+    if user_slot is None:
+        release_remote_operation(RemoteOperationLease((global_slot,)))
+        return None
+    return RemoteOperationLease((global_slot, user_slot))
+
+
+def release_remote_operation(lease: RemoteOperationLease) -> None:
+    """Release only slots owned by this request; expired/reclaimed slots stay intact."""
+    for partition, sort_key, lease_id in lease.slots:
+        try:
+            _table().delete_item(
+                Key={"PK": partition, "SK": sort_key},
+                ConditionExpression=Attr("lease_id").eq(lease_id),
+            )
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                raise
 
 
 def _consume_quota(kind: str, user_id: str, window_seconds: int, request_limit: int) -> bool:

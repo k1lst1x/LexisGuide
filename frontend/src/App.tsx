@@ -10,6 +10,24 @@ import { ChatWidget } from './chat/ChatWidget'
 
 const WORKSPACE_KEY = 'lexisguide:workspace'
 const WORKSPACE_USER_KEY = 'lexisguide:workspace-user'
+const ACCOUNT_WORKSPACE_STORAGE_KEYS = [
+  WORKSPACE_KEY,
+  WORKSPACE_USER_KEY,
+  'lexisguide:last-section',
+  'lexisguide:document-tutorial-seen',
+  'lexisguide:space-messages',
+  'lexisguide:resolved-findings',
+  'lexisguide:local-workspaces',
+  'lexisguide:local-workspace-invites',
+]
+
+function clearAccountWorkspaceStorage() {
+  for (const key of ACCOUNT_WORKSPACE_STORAGE_KEYS) window.localStorage.removeItem(key)
+  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.localStorage.key(index)
+    if (key?.startsWith('lexisguide:chat-')) window.localStorage.removeItem(key)
+  }
+}
 
 function readWorkspaceUser() {
   try {
@@ -39,20 +57,24 @@ export function App() {
   // Check existing session on mount
   useEffect(() => {
     let mounted = true
-    const wantsWorkspace = window.location.pathname.endsWith('/dashboard') || window.location.hash === '#dashboard' || window.localStorage.getItem(WORKSPACE_KEY) === 'open'
+    const opensDashboardRoute = window.location.pathname.endsWith('/dashboard') || window.location.hash === '#dashboard'
     const savedUser = readWorkspaceUser()
     cognitoGetCurrentUser()
       .then((user) => {
         if (!mounted) return
         if (user) {
           const restoredUser = { email: user.email, username: user.username }
+          const shouldOpenWorkspace = window.localStorage.getItem(WORKSPACE_KEY) !== 'closed'
+          if (!savedUser || savedUser.email !== restoredUser.email) clearAccountWorkspaceStorage()
           setCurrentUser(restoredUser)
           window.localStorage.setItem(WORKSPACE_USER_KEY, JSON.stringify(restoredUser))
-          if (window.localStorage.getItem(WORKSPACE_KEY) !== 'closed') setDashOpen(true)
-        } else if (savedUser) {
-          setCurrentUser(savedUser)
+          if (shouldOpenWorkspace) setDashOpen(true)
+        } else {
+          // Never treat browser storage as proof of an authenticated identity.
+          // Clear stale workspace data even if its cached user marker is absent or invalid.
+          clearAccountWorkspaceStorage()
+          if (opensDashboardRoute) setDashOpen(true)
         }
-        if (!user && wantsWorkspace) setDashOpen(true)
       })
       .catch(() => {})
       .finally(() => {
@@ -70,6 +92,8 @@ export function App() {
   }, [toast])
 
   const handleAuthSuccess = (email: string) => {
+    const savedUser = readWorkspaceUser()
+    if (savedUser?.email !== email) clearAccountWorkspaceStorage()
     setAuthOpen(false)
     setCurrentUser({ email, username: email })
     setDashOpen(true)
@@ -82,9 +106,7 @@ export function App() {
     await cognitoSignOut().catch(() => {})
     setCurrentUser(null)
     setDashOpen(false)
-    window.localStorage.removeItem(WORKSPACE_KEY)
-    window.localStorage.removeItem(WORKSPACE_USER_KEY)
-    window.localStorage.removeItem('lexisguide:last-section')
+    clearAccountWorkspaceStorage()
     setToast('Signed out of AWS session.')
   }
 
@@ -148,7 +170,7 @@ export function App() {
           onSignOut={handleSignOut}
         />
         <ChatWidget
-          storageKey="lexisguide:chat-landing"
+          storageKey={currentUser ? `lexisguide:chat-landing:${currentUser.email.toLowerCase()}` : 'lexisguide:chat-guest'}
           context={{ page: 'Landing page' }}
           onSignIn={() => setAuthOpen(true)}
           suggestions={['What can LexisGuide do?', 'What does “indemnify” mean?', 'Is this risky: “Either party may terminate this agreement.”']}
