@@ -10,6 +10,7 @@ const authMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../aws', () => ({
+  authConfigured: true,
   cognitoAppleSignIn: vi.fn(),
   cognitoConfirmResetPassword: vi.fn(),
   cognitoConfirmSignUp: vi.fn(),
