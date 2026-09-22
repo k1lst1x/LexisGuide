@@ -91,26 +91,25 @@ jobs:
           echo "cognito_user_pool_id=$(terraform output -raw cognito_user_pool_id)" >> "$GITHUB_OUTPUT"
           echo "cognito_user_pool_client_id=$(terraform output -raw cognito_user_pool_client_id)" >> "$GITHUB_OUTPUT"
           echo "cognito_domain=$(terraform output -raw cognito_domain)" >> "$GITHUB_OUTPUT"
-      - name: Update Pages configuration
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh variable set VITE_API_BASE_URL --repo "$GITHUB_REPOSITORY" --body "${{ steps.outputs.outputs.api_base_url }}"
-          gh variable set VITE_AWS_REGION --repo "$GITHUB_REPOSITORY" --body "$AWS_REGION"
-          gh variable set VITE_COGNITO_USER_POOL_ID --repo "$GITHUB_REPOSITORY" --body "${{ steps.outputs.outputs.cognito_user_pool_id }}"
-          gh variable set VITE_COGNITO_USER_POOL_CLIENT_ID --repo "$GITHUB_REPOSITORY" --body "${{ steps.outputs.outputs.cognito_user_pool_client_id }}"
-          gh variable set VITE_COGNITO_DOMAIN --repo "$GITHUB_REPOSITORY" --body "${{ steps.outputs.outputs.cognito_domain }}"
+      # The values travel as dispatch inputs rather than repository variables:
+      # GITHUB_TOKEN cannot reach the Actions variables API, and storing an
+      # admin PAT to work around that would outweigh the convenience.
       - name: Trigger Pages deployment with the deployed API configuration
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME"
+        run: |
+          gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" \
+            -f api_base_url="${{ steps.outputs.outputs.api_base_url }}" \
+            -f cognito_user_pool_id="${{ steps.outputs.outputs.cognito_user_pool_id }}" \
+            -f cognito_user_pool_client_id="${{ steps.outputs.outputs.cognito_user_pool_client_id }}" \
+            -f cognito_domain="${{ steps.outputs.outputs.cognito_domain }}"
       - name: Publish deployment summary
         working-directory: infra
         run: |
           {
             echo '## Production API deployed'
             echo ''
-            echo 'The workflow updated the GitHub Pages configuration and triggered a Pages deployment.'
+            echo 'The workflow passed these values to a Pages deployment.'
             echo ''
             echo "- \`VITE_API_BASE_URL\`: \`$(terraform output -raw api_base_url)\`"
             echo "- \`VITE_AWS_REGION\`: \`$AWS_REGION\`"

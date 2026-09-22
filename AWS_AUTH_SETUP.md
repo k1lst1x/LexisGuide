@@ -24,8 +24,11 @@ production API runs as FastAPI on AWS Lambda behind API Gateway.
    ```
 
 The Terraform outputs include the API Gateway URL and all public frontend Cognito
-values. The production deployment workflow writes them to GitHub
-**Settings → Secrets and variables → Actions → Variables** automatically:
+values. After each apply, the production deployment workflow hands them to the
+Pages workflow as dispatch inputs, so a freshly applied stack publishes with its
+own values. Keep the same values in GitHub
+**Settings → Secrets and variables → Actions → Variables**, which is what a Pages
+run started on its own uses:
 
 - `VITE_API_BASE_URL`
 - `VITE_AWS_REGION`
@@ -35,6 +38,10 @@ values. The production deployment workflow writes them to GitHub
 
 The Pages workflow deliberately fails if these values are missing; it must never
 silently publish a frontend that sends authenticated requests to GitHub Pages.
+
+The deployment workflow cannot write those variables itself: `GITHUB_TOKEN` has
+no access to the Actions variables API, and that is not worth storing a
+long-lived admin PAT for. Update them by hand when the stack is recreated.
 
 ## Automated deployment from GitHub Actions
 

@@ -7,6 +7,21 @@ on:
       - frontend/**
       - .github/workflows/pages.yml
   workflow_dispatch:
+    # "Deploy production API" passes its Terraform outputs here so a freshly
+    # applied stack publishes with its own values. It cannot write repository
+    # variables: GITHUB_TOKEN has no access to the Actions variables API, and a
+    # long-lived admin PAT is not worth storing for this. A manual run passes
+    # nothing and falls back to the repository variables.
+    inputs:
+      api_base_url:
+        description: API Gateway base URL, without a trailing slash
+        required: false
+      cognito_user_pool_id:
+        required: false
+      cognito_user_pool_client_id:
+        required: false
+      cognito_domain:
+        required: false
 
 permissions:
   contents: read
@@ -21,11 +36,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+      VITE_API_BASE_URL: ${{ inputs.api_base_url || vars.VITE_API_BASE_URL }}
       VITE_AWS_REGION: ${{ vars.AWS_REGION }}
-      VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
-      VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ vars.VITE_COGNITO_USER_POOL_CLIENT_ID }}
-      VITE_COGNITO_DOMAIN: ${{ vars.VITE_COGNITO_DOMAIN }}
+      VITE_COGNITO_USER_POOL_ID: ${{ inputs.cognito_user_pool_id || vars.VITE_COGNITO_USER_POOL_ID }}
+      VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ inputs.cognito_user_pool_client_id || vars.VITE_COGNITO_USER_POOL_CLIENT_ID }}
+      VITE_COGNITO_DOMAIN: ${{ inputs.cognito_domain || vars.VITE_COGNITO_DOMAIN }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
