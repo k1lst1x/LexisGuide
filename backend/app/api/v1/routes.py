@@ -35,7 +35,7 @@ class HealthResponse(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
-    document_text: str = Field(min_length=1, max_length=100_000)
+    document_text: str = Field(min_length=1, max_length=250_000)
     action: str = Field(default="review", pattern="^(review|negotiate|rewrite)$")
     jurisdiction: str | None = Field(default=None, max_length=200)
     user_context: str | None = Field(default=None, max_length=5_000)

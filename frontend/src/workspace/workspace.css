@@ -394,6 +394,12 @@
 .ws-reader-head small { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-45); }
 .ws-reader-head strong { display: block; font-family: var(--serif); font-size: 18px; font-weight: 400; line-height: 1.25; }
 .ws-reader-head .ws-muted { font-size: 12px; }
+.ws-title-display { display: flex; align-items: center; gap: 6px; }
+.ws-title-display .ws-icon-btn { width: 28px; height: 28px; opacity: 0; color: var(--ink-60) !important; transition: opacity .15s, background-color .15s; }
+.ws-reader-head:hover .ws-title-display .ws-icon-btn, .ws-title-display .ws-icon-btn:focus-visible { opacity: 1; }
+.ws-title-edit { display: flex; align-items: center; gap: 5px; min-width: min(440px, 52vw); }
+.ws-title-edit input { min-width: 0; width: 100%; height: 32px; padding: 0 9px; border: 1px solid var(--green); border-radius: 8px; background: #fff; font: 400 17px var(--serif); color: var(--ink); outline: 0; box-shadow: 0 0 0 3px rgba(0,103,79,.1); }
+.ws-title-edit .ws-icon-btn { flex: none; width: 28px; height: 28px; color: var(--green) !important; }
 .ws-summary { display: flex; gap: 10px; margin: 16px 24px 0; padding: 12px 14px; border-radius: 12px; background: var(--green-soft); color: var(--green); }
 .ws-summary p { color: var(--ink); font-size: 13.5px; }
 .ws-paper-text { padding: 22px 28px 30px; font-family: var(--serif); font-size: 16.5px; line-height: 1.75; color: var(--ink); }

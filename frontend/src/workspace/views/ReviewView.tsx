@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, ChevronDown, ListTodo, MessageSquare, PencilLine, RotateCcw, Sparkles, Wand2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronDown, ListTodo, MessageSquare, PencilLine, RotateCcw, Sparkles, Wand2, X } from 'lucide-react'
 import { useWorkspace } from '../store'
 import { bySeverity, documentDisplayName, documentKind, openFindings, type Finding, type SampleDoc } from '../data'
 import { ProgressLine, ScoreMeter } from '../charts'
@@ -131,6 +131,8 @@ export function ReviewView() {
   const doc = ws.selected
   const [queue, setQueue] = useState<'open' | 'resolved' | 'all'>('open')
   const [mode, setMode] = useState<'read' | 'edit'>('read')
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleState, setTitleState] = useState({ documentId: doc.id, draft: doc.title })
   const [actionsOpen, setActionsOpen] = useState(false)
   const resolved = ws.resolved[doc.id] ?? []
   const actionable = doc.findings.filter((f) => f.severity !== 'pass')
@@ -139,6 +141,9 @@ export function ReviewView() {
   const shown = queue === 'open' ? openList : queue === 'resolved' ? ordered.filter((f) => resolved.includes(f.id) || f.severity === 'pass') : ordered
   const finding = ws.activeFinding
   const findingIndex = finding ? ordered.findIndex((f) => f.id === finding.id) : -1
+
+  const titleDraft = titleState.documentId === doc.id ? titleState.draft : doc.title
+  const saveTitle = () => { if (ws.renameDocument(titleDraft)) setEditingTitle(false) }
 
   return (
     <div className="ws-page ws-review">
@@ -206,7 +211,15 @@ export function ReviewView() {
           <div className="ws-reader-head">
             <div>
               <small>{doc.agency}</small>
-              <strong>{doc.title}</strong>
+              {editingTitle ? (
+                <form className="ws-title-edit" onSubmit={(event) => { event.preventDefault(); saveTitle() }}>
+                  <input value={titleDraft} onChange={(event) => setTitleState({ documentId: doc.id, draft: event.target.value })} aria-label="Document name" autoFocus maxLength={200} />
+                  <button type="submit" className="ws-icon-btn" aria-label="Save document name" title="Save name"><Check size={15} /></button>
+                  <button type="button" className="ws-icon-btn" aria-label="Cancel document rename" title="Cancel" onClick={() => { setTitleState({ documentId: doc.id, draft: doc.title }); setEditingTitle(false) }}><X size={15} /></button>
+                </form>
+              ) : (
+                <span className="ws-title-display"><strong>{doc.title}</strong><button type="button" className="ws-icon-btn" aria-label="Rename document" title="Rename document" onClick={() => { setTitleState({ documentId: doc.id, draft: doc.title }); setEditingTitle(true) }}><PencilLine size={14} /></button></span>
+              )}
               <span className="ws-muted">{doc.version} · {doc.date}</span>
             </div>
             <div className="ws-segment" role="group" aria-label="Reader mode">

@@ -15,7 +15,7 @@ def test_analyze_rejects_empty_document(authenticated_client: TestClient) -> Non
 def test_analyze_rejects_documents_above_the_contract_limit(
     authenticated_client: TestClient,
 ) -> None:
-    response = authenticated_client.post("/api/v1/analyze", json={"document_text": "a" * 100_001})
+    response = authenticated_client.post("/api/v1/analyze", json={"document_text": "a" * 250_001})
 
     assert response.status_code == 422
 
