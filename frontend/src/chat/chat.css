@@ -100,6 +100,10 @@
 
 /* Inside the workspace on phones, sit above the bottom tab bar. */
 .cw-in-workspace { --cw-bottom: 22px; }
+.cw-ai-page { position: static; display: block; width: 100%; max-width: 900px; margin: 0 auto; font-family: var(--cw-sans); color: var(--cw-ink); }
+.cw-ai-page .cw-panel { width: 100%; height: min(620px, calc(100vh - 250px)); min-height: 460px; border-radius: 18px; box-shadow: var(--shadow, 0 18px 45px -28px rgba(30,30,10,.45)); transform-origin: center; }
+.cw-ai-page .cw-list { padding: 20px; }
+.cw-ai-page .cw-msg { max-width: 76%; font-size: 14.5px; }
 @media (max-width: 860px) {
   .cw { right: 14px; }
   .cw-in-workspace { --cw-bottom: 78px; }
