@@ -76,6 +76,13 @@ resource "aws_cognito_user_pool" "main" {
     required            = true
     mutable             = true
   }
+
+  lifecycle {
+    # Cognito fixes a pool's schema at creation: standard attributes cannot be
+    # added or changed later, and an update attempt is rejected as an unsupported
+    # required custom attribute. Apply the schema on create, then leave it alone.
+    ignore_changes = [schema]
+  }
 }
 
 resource "aws_cognito_user_pool_domain" "main" {
@@ -315,6 +322,13 @@ resource "aws_apigatewayv2_stage" "api" {
       userAgent = "$context.identity.userAgent"
     })
   }
+
+  # route_settings names a route by key, which Terraform cannot see as a
+  # dependency, so the stage must wait for the routes to exist.
+  depends_on = [
+    aws_apigatewayv2_route.api,
+    aws_apigatewayv2_route.health,
+  ]
 }
 
 resource "aws_lambda_permission" "api_gateway" {

@@ -11,6 +11,8 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "boto3>=1.42,<2.0",
   "fastapi>=0.141,<0.142",
+  "lexisguide-assistant",
+  "lexisguide-review-contract",
   "mangum>=0.19,<1.0",
   "PyJWT[crypto]>=2.10,<3.0",
   "python-dotenv>=1.1,<2.0",
@@ -23,6 +25,12 @@ dev = [
   "pytest>=8.3,<10.0",
   "ruff>=0.14,<0.17",
 ]
+
+# The shared contracts live in this repo, not on an index. The Lambda build
+# installs them from the same paths; here uv resolves them for local runs and tests.
+[tool.uv.sources]
+lexisguide-assistant = { path = "../packages/assistant_agent", editable = true }
+lexisguide-review-contract = { path = "../packages/review_contract", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
