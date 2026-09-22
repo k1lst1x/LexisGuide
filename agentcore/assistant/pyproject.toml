@@ -1,0 +1,26 @@
+[project]
+name = "lexisguide-assistant-runtime"
+version = "0.1.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "boto3>=1.42,<2.0",
+  "bedrock-agentcore>=1.0,<2.0",
+  "aws-opentelemetry-distro~=0.18.0",
+  "lexisguide-assistant>=0.1,<0.2",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.uv.sources]
+lexisguide-assistant = { path = "vendor/lexisguide_assistant-0.1.0-py3-none-any.whl" }
+
+[tool.agentcore]
+entrypoint = "main.py"
+runtime = "PYTHON_3_13"
+network_mode = "PUBLIC"
+memory = "none"

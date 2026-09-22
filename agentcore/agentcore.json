@@ -18,8 +18,33 @@
       "networkMode": "PUBLIC",
       "protocol": "HTTP",
       "envVars": [
-        {"name": "AWS_REGION", "value": "us-east-1"},
-        {"name": "BEDROCK_MODEL_ID", "value": "us.amazon.nova-lite-v1:0"}
+        {
+          "name": "AWS_REGION",
+          "value": "us-east-1"
+        },
+        {
+          "name": "BEDROCK_MODEL_ID",
+          "value": "us.amazon.nova-lite-v1:0"
+        }
+      ]
+    },
+    {
+      "name": "LexisGuideAssistant",
+      "build": "CodeZip",
+      "entrypoint": "main.py",
+      "codeLocation": "agentcore/assistant",
+      "runtimeVersion": "PYTHON_3_13",
+      "networkMode": "PUBLIC",
+      "protocol": "HTTP",
+      "envVars": [
+        {
+          "name": "AWS_REGION",
+          "value": "us-east-1"
+        },
+        {
+          "name": "ASSISTANT_MODEL_ID",
+          "value": "us.amazon.nova-lite-v1:0"
+        }
       ]
     }
   ],

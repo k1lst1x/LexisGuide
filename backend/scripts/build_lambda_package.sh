@@ -18,6 +18,7 @@ python3.12 -m pip install \
   --no-compile \
   --target "$build_dir" \
   "$repo_dir/packages/review_contract" \
+  "$repo_dir/packages/assistant_agent" \
   "$backend_dir"
 
 (

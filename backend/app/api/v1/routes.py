@@ -1,12 +1,15 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from lexisguide_assistant import ChatReply, ChatRequest
 from pydantic import BaseModel, Field
 from review_contract import ReviewResult
 
 from app.auth import current_user
+from app.chat_agent import AssistantUnavailableError, configured_assistant, runtime_session_id
 from app.legal_agent import configured_agent
 from app.storage import (
+    consume_chat_quota,
     consume_review_quota,
     consume_workspace_invite,
     create_workspace,
@@ -21,6 +24,10 @@ from app.storage import (
 )
 
 router = APIRouter(prefix="/api/v1", tags=["v1"])
+
+
+class ChatPayload(ChatRequest):
+    conversation_id: str = Field(pattern=r"^[A-Za-z0-9-]{8,64}$")
 
 
 class HealthResponse(BaseModel):
@@ -124,6 +131,34 @@ async def analyze_document(
         goals=payload.goals,
     )
     return AnalyzeResponse(**result)
+
+
+@router.post("/chat", response_model=ChatReply)
+async def chat(payload: ChatPayload, user: dict[str, str] = Depends(current_user)) -> ChatReply:
+    """Talk to the LexisGuide assistant (the LexisGuideAssistant AgentCore runtime)."""
+    assistant = configured_assistant()
+    if assistant is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The assistant is not configured.",
+        )
+    if not consume_chat_quota(user["sub"]):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Message limit reached. Please try again shortly.",
+            headers={"Retry-After": "60"},
+        )
+    request = ChatRequest(
+        messages=payload.messages,
+        context=payload.context.model_copy(update={"signed_in": True}),
+    )
+    try:
+        return assistant.chat(request, runtime_session_id(user["sub"], payload.conversation_id))
+    except AssistantUnavailableError as error:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The assistant could not answer right now.",
+        ) from error
 
 
 @router.get("/me", response_model=UserProfile)

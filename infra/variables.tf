@@ -39,6 +39,23 @@ variable "agentcore_runtime_arn" {
   default     = ""
 }
 
+variable "agentcore_assistant_runtime_arn" {
+  description = "Deployed LexisGuideAssistant AgentCore runtime ARN for /api/v1/chat. Empty disables live chat."
+  type        = string
+  default     = ""
+}
+
+variable "chat_rate_limit_per_window" {
+  description = "Assistant messages each user may send per 60-second window."
+  type        = number
+  default     = 20
+
+  validation {
+    condition     = var.chat_rate_limit_per_window >= 1 && var.chat_rate_limit_per_window <= 1000
+    error_message = "chat_rate_limit_per_window must be between 1 and 1000."
+  }
+}
+
 variable "api_allowed_origins" {
   description = "Exact browser origins permitted to call the API with credentials."
   type        = list(string)

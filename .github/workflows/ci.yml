@@ -28,7 +28,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
       - name: Install dependencies
-        run: pip install -e ../packages/review_contract -e '.[dev]'
+        run: pip install -e ../packages/review_contract -e ../packages/assistant_agent -e '.[dev]'
       - name: Lint
         run: ruff check .
       - name: Check formatting
@@ -56,6 +56,34 @@ jobs:
           ruff format --check packages/review_contract
       - name: Test
         run: pytest packages/review_contract/tests
+
+  assistant-agent:
+    name: Assistant agent checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: packages/assistant_agent/pyproject.toml
+      - name: Install the agent package
+        run: pip install -e 'packages/assistant_agent' 'pytest>=8.3,<10.0' 'ruff>=0.14,<0.17'
+      - name: Lint and check formatting
+        run: |
+          ruff check packages/assistant_agent
+          ruff format --check packages/assistant_agent
+      - name: Test the agent
+        run: pytest packages/assistant_agent/tests
+      - name: Test the AgentCore entrypoint
+        working-directory: agentcore/assistant
+        env:
+          AWS_REGION: us-east-1
+        run: |
+          pip install 'bedrock-agentcore>=1.0,<2.0'
+          python -m unittest discover -s tests
 
   agentcore-runtime:
     name: AgentCore runtime checks

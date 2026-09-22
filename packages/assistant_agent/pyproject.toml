@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lexisguide-assistant"
+version = "0.1.0"
+description = "Conversational LexisGuide agent shared by the API and the AgentCore runtime"
+requires-python = ">=3.12,<3.14"
+dependencies = ["boto3>=1.42,<2.0", "pydantic>=2.9,<3.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lexisguide_assistant"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
