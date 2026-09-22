@@ -54,7 +54,10 @@ describe('App', () => {
     expect(window.localStorage.getItem('lexisguide:space-messages')).toBeNull()
   })
 
-  it('does not restore a cached workspace identity when no Cognito session exists', async () => {
+  it('asks a returning browser to sign in rather than reopening the workspace', async () => {
+    // Local storage records what this browser last did, never who it is. The
+    // workspace holds the person's own documents, so only a live Cognito
+    // session may open it.
     authMocks.cognitoGetCurrentUser.mockResolvedValue(null)
     window.localStorage.setItem('lexisguide:workspace', 'open')
     window.localStorage.setItem('lexisguide:workspace-user', JSON.stringify({ email: 'saved@example.com', username: 'saved@example.com' }))
@@ -62,7 +65,9 @@ describe('App', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Documents' })).not.toBeInTheDocument()
+    // The stale identity is cleared, so nothing can read it back later.
     expect(window.localStorage.getItem('lexisguide:workspace-user')).toBeNull()
     expect(window.localStorage.getItem('lexisguide:last-section')).toBeNull()
   })
@@ -75,7 +80,7 @@ describe('App', () => {
 
     render(<App />)
 
-    expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
     expect(window.localStorage.getItem('lexisguide:space-messages')).toBeNull()
     expect(window.localStorage.getItem('lexisguide:chat-workspace:prior@example.com')).toBeNull()
   })

@@ -1,4 +1,4 @@
-import { Activity, FileText, Home, Layers, LogOut, MessageSquare, PanelLeft, Plus, Settings } from 'lucide-react'
+import { Activity, FileText, Home, Layers, LogOut, MessageSquare, PanelLeft, Plus, Settings, Sparkles } from 'lucide-react'
 import { WorkspaceProvider, useWorkspace } from './store'
 import { documentDisplayName, openFindings, type NavItem } from './data'
 import { HomeView } from './views/HomeView'
@@ -7,6 +7,7 @@ import { ReviewView } from './views/ReviewView'
 import { ActivityView } from './views/ActivityView'
 import { MessagesView } from './views/MessagesView'
 import { SettingsView } from './views/SettingsView'
+import { AssistantView } from './views/AssistantView'
 import { WorkspaceChat } from './WorkspaceChat'
 import { AddDocument } from './AddDocument'
 import { AccountMenu, Notifications, SearchBox } from './TopBar'
@@ -17,6 +18,7 @@ import './workspace.css'
 const NAV: Array<{ group: string; items: Array<{ key: NavItem; label: string; icon: typeof Home }> }> = [
   { group: 'Review', items: [
     { key: 'overview', label: 'Home', icon: Home },
+    { key: 'assistant', label: 'AI Assistant', icon: Sparkles },
     { key: 'documents', label: 'Documents', icon: FileText },
     { key: 'linter', label: 'Review', icon: Layers },
   ] },
@@ -92,6 +94,7 @@ function Shell({ onClose, onSignOut, userEmail }: { onClose: () => void; onSignO
         </header>
         <main className="ws-content" key={ws.nav}>
           {ws.nav === 'overview' && <HomeView />}
+          {ws.nav === 'assistant' && <AssistantView />}
           {ws.nav === 'documents' && <DocumentsView />}
           {ws.nav === 'linter' && <ReviewView />}
           {ws.nav === 'chain' && <ActivityView />}
@@ -100,7 +103,7 @@ function Shell({ onClose, onSignOut, userEmail }: { onClose: () => void; onSignO
         </main>
       </div>
 
-      <WorkspaceChat userEmail={userEmail} />
+      {ws.nav !== 'assistant' && <WorkspaceChat userEmail={userEmail} />}
       <AddDocument />
       {ws.notice && <div className="ws-toast" role="status">{ws.notice}<button type="button" aria-label="Dismiss" onClick={() => ws.setNotice('')}>×</button></div>}
 

@@ -34,7 +34,9 @@ function readWorkspaceUser() {
     const value = window.localStorage.getItem(WORKSPACE_USER_KEY)
     if (!value) return null
     const user = JSON.parse(value) as { email?: unknown; username?: unknown }
-    return typeof user.email === 'string' && typeof user.username === 'string' ? { email: user.email, username: user.username } : null
+    return typeof user.email === 'string' && typeof user.username === 'string'
+      ? { email: user.email, username: user.username }
+      : null
   } catch {
     return null
   }
@@ -57,11 +59,14 @@ export function App() {
   // Check existing session on mount
   useEffect(() => {
     let mounted = true
-    const opensDashboardRoute = window.location.pathname.endsWith('/dashboard') || window.location.hash === '#dashboard'
+    const wantsWorkspace = window.location.pathname.endsWith('/dashboard') || window.location.hash === '#dashboard' || window.localStorage.getItem(WORKSPACE_KEY) === 'open'
     const savedUser = readWorkspaceUser()
     cognitoGetCurrentUser()
       .then((user) => {
         if (!mounted) return
+        // Only a live Cognito session opens the workspace. Local storage says
+        // what this browser last did, never who it is, so it cannot stand in
+        // for a session: the workspace holds the person's own documents.
         if (user) {
           const restoredUser = { email: user.email, username: user.username }
           const shouldOpenWorkspace = window.localStorage.getItem(WORKSPACE_KEY) !== 'closed'
@@ -73,7 +78,7 @@ export function App() {
           // Never treat browser storage as proof of an authenticated identity.
           // Clear stale workspace data even if its cached user marker is absent or invalid.
           clearAccountWorkspaceStorage()
-          if (opensDashboardRoute) setDashOpen(true)
+          if (wantsWorkspace) setAuthOpen(true)
         }
       })
       .catch(() => {})
@@ -128,12 +133,18 @@ export function App() {
 
   // The loader sheet fully covers the screen at ~600ms; swap screens underneath, then let it sweep away.
   const openDashboard = useCallback(() => {
+    // Without a session there is no workspace to open, so ask them to sign in
+    // rather than play the transition and land back on the homepage.
+    if (!currentUser) {
+      setAuthOpen(true)
+      return
+    }
     window.localStorage.setItem(WORKSPACE_KEY, 'open')
     setTransitionMsg('Opening your workspace')
     setTransitioning(true)
     window.setTimeout(() => setDashOpen(true), 650)
     window.setTimeout(() => setTransitioning(false), 1500)
-  }, [])
+  }, [currentUser])
 
   const closeDashboard = useCallback(() => {
     window.localStorage.setItem(WORKSPACE_KEY, 'closed')
@@ -154,12 +165,11 @@ export function App() {
       <AuthSectionOne
         onSuccess={handleAuthSuccess}
         onCancel={() => setAuthOpen(false)}
-        onDemo={() => { setAuthOpen(false); openDashboard() }}
         initialMode="sign-in"
       />
     )
-  } else if (showApp && dashOpen) {
-    screen = <DashboardV2 onClose={closeDashboard} onSignOut={handleSignOut} userEmail={currentUser?.email} />
+  } else if (showApp && dashOpen && currentUser) {
+    screen = <DashboardV2 onClose={closeDashboard} onSignOut={handleSignOut} userEmail={currentUser.email} />
   } else if (showApp) {
     screen = (
       <>

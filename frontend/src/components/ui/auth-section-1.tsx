@@ -19,8 +19,6 @@ import { authErrorMessage } from "../../authErrors";
 export type AuthSectionOneProps = {
   onSuccess?: (email: string) => void;
   onCancel?: () => void;
-  /** Offered when sign-in is not configured in this build. */
-  onDemo?: () => void;
   initialMode?: "sign-in" | "sign-up";
 };
 
@@ -35,7 +33,7 @@ const PASSWORD_RULES: Array<[string, (value: string) => boolean]> = [
   ["Symbol", (v) => /[^A-Za-z0-9]/.test(v)],
 ];
 
-export default function AuthSectionOne({ onSuccess, onCancel, onDemo, initialMode = "sign-up" }: AuthSectionOneProps) {
+export default function AuthSectionOne({ onSuccess, onCancel, initialMode = "sign-up" }: AuthSectionOneProps) {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -64,7 +62,7 @@ export default function AuthSectionOne({ onSuccess, onCancel, onDemo, initialMod
 
   const run = async (task: () => Promise<void>) => {
     if (!authConfigured) {
-      setError("Sign-in isn't connected in this build. You can still explore the demo workspace.");
+      setError("Sign-in is unavailable in this build. Please try again later.");
       return;
     }
     setBusy(true);
@@ -204,8 +202,7 @@ export default function AuthSectionOne({ onSuccess, onCancel, onDemo, initialMod
 
             {!authConfigured && (
               <div className="auth-notice" role="status">
-                <span>Sign-in isn't connected in this build yet.</span>
-                {onDemo && <button type="button" className="auth-text-button" onClick={onDemo}>Explore the demo workspace</button>}
+                <span>Sign-in isn't available in this build yet. The workspace holds real documents, so there is no way in without an account.</span>
               </div>
             )}
 
