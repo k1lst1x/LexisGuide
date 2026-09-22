@@ -25,10 +25,10 @@ jobs:
     name: Package and deploy API
     runs-on: ubuntu-latest
     env:
-      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
       AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-west-2' }}
       TF_VAR_cognito_domain_prefix: ${{ vars.COGNITO_DOMAIN_PREFIX }}
       # An account on the default Lambda limit of 10 concurrent executions cannot
       # reserve any, because AWS requires 10 to stay unreserved. Such an account
@@ -105,7 +105,8 @@ jobs:
             -f api_base_url="${{ steps.outputs.outputs.api_base_url }}" \
             -f cognito_user_pool_id="${{ steps.outputs.outputs.cognito_user_pool_id }}" \
             -f cognito_user_pool_client_id="${{ steps.outputs.outputs.cognito_user_pool_client_id }}" \
-            -f cognito_domain="${{ steps.outputs.outputs.cognito_domain }}"
+            -f cognito_domain="${{ steps.outputs.outputs.cognito_domain }}" \
+            -f aws_region="$AWS_REGION"
       - name: Publish deployment summary
         working-directory: infra
         run: |
