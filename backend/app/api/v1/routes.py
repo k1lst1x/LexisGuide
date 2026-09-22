@@ -21,6 +21,7 @@ from app.storage import (
     list_workspaces,
     put_profile,
     save_record,
+    set_workspace_linked_document,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["v1"])
@@ -78,6 +79,8 @@ class Workspace(BaseModel):
     owner_id: str
     created_at: str
     role: str = "member"
+    linked_document_id: str | None = None
+    linked_document_title: str | None = None
 
 
 class WorkspaceMember(BaseModel):
@@ -90,6 +93,11 @@ class WorkspaceMember(BaseModel):
 
 class WorkspaceInvite(BaseModel):
     invite_code: str
+
+
+class WorkspaceLinkedDocument(BaseModel):
+    document_id: str = Field(min_length=1, max_length=160)
+    document_title: str = Field(min_length=1, max_length=240)
 
 
 class WorkspaceJoinResponse(Workspace):
@@ -234,6 +242,17 @@ async def read_workspace_members(
     if not get_workspace_membership(workspace_id, user["sub"]):
         raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
     return [WorkspaceMember(**member) for member in list_workspace_members(workspace_id)]
+
+
+@router.put("/workspaces/{workspace_id}/linked-document", response_model=Workspace)
+async def update_workspace_linked_document(
+    workspace_id: str, payload: WorkspaceLinkedDocument, user: dict[str, str] = Depends(current_user)
+) -> Workspace:
+    membership = get_workspace_membership(workspace_id, user["sub"])
+    if not membership or membership.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Only the workspace host can change the linked document.")
+    workspace = set_workspace_linked_document(workspace_id, payload.document_id, payload.document_title.strip())
+    return Workspace(**workspace, role=membership["role"])
 
 
 @router.post("/workspaces/{workspace_id}/invites", response_model=WorkspaceInvite)
