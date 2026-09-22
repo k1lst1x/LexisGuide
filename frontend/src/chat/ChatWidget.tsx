@@ -36,6 +36,8 @@ type Props = {
   onSignIn?: () => void
   className?: string
   footer?: ReactNode
+  /** Render as a full-page conversation, without the floating launcher. */
+  embedded?: boolean
 }
 
 const MAX_HISTORY = 12
@@ -82,7 +84,7 @@ function RichText({ text }: { text: string }) {
   return <>{blocks}</>
 }
 
-export function ChatWidget({ storageKey, context, suggestions = [], fallback = defaultGuide, greeting, open: controlledOpen, onOpenChange, pendingQuestion, onSignIn, className = '', footer }: Props) {
+export function ChatWidget({ storageKey, context, suggestions = [], fallback = defaultGuide, greeting, open: controlledOpen, onOpenChange, pendingQuestion, onSignIn, className = '', footer, embedded = false }: Props) {
   const [saved] = useState(() => load(storageKey))
   const [conversationId, setConversationId] = useState(saved?.conversationId ?? newId())
   const welcome: Turn = { id: 'welcome', role: 'assistant', content: greeting ?? 'Hi! I’m the LexisGuide assistant. Ask me about a notice or agreement, a legal term, or how to use LexisGuide.', local: true }
@@ -92,7 +94,7 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
   const [mode, setMode] = useState<Mode>('unknown')
   const [notice, setNotice] = useState('')
   const [localOpen, setLocalOpen] = useState(false)
-  const open = controlledOpen ?? localOpen
+  const open = embedded || (controlledOpen ?? localOpen)
   const setOpen = (value: boolean) => { onOpenChange?.(value); if (controlledOpen === undefined) setLocalOpen(value) }
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -173,7 +175,7 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
               <small><i className={`cw-dot cw-dot-${mode}`} />{status}</small>
             </div>
             <button type="button" className="cw-icon" onClick={reset} aria-label="Start a new conversation" title="New conversation"><RotateCcw size={15} /></button>
-            <button type="button" className="cw-icon" onClick={() => setOpen(false)} aria-label="Close assistant" title="Close"><Minus size={16} /></button>
+            {!embedded && <button type="button" className="cw-icon" onClick={() => setOpen(false)} aria-label="Close assistant" title="Close"><Minus size={16} /></button>}
           </header>
 
           <div className="cw-list" ref={listRef} aria-live="polite">
@@ -215,10 +217,10 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
         </section>
       )}
 
-      <button type="button" className="cw-launcher" onClick={() => setOpen(!open)} aria-label={open ? 'Close LexisGuide assistant' : 'Open LexisGuide assistant'} aria-expanded={open}>
+      {!embedded && <button type="button" className="cw-launcher" onClick={() => setOpen(!open)} aria-label={open ? 'Close LexisGuide assistant' : 'Open LexisGuide assistant'} aria-expanded={open}>
         <Sparkles size={18} />
         <span>{open ? 'Close' : 'Ask LexisGuide'}</span>
-      </button>
+      </button>}
     </div>
   )
 }

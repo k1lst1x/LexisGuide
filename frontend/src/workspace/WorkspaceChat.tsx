@@ -2,7 +2,7 @@ import { ChatWidget } from '../chat/ChatWidget'
 import { useWorkspace } from './store'
 import { assistantPageGuidance, assistantQuickPrompts, documentDisplayName, openFindings, type NavItem } from './data'
 
-const PAGE: Record<NavItem, string> = { overview: 'Home', documents: 'Documents', linter: 'Review', chain: 'Activity', team: 'Messages', settings: 'Settings' }
+const PAGE: Record<NavItem, string> = { overview: 'Home', assistant: 'AI Assistant', documents: 'Documents', linter: 'Review', chain: 'Activity', team: 'Messages', settings: 'Settings' }
 
 /** The chat popup, given what the person is looking at in the workspace. */
 export function WorkspaceChat() {

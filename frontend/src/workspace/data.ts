@@ -35,7 +35,7 @@ export type SampleDoc = {
   }>
 }
 
-export type NavItem = 'overview' | 'linter' | 'documents' | 'chain' | 'team' | 'settings'
+export type NavItem = 'overview' | 'assistant' | 'linter' | 'documents' | 'chain' | 'team' | 'settings'
 export type WorkspaceSummary = {
   id: string
   name: string
@@ -66,6 +66,7 @@ export const defaultWorkspaceMessages: WorkspaceMessage[] = [
 
 export const assistantPageGuidance: Record<NavItem, string> = {
   overview: 'Home shows what needs attention: the next document to review, upcoming deadlines, open findings by category, and every document score against the pass line.',
+  assistant: 'AI Assistant is a dedicated conversation space. Ask about the current document, its findings, a legal term, or how to use LexisGuide.',
   linter: 'Review is the main workspace. The finding queue is on the left, the highlighted document is in the middle, and the plain-language explanation, rule, and next step are on the right. Mark each finding resolved as you go.',
   documents: 'Documents lists every file with its score, open findings, and deadline. Add a file or paste text, then open it in Review.',
   chain: 'Activity shows how a document improved across versions, with the score trend and each review milestone.',
@@ -74,6 +75,7 @@ export const assistantPageGuidance: Record<NavItem, string> = {
 }
 export const assistantQuickPrompts: Record<NavItem, string[]> = {
   overview: ['What should I review first?', 'Explain this document rating'],
+  assistant: ['What should I review first?', 'Explain the highest-impact finding', 'Summarise this document in plain language', 'What evidence supports this review?'],
   linter: ['Explain this finding in plain language', 'Show exact document evidence', 'Draft a 30-day deadline revision', 'What could happen if we do nothing?'],
   documents: ['How do I add a document?', 'Which document is most urgent?'],
   chain: ['What changed in this review?', 'How do versions work?'],

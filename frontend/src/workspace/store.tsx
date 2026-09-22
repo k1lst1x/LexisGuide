@@ -12,7 +12,7 @@ const RESOLVED_KEY = 'lexisguide:resolved-findings'
 const LOCAL_WORKSPACES_KEY = 'lexisguide:local-workspaces'
 const LOCAL_INVITES_KEY = 'lexisguide:local-workspace-invites'
 const PERSONAL_WORKSPACE_ID = 'personal'
-const NAV_KEYS: NavItem[] = ['overview', 'documents', 'linter', 'chain', 'team', 'settings']
+const NAV_KEYS: NavItem[] = ['overview', 'assistant', 'documents', 'linter', 'chain', 'team', 'settings']
 
 export type AddStage = 'idle' | 'reading' | 'checking' | 'scoring' | 'done' | 'error'
 export type ReviewAction = 'review' | 'negotiate' | 'rewrite'
