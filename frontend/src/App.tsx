@@ -11,17 +11,6 @@ import { ChatWidget } from './chat/ChatWidget'
 const WORKSPACE_KEY = 'lexisguide:workspace'
 const WORKSPACE_USER_KEY = 'lexisguide:workspace-user'
 
-function readWorkspaceUser() {
-  try {
-    const value = window.localStorage.getItem(WORKSPACE_USER_KEY)
-    if (!value) return null
-    const user = JSON.parse(value) as { email?: unknown; username?: unknown }
-    return typeof user.email === 'string' && typeof user.username === 'string' ? { email: user.email, username: user.username } : null
-  } catch {
-    return null
-  }
-}
-
 /* ═════════════════════════════════════════════════════════════════
    APP
    ═════════════════════════════════════════════════════════════════ */
@@ -40,19 +29,22 @@ export function App() {
   useEffect(() => {
     let mounted = true
     const wantsWorkspace = window.location.pathname.endsWith('/dashboard') || window.location.hash === '#dashboard' || window.localStorage.getItem(WORKSPACE_KEY) === 'open'
-    const savedUser = readWorkspaceUser()
     cognitoGetCurrentUser()
       .then((user) => {
         if (!mounted) return
+        // Only a live Cognito session opens the workspace. Local storage says
+        // what this browser last did, never who it is, so it cannot stand in
+        // for a session: the workspace holds the person's own documents.
         if (user) {
           const restoredUser = { email: user.email, username: user.username }
           setCurrentUser(restoredUser)
           window.localStorage.setItem(WORKSPACE_USER_KEY, JSON.stringify(restoredUser))
           if (window.localStorage.getItem(WORKSPACE_KEY) !== 'closed') setDashOpen(true)
-        } else if (savedUser) {
-          setCurrentUser(savedUser)
+          return
         }
-        if (!user && wantsWorkspace) setDashOpen(true)
+        window.localStorage.removeItem(WORKSPACE_USER_KEY)
+        window.localStorage.removeItem(WORKSPACE_KEY)
+        if (wantsWorkspace) setAuthOpen(true)
       })
       .catch(() => {})
       .finally(() => {
@@ -106,12 +98,18 @@ export function App() {
 
   // The loader sheet fully covers the screen at ~600ms; swap screens underneath, then let it sweep away.
   const openDashboard = useCallback(() => {
+    // Without a session there is no workspace to open, so ask them to sign in
+    // rather than play the transition and land back on the homepage.
+    if (!currentUser) {
+      setAuthOpen(true)
+      return
+    }
     window.localStorage.setItem(WORKSPACE_KEY, 'open')
     setTransitionMsg('Opening your workspace')
     setTransitioning(true)
     window.setTimeout(() => setDashOpen(true), 650)
     window.setTimeout(() => setTransitioning(false), 1500)
-  }, [])
+  }, [currentUser])
 
   const closeDashboard = useCallback(() => {
     window.localStorage.setItem(WORKSPACE_KEY, 'closed')
@@ -132,12 +130,11 @@ export function App() {
       <AuthSectionOne
         onSuccess={handleAuthSuccess}
         onCancel={() => setAuthOpen(false)}
-        onDemo={() => { setAuthOpen(false); openDashboard() }}
         initialMode="sign-in"
       />
     )
-  } else if (showApp && dashOpen) {
-    screen = <DashboardV2 onClose={closeDashboard} onSignOut={handleSignOut} userEmail={currentUser?.email} />
+  } else if (showApp && dashOpen && currentUser) {
+    screen = <DashboardV2 onClose={closeDashboard} onSignOut={handleSignOut} userEmail={currentUser.email} />
   } else if (showApp) {
     screen = (
       <>

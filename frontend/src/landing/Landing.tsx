@@ -368,7 +368,7 @@ export function Landing({ userEmail, onOpenWorkspace, onSignIn, onSignOut }: Lan
             </>
           ) : (
             <>
-              <button type="button" className="lp-nav-text" onClick={onOpenWorkspace}>Try the demo</button>
+              <button type="button" className="lp-nav-text" onClick={onSignIn}>Create an account</button>
               <button type="button" className="lp-btn-dark lp-btn-sm" onClick={onSignIn}>Sign In</button>
             </>
           )}
