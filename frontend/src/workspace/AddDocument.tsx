@@ -62,7 +62,7 @@ export function AddDocument() {
                 >
                   <UploadCloud size={26} />
                   <strong>Drop a file here, or click to choose</strong>
-                  <small>PDF, Word (.docx), HTML, RTF or text. Scanned PDFs need pasted text.</small>
+                  <small>PDF, Word (.docx), HTML, RTF or text. Every readable page is included. Image-only PDFs need pasted text.</small>
                 </button>
               ) : (
                 <form className="ws-paste" onSubmit={(event) => { event.preventDefault(); void submit({ title, text }) }}>

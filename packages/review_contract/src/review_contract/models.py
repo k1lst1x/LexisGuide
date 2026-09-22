@@ -68,7 +68,7 @@ class ReviewRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    document: str = Field(min_length=1, max_length=100_000)
+    document: str = Field(min_length=1, max_length=250_000)
     action: Literal["review", "negotiate", "rewrite"] = "review"
     jurisdiction: str = Field(default="Not provided", max_length=200)
     user_context: str = Field(default="Not provided", max_length=5_000)

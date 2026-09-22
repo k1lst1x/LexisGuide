@@ -205,6 +205,18 @@ function useWorkspaceState(userEmail?: string) {
     updateDocument({ ...selected, text, version: 'Working copy · edited' })
   }, [selected, updateDocument])
 
+  const renameDocument = useCallback((title: string) => {
+    const nextTitle = title.trim().replace(/\s+/g, ' ')
+    if (!nextTitle) {
+      setNotice('Enter a document name before saving.')
+      return false
+    }
+    if (nextTitle === selected.title) return true
+    updateDocument({ ...selected, title: nextTitle, version: 'Working copy · renamed' })
+    setNotice(`Document renamed to “${nextTitle}”.`)
+    return true
+  }, [selected, updateDocument])
+
   const sendMessage = useCallback((text: string, attachment?: string | null) => {
     const trimmed = text.trim()
     if (!trimmed) return
@@ -360,7 +372,7 @@ function useWorkspaceState(userEmail?: string) {
 
   return {
     userEmail, nav, go, documents, selected, selectDocument, openInReview, activeFinding, setActiveFindingId,
-    resolved, toggleResolved, resolveAndNext, jurisdiction, setJurisdiction, busyAction, runAction, applyRewrite, editText,
+    resolved, toggleResolved, resolveAndNext, jurisdiction, setJurisdiction, busyAction, runAction, applyRewrite, editText, renameDocument,
     notice, setNotice, addOpen, setAddOpen, addStage, setAddStage, addMessage, addDocument, isDemo, stats,
     comments, reactions, toggleReaction, toggleSaved, sendMessage, draft, setDraft, composerFocus, focusComposer, tasks, addTask, toggleTask,
     messageTab, setMessageTab, discuss,
