@@ -30,6 +30,10 @@ jobs:
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
       TF_VAR_cognito_domain_prefix: ${{ vars.COGNITO_DOMAIN_PREFIX }}
+      # An account on the default Lambda limit of 10 concurrent executions cannot
+      # reserve any, because AWS requires 10 to stay unreserved. Such an account
+      # sets this variable to -1; everywhere else the safe default applies.
+      TF_VAR_api_lambda_reserved_concurrency: ${{ vars.API_LAMBDA_RESERVED_CONCURRENCY || '10' }}
       TF_VAR_agentcore_runtime_arn: ${{ vars.AGENTCORE_RUNTIME_ARN }}
       TF_VAR_agentcore_assistant_runtime_arn: ${{ vars.AGENTCORE_ASSISTANT_RUNTIME_ARN }}
       TF_VAR_google_client_id: ${{ vars.GOOGLE_CLIENT_ID }}
