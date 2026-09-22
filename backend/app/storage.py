@@ -115,11 +115,15 @@ def list_workspaces(user_id: str) -> list[dict[str, Any]]:
     return workspaces
 
 
-def set_workspace_linked_document(workspace_id: str, document_id: str, document_title: str) -> dict[str, Any]:
+def set_workspace_linked_document(
+    workspace_id: str, document_id: str, document_title: str
+) -> dict[str, Any]:
     """Persist the host-selected document shown in a shared workspace."""
     response = _table().update_item(
         Key={"PK": f"WORKSPACE#{workspace_id}", "SK": "META"},
-        UpdateExpression="SET linked_document_id = :document_id, linked_document_title = :document_title",
+        UpdateExpression=(
+            "SET linked_document_id = :document_id, linked_document_title = :document_title"
+        ),
         ExpressionAttributeValues={":document_id": document_id, ":document_title": document_title},
         ReturnValues="ALL_NEW",
     )

@@ -89,13 +89,18 @@ variable "review_rate_limit_window_seconds" {
 }
 
 variable "api_lambda_reserved_concurrency" {
-  description = "Hard cap on concurrent API Lambda executions to bound downstream AI spend."
+  description = <<-EOT
+    Hard cap on concurrent API Lambda executions to bound downstream AI spend.
+    Use -1 for no reservation: AWS keeps 10 concurrent executions unreserved per
+    account, so an account still on the default new-account limit of 10 cannot
+    reserve any. There the account limit itself provides the same cap.
+  EOT
   type        = number
   default     = 10
 
   validation {
-    condition     = var.api_lambda_reserved_concurrency >= 1
-    error_message = "api_lambda_reserved_concurrency must be at least 1."
+    condition     = var.api_lambda_reserved_concurrency >= 1 || var.api_lambda_reserved_concurrency == -1
+    error_message = "api_lambda_reserved_concurrency must be at least 1, or -1 for no reservation."
   }
 }
 

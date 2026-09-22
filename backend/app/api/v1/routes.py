@@ -246,12 +246,19 @@ async def read_workspace_members(
 
 @router.put("/workspaces/{workspace_id}/linked-document", response_model=Workspace)
 async def update_workspace_linked_document(
-    workspace_id: str, payload: WorkspaceLinkedDocument, user: dict[str, str] = Depends(current_user)
+    workspace_id: str,
+    payload: WorkspaceLinkedDocument,
+    user: dict[str, str] = Depends(current_user),
 ) -> Workspace:
     membership = get_workspace_membership(workspace_id, user["sub"])
     if not membership or membership.get("role") != "owner":
-        raise HTTPException(status_code=403, detail="Only the workspace host can change the linked document.")
-    workspace = set_workspace_linked_document(workspace_id, payload.document_id, payload.document_title.strip())
+        raise HTTPException(
+            status_code=403,
+            detail="Only the workspace host can change the linked document.",
+        )
+    workspace = set_workspace_linked_document(
+        workspace_id, payload.document_id, payload.document_title.strip()
+    )
     return Workspace(**workspace, role=membership["role"])
 
 
