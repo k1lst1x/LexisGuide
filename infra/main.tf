@@ -236,7 +236,7 @@ resource "aws_lambda_function" "api" {
       CORS_ALLOW_ORIGINS               = join(",", var.api_allowed_origins)
       REVIEW_RATE_LIMIT_PER_WINDOW     = var.review_rate_limit_per_window
       REVIEW_RATE_LIMIT_WINDOW_SECONDS = var.review_rate_limit_window_seconds
-      LAWFIRM_API_KEY_SECRET_ARN        = var.lawfirm_api_key_secret_arn
+      LAWFIRM_API_KEY_SECRET_ARN       = var.lawfirm_api_key_secret_arn
     }
   }
 
