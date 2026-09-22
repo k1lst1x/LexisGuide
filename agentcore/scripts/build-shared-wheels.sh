@@ -15,4 +15,5 @@ build() {
   echo "Built $(ls "$runtime_dir/vendor") for $(basename "$runtime_dir")"
 }
 
+build "$root/packages/review_contract" "$root/agentcore/runtime"
 build "$root/packages/assistant_agent" "$root/agentcore/assistant"

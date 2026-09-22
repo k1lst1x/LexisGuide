@@ -17,7 +17,7 @@ build-backend = "setuptools.build_meta"
 py-modules = ["main", "legal_agent"]
 
 [tool.uv.sources]
-lexisguide-review-contract = { path = "../../packages/review_contract", editable = true }
+lexisguide-review-contract = { path = "vendor/lexisguide_review_contract-0.1.0-py3-none-any.whl" }
 
 [tool.agentcore]
 entrypoint = "main.py"

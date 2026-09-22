@@ -333,15 +333,18 @@ requires-dist = [
     { name = "aws-opentelemetry-distro", specifier = "~=0.18.0" },
     { name = "bedrock-agentcore", specifier = ">=1.0,<2.0" },
     { name = "boto3", specifier = ">=1.42,<2.0" },
-    { name = "lexisguide-review-contract", editable = "../../packages/review_contract" },
+    { name = "lexisguide-review-contract", path = "vendor/lexisguide_review_contract-0.1.0-py3-none-any.whl" },
 ]
 
 [[package]]
 name = "lexisguide-review-contract"
 version = "0.1.0"
-source = { editable = "../../packages/review_contract" }
+source = { path = "vendor/lexisguide_review_contract-0.1.0-py3-none-any.whl" }
 dependencies = [
     { name = "pydantic" },
+]
+wheels = [
+    { filename = "lexisguide_review_contract-0.1.0-py3-none-any.whl", hash = "sha256:e41fb06c1b66bc7808e15944332f6b64e76f9971d954dc713c3a9a70a5adecd8" },
 ]
 
 [package.metadata]

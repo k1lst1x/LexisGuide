@@ -1,6 +1,6 @@
 "use client";
 
-import { GrainGradient } from "@paper-design/shaders-react";
+import meadowBg from "@/assets/meadow_bg.webp";
 import { useId, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -167,21 +167,8 @@ export default function AuthSectionOne({
         {/* Right Column — Grain Gradient Shader Banner with top & bottom gap */}
         <div className="auth-gradient-wrapper">
           <div className="auth-gradient-box">
-            <GrainGradient
-              speed={1}
-              scale={1}
-              rotation={0}
-              offsetX={0}
-              offsetY={0}
-              softness={0.5}
-              intensity={0.5}
-              noise={0.25}
-              shape="corners"
-              frame={2854.5}
-              colors={["#FFFFFF", "#FC7819", "#FC7819", "#FFFFFF"]}
-              colorBack="#00000000"
-              className="absolute inset-0 h-full w-full rounded-[20px] object-cover bg-black"
-            />
+            {/* The same watercolor meadow as the landing page, so sign-in feels like part of it. */}
+            <img src={meadowBg} alt="" aria-hidden="true" className="auth-meadow" />
             <div className="auth-switch-panel" key={mode}>
               <span className="auth-switch-kicker">LEXISGUIDE WORKSPACE</span>
               <h2>{isSignUp ? "Already reviewing with us?" : "New here?"}</h2>

@@ -14,9 +14,16 @@ class LegalDocumentAgent:
         self.model_id = model_id or os.getenv(
             "BEDROCK_MODEL_ID", "us.amazon.nova-lite-v1:0"
         )
-        self.client = client or boto3.client(
-            "bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1")
-        )
+        self._client = client
+
+    @property
+    def client(self) -> Any:
+        """Created on first use, so importing the runtime never needs AWS credentials."""
+        if self._client is None:
+            self._client = boto3.client(
+                "bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1")
+            )
+        return self._client
 
     def review(self, request: ReviewRequest) -> dict[str, Any]:
         response = self.client.converse(
