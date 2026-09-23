@@ -82,6 +82,9 @@ function useWorkspaceState(userEmail?: string) {
   const [tasks, setTasks] = useState<WorkspaceTask[]>(defaultTasks)
   const [draft, setDraft] = useState('')
   const [messageTab, setMessageTab] = useState<'chat' | 'files' | 'tasks'>('chat')
+  // Prevent a double click or overlapping Enter/submit event from creating
+  // two copies of the same local group message before React clears the draft.
+  const lastMessageSend = useRef<{ key: string; at: number } | null>(null)
 
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>(localWorkspaces)
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceSummary | null>(null)
@@ -304,10 +307,14 @@ function useWorkspaceState(userEmail?: string) {
   const sendMessage = useCallback((text: string, attachment?: string | null) => {
     const trimmed = text.trim()
     if (!trimmed) return
+    const now = Date.now()
+    const key = `${activeMessageWorkspace}:${trimmed}:${attachment ?? ''}`
+    if (lastMessageSend.current?.key === key && now - lastMessageSend.current.at < 1_000) return
+    lastMessageSend.current = { key, at: now }
     messagesChanged.current = true
     setMessagesByWorkspace((current) => ({
       ...current,
-      [activeMessageWorkspace]: [...(current[activeMessageWorkspace] ?? []), { id: `message-${Date.now()}`, user: 'You (Reviewer)', text: trimmed, time: 'Just now', saved: false, attachment: attachment || undefined }],
+      [activeMessageWorkspace]: [...(current[activeMessageWorkspace] ?? []), { id: `message-${now}-${Math.random().toString(36).slice(2, 8)}`, user: 'You (Reviewer)', text: trimmed, time: 'Just now', saved: false, attachment: attachment || undefined }],
     }))
     setDraft('')
   }, [activeMessageWorkspace])

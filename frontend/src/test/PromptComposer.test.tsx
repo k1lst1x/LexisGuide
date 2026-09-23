@@ -89,6 +89,24 @@ describe('PromptComposer', () => {
     expect(screen.getByRole('button', { name: 'Send question' })).toBeDisabled()
   })
 
+  it('submits a message only once when two submit events arrive before state updates', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    function DeferredHarness() {
+      const [value, setValue] = useState('')
+      return <PromptComposer value={value} onChange={setValue} onSubmit={onSubmit} />
+    }
+    render(<DeferredHarness />)
+
+    await user.click(screen.getByRole('button', { name: 'Ask LexisGuide' }))
+    await user.type(field(), 'One message only')
+    await user.click(screen.getByRole('button', { name: 'Send question' }))
+    await user.click(screen.getByRole('button', { name: 'Send question' }))
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit).toHaveBeenCalledWith('One message only')
+  })
+
   it('stays open while it holds text the person has not sent', async () => {
     const user = userEvent.setup()
     render(<Harness />)

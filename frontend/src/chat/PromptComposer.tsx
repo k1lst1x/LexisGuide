@@ -43,6 +43,10 @@ export function PromptComposer({
   const [textHeight, setTextHeight] = useState(MIN_TEXT_HEIGHT)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const rootRef = useRef<HTMLFormElement>(null)
+  // A form submit and an Enter key handler can arrive in the same render
+  // frame, before the parent has supplied its new `busy` value. Keep the
+  // sent value locally so a single user gesture can only submit once.
+  const sentValueRef = useRef<string | null>(null)
 
   const hasValue = value.trim() !== ''
 
@@ -82,6 +86,14 @@ export function PromptComposer({
     return () => window.clearTimeout(timer)
   }, [isOpen, mic.recording])
 
+  useEffect(() => {
+    if (busy) return
+    const current = value.trim()
+    if (!current || (sentValueRef.current && current !== sentValueRef.current)) {
+      sentValueRef.current = null
+    }
+  }, [busy, value])
+
   const open = () => {
     setTyping(false)
     setExpanded(true)
@@ -89,10 +101,12 @@ export function PromptComposer({
 
   const submit = (event?: FormEvent) => {
     event?.preventDefault()
-    if (!hasValue || busy) return
+    const text = value.trim()
+    if (!text || busy || sentValueRef.current !== null) return
+    sentValueRef.current = text
     if (mic.recording) mic.stop()
     setTyping(false)
-    onSubmit(value)
+    onSubmit(text)
     setExpanded(false)
   }
 
