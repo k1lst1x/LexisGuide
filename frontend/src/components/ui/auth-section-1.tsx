@@ -89,6 +89,18 @@ export default function AuthSectionOne({ onSuccess, onCancel, initialMode = "sig
       const result = await cognitoSignIn(email.trim(), password);
       const step = result.nextStep?.signInStep;
       if (result.isSignedIn || step === "DONE") return finishSignIn();
+      if (step === "CONFIRM_SIGN_UP") {
+        // Amplify reports this as a step rather than throwing. Only accounts
+        // made before sign-up started confirming itself can be in this state,
+        // and no code can be sent to them, so name the way out.
+        setError("This account was created before sign-in changed and needs support to enable it. Please contact support@lexisguide.app.");
+        return;
+      }
+      if (step === "RESET_REQUIRED") {
+        go("forgot");
+        setInfo("This account needs a new password. We'll email you a reset code.");
+        return;
+      }
       setError("This account needs an extra sign-in step that isn't supported here yet.");
     });
 

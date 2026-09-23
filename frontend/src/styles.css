@@ -600,9 +600,11 @@ html, body {
 }
 
 /* Social buttons */
+/* One provider, so it spans the form rather than sitting in half the width
+   left by the second column. */
 .auth-social-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 14px;
 }
 
@@ -986,7 +988,7 @@ html, body {
 }
 
 @media (max-width: 420px) {
-  .auth-social-row, .auth-row-2col { grid-template-columns: minmax(0, 1fr); }
+  .auth-row-2col { grid-template-columns: minmax(0, 1fr); }
   .auth-field-input { font-size: 16px; }
   .auth-social-btn { min-height: 44px; }
 }
