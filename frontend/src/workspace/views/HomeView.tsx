@@ -1,4 +1,4 @@
-import { ArrowRight, CalendarClock, CheckCircle2, FileText, Flag, MessageSquare, Plus, Sparkles } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CalendarClock, CalendarDays, CheckCircle2, ChevronRight, FileText, Flag, MessageSquare, Plus, Sparkles } from 'lucide-react'
 import { useWorkspace } from '../store'
 import { PASS_SCORE, SEVERITY, documentDisplayName, documentKind, openFindings } from '../data'
 import { FindingsByCategory, ProgressLine, ScoreBars, ScoreMeter } from '../charts'
@@ -11,6 +11,18 @@ function greeting() {
 
 function daysUntil(date: Date) {
   return Math.ceil((date.getTime() - Date.now()) / 86_400_000)
+}
+
+function deadlineStatus(date: Date) {
+  const days = daysUntil(date)
+  if (days < 0) return { label: `${Math.abs(days)}d overdue`, tone: 'overdue' }
+  if (days === 0) return { label: 'Due today', tone: 'urgent' }
+  if (days <= 7) return { label: `${days}d left`, tone: 'urgent' }
+  return { label: `${days} days left`, tone: 'on-track' }
+}
+
+function deadlineMonth(date: Date) {
+  return date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
 }
 
 export function HomeView() {
@@ -112,25 +124,42 @@ export function HomeView() {
       </div>
 
       <div className="ws-grid-2">
-        <Card title="Deadlines" subtitle="Dates found in your documents, and the ones that are missing." id="deadlines-title">
-          <ul className="ws-list">
+        <Card
+          className="ws-deadlines-card"
+          title="Deadlines"
+          subtitle={`${stats.deadlines.length} confirmed date${stats.deadlines.length === 1 ? '' : 's'} · ${stats.missingDeadline.length} need${stats.missingDeadline.length === 1 ? 's' : ''} clarification`}
+          action={<button type="button" className="ws-link" onClick={() => firstDeadline ? ws.openInReview(firstDeadline.doc) : ws.go('documents')}>Review <ArrowRight size={13} /></button>}
+          id="deadlines-title"
+        >
+          {(stats.deadlines.length > 0 || stats.missingDeadline.length > 0) && (
+            <div className="ws-deadline-overview">
+              <CalendarDays size={16} aria-hidden="true" />
+              <span><strong>{stats.deadlines.length}</strong> confirmed</span>
+              {stats.missingDeadline.length > 0 && <span className="ws-deadline-missing"><AlertTriangle size={13} aria-hidden="true" /><strong>{stats.missingDeadline.length}</strong> need review</span>}
+            </div>
+          )}
+          <ul className="ws-deadline-list">
             {stats.deadlines.map(({ doc, date }) => (
               <li key={doc.id}>
                 <button type="button" onClick={() => ws.openInReview(doc)}>
-                  <span className="ws-date"><b>{date.toLocaleDateString(undefined, { day: 'numeric' })}</b>{date.toLocaleDateString(undefined, { month: 'short' })}</span>
-                  <span><strong>{documentDisplayName(doc)}</strong><small>{daysUntil(date) >= 0 ? `${daysUntil(date)} days left` : 'Date has passed'} · confidence {doc.deadlineConfidence ?? 'unknown'}</small></span>
+                  <span className="ws-deadline-date"><b>{date.toLocaleDateString('en-US', { day: 'numeric' })}</b><small>{deadlineMonth(date)}</small></span>
+                  <span className="ws-deadline-copy"><strong>{documentDisplayName(doc)}</strong><small>Confirmed deadline · {doc.deadlineConfidence ?? 'unknown'} confidence</small></span>
+                  <span className={`ws-deadline-status is-${deadlineStatus(date).tone}`}>{deadlineStatus(date).label}</span>
+                  <ChevronRight size={16} aria-hidden="true" />
                 </button>
               </li>
             ))}
             {stats.missingDeadline.map((doc) => (
               <li key={`missing-${doc.id}`}>
                 <button type="button" onClick={() => ws.openInReview(doc, doc.findings.find((f) => /deadline/i.test(f.title + f.category))?.id)}>
-                  <span className="ws-date ws-date-missing"><b>?</b>No date</span>
-                  <span><strong>{documentDisplayName(doc)}</strong><small>The document does not state a clear deadline. Ask for one in writing.</small></span>
+                  <span className="ws-deadline-date is-missing"><b>?</b><small>DATE</small></span>
+                  <span className="ws-deadline-copy"><strong>{documentDisplayName(doc)}</strong><small>No clear deadline in the document</small></span>
+                  <span className="ws-deadline-status is-review">Clarify</span>
+                  <ChevronRight size={16} aria-hidden="true" />
                 </button>
               </li>
             ))}
-            {!stats.deadlines.length && !stats.missingDeadline.length && <li className="ws-muted">No deadlines found yet.</li>}
+            {!stats.deadlines.length && !stats.missingDeadline.length && <li className="ws-deadline-empty"><CalendarClock size={17} /><span><strong>No deadlines found yet</strong><small>When a document includes a date, it will appear here.</small></span></li>}
           </ul>
         </Card>
         <Card title="Recent activity" action={<button type="button" className="ws-link" onClick={() => ws.go('chain')}>View all</button>} id="activity-title">
