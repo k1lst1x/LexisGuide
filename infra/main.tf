@@ -193,7 +193,9 @@ data "aws_iam_policy_document" "api_lambda" {
       ]
       resources = [
         "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/${statement.value}",
-        "arn:aws:bedrock:${var.aws_region}::foundation-model/*",
+        # Cross-region inference profiles may route a request to any enabled
+        # foundation-model region. The profile itself remains account-scoped.
+        "arn:aws:bedrock:*::foundation-model/*",
       ]
     }
   }
@@ -237,10 +239,6 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      # Lambda does not expose its execution region through the application
-      # environment consistently. Set it explicitly so every SDK client uses
-      # the same region as the deployed Bedrock inference profile.
-      AWS_REGION                            = var.aws_region
       COGNITO_USER_POOL_ID                  = aws_cognito_user_pool.main.id
       COGNITO_USER_POOL_CLIENT_ID           = aws_cognito_user_pool_client.web.id
       USER_DATA_TABLE                       = aws_dynamodb_table.user_data.name
