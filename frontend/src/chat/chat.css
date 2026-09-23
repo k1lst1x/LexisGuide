@@ -197,56 +197,53 @@
 }
 .cw-compose-wrap { display: flex; justify-content: center; padding: 0 12px; }
 
-/* ── Assistant page: one chat box, centred ───────────────────── */
+/* ── Assistant page ──────────────────────────────────────────
+   A column that fills the view: the transcript takes the room it needs and
+   the composer stays docked beneath it. Before the first question there is no
+   transcript, so a greeting sits in the middle instead. */
 .ac {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  min-height: min(560px, calc(100vh - 260px));
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  max-width: 820px;
-  margin: 0 auto;
   font-family: var(--cw-sans);
   color: var(--cw-ink);
 }
-/* Once there is a transcript it takes the space and the box settles beneath. */
-.ac.is-started { justify-content: flex-end; }
 
-.ac-greeting {
-  max-width: 34ch;
-  margin: 0;
-  font-family: var(--serif, 'Newsreader', Georgia, serif);
-  font-size: 22px;
-  line-height: 1.35;
-  color: var(--cw-ink);
-  text-align: center;
-  animation: ac-rise .45s cubic-bezier(.2,.8,.2,1) both;
-}
-
-.ac-thread {
+/* ── Opening state ─────────────────────────────────────────── */
+.ac-hero {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 10px;
-  width: 100%;
-  max-height: calc(100vh - 380px);
-  padding: 4px 2px 6px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-.ac-thread .cw-msg { animation: ac-rise .35s cubic-bezier(.2,.8,.2,1) both; }
-
-@keyframes ac-rise {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.ac-notice {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--cw-ink-45);
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 0;
+  padding: 24px 16px;
   text-align: center;
+}
+.ac-hero-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: var(--cw-green);
+  color: #fff;
+  box-shadow: 0 14px 30px -16px rgba(0, 103, 79, .8);
+  animation: ac-mark .6s var(--cw-ease) both;
+}
+.ac-hero h2 {
+  max-width: 26ch;
+  margin: 0;
+  font-family: var(--cw-serif);
+  font-size: clamp(24px, 2.6vw, 32px);
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -.015em;
+  color: var(--cw-ink);
+  animation: ac-rise .5s var(--cw-ease) 60ms both;
 }
 
 .ac-suggest {
@@ -254,27 +251,175 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
-  max-width: 640px;
+  max-width: 660px;
+  margin-top: 4px;
+  padding: 0;
 }
 .ac-suggest button {
-  padding: 7px 13px;
+  padding: 8px 14px;
   border: 1px solid var(--cw-line);
   border-radius: 999px;
   background: #fffef9;
   font: inherit;
-  font-size: 12.5px;
-  color: var(--cw-ink);
-  transition: background-color .15s, border-color .15s, transform .2s cubic-bezier(.175,.885,.32,1.275);
+  font-size: 13px;
+  color: var(--cw-ink) !important;
+  transition: border-color .18s, background-color .18s, transform .28s var(--cw-ease), box-shadow .18s;
+  animation: ac-rise .45s var(--cw-ease) both;
 }
-.ac-suggest button:hover { background: var(--hover, #efe8d5); transform: translateY(-1px); }
+.ac-suggest button:hover {
+  border-color: var(--cw-line-2);
+  background: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -14px rgba(27, 28, 20, .5);
+}
+
+/* ── Transcript ────────────────────────────────────────────── */
+.ac-thread {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 8px 4px 20px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cw-line-2) transparent;
+  /* The last message fades under the composer instead of colliding with it. */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+}
+.ac-thread::-webkit-scrollbar { width: 6px; }
+.ac-thread::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--cw-line); }
+.ac-thread:hover::-webkit-scrollbar-thumb { background: var(--cw-line-2); }
+
+.ac-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 100%;
+  animation: ac-msg-in .42s var(--cw-ease) both;
+}
+.ac-msg-user { justify-content: flex-end; }
+
+.ac-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  border-radius: 9px;
+  background: var(--cw-green);
+  color: #fff;
+}
+
+.ac-bubble {
+  position: relative;
+  max-width: min(72ch, 82%);
+  padding: 12px 16px;
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+.ac-bubble p { margin: 0; }
+.ac-bubble p + p,
+.ac-bubble p + ul,
+.ac-bubble p + ol,
+.ac-bubble ul + p,
+.ac-bubble ol + p { margin-top: 9px; }
+.ac-bubble ul, .ac-bubble ol { margin: 6px 0 0; padding-left: 20px; }
+.ac-bubble li + li { margin-top: 4px; }
+.ac-bubble strong { font-weight: 600; }
+
+.ac-msg-assistant .ac-bubble {
+  border-radius: 6px 18px 18px 18px;
+  background: var(--cw-sand);
+  box-shadow: inset 0 0 0 1px var(--cw-line);
+}
+.ac-msg-user .ac-bubble {
+  border-radius: 18px 18px 6px 18px;
+  background: var(--cw-ink);
+  color: #fffaeb;
+  white-space: pre-wrap;
+  box-shadow: 0 10px 24px -18px rgba(27, 28, 20, .9);
+}
+
+/* Appears on hover, and whenever the keyboard reaches it. */
+.ac-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 253, 245, .9);
+  color: var(--cw-ink-60) !important;
+  opacity: 0;
+  transition: opacity .18s, color .18s, background-color .18s;
+}
+.ac-msg:hover .ac-copy,
+.ac-copy:focus-visible { opacity: 1; }
+.ac-copy:hover { background: #fff; color: var(--cw-ink) !important; }
+
+.ac-typing { display: flex; gap: 5px; align-items: center; padding: 15px 17px; }
+.ac-typing span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cw-green);
+  animation: cw-bounce 1s ease-in-out infinite;
+}
+.ac-typing span:nth-child(2) { animation-delay: .15s; }
+.ac-typing span:nth-child(3) { animation-delay: .3s; }
+
+/* ── Dock ──────────────────────────────────────────────────── */
+.ac-dock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  width: 100%;
+  padding-top: 4px;
+}
+
+.ac-notice {
+  margin: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: #fdf6dc;
+  box-shadow: inset 0 0 0 1px #f0dfa6;
+  font-size: 12.5px;
+  color: #6b4d0c;
+  text-align: center;
+  animation: ac-rise .35s var(--cw-ease) both;
+}
 
 .ac-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  justify-content: center;
+  gap: 8px;
   font-size: 11.5px;
   color: var(--cw-ink-45);
 }
+.ac-foot-sep { opacity: .5; }
+.ac-status { display: inline-flex; align-items: center; gap: 6px; }
+.ac-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cw-line-2);
+  transition: background-color .3s;
+}
+.ac-status.is-live i { background: var(--cw-green); box-shadow: 0 0 0 3px rgba(0, 103, 79, .14); }
+.ac-status.is-guide i { background: #c98a1a; box-shadow: 0 0 0 3px rgba(201, 138, 26, .16); }
+
 .ac-reset {
   display: inline-flex;
   align-items: center;
@@ -284,9 +429,33 @@
   background: none;
   font: inherit;
   font-size: 11.5px;
-  color: var(--cw-ink-45);
+  color: var(--cw-ink-45) !important;
+  transition: color .15s;
 }
-.ac-reset:hover { color: var(--cw-ink); }
+.ac-reset:hover { color: var(--cw-ink) !important; }
+
+@keyframes ac-msg-in {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ac-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ac-mark {
+  from { opacity: 0; transform: translateY(8px) scale(.82); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 720px) {
+  .ac-bubble { max-width: 88%; font-size: 14px; }
+  .ac-suggest button { font-size: 12.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ac-hero-mark, .ac-hero h2, .ac-suggest button, .ac-msg, .ac-notice { animation: none !important; }
+  .ac-suggest button:hover { transform: none; }
+}
 
 /* ── Voice ───────────────────────────────────────────────────── */
 .cw-prompt-levels {

@@ -96,7 +96,7 @@ export default function AuthSectionOne({ onSuccess, onCancel, initialMode = "sig
         setError("This account was created before sign-in changed and needs support to enable it. Please contact support@lexisguide.app.");
         return;
       }
-      if (step === "RESET_REQUIRED") {
+      if (step === "RESET_PASSWORD") {
         go("forgot");
         setInfo("This account needs a new password. We'll email you a reset code.");
         return;
