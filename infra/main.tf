@@ -11,6 +11,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }
   }
 }
 
@@ -52,6 +56,12 @@ resource "aws_cognito_user_pool" "main" {
   # providers still establish a verified email through Cognito federation.
   # Password-reset codes remain enabled by the recovery configuration below.
   auto_verified_attributes = []
+
+  # Clearing the list above only stops the email being sent. Without this
+  # trigger a new account stays UNCONFIRMED and can never sign in.
+  lambda_config {
+    pre_sign_up = aws_lambda_function.pre_signup.arn
+  }
 
   account_recovery_setting {
     recovery_mechanism {
@@ -101,21 +111,6 @@ resource "aws_cognito_identity_provider" "google" {
   attribute_mapping = { email = "email", username = "sub" }
 }
 
-resource "aws_cognito_identity_provider" "apple" {
-  count         = var.apple_client_id == "" ? 0 : 1
-  user_pool_id  = aws_cognito_user_pool.main.id
-  provider_name = "SignInWithApple"
-  provider_type = "SignInWithApple"
-  provider_details = {
-    authorize_scopes = "email name"
-    client_id        = var.apple_client_id
-    team_id          = var.apple_team_id
-    key_id           = var.apple_key_id
-    private_key      = var.apple_private_key
-  }
-  attribute_mapping = { email = "email", username = "sub" }
-}
-
 resource "aws_cognito_user_pool_client" "web" {
   name                                 = "${var.project_name}-web"
   user_pool_id                         = aws_cognito_user_pool.main.id
@@ -123,7 +118,7 @@ resource "aws_cognito_user_pool_client" "web" {
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
-  supported_identity_providers         = concat(["COGNITO"], var.google_client_id == "" ? [] : ["Google"], var.apple_client_id == "" ? [] : ["SignInWithApple"])
+  supported_identity_providers         = concat(["COGNITO"], var.google_client_id == "" ? [] : ["Google"])
   callback_urls                        = var.callback_urls
   logout_urls                          = var.logout_urls
   explicit_auth_flows = [
@@ -131,7 +126,7 @@ resource "aws_cognito_user_pool_client" "web" {
     "ALLOW_REFRESH_TOKEN_AUTH",
     "ALLOW_USER_PASSWORD_AUTH",
   ]
-  depends_on = [aws_cognito_identity_provider.google, aws_cognito_identity_provider.apple]
+  depends_on = [aws_cognito_identity_provider.google]
 }
 
 data "aws_iam_policy_document" "api_lambda_assume_role" {
@@ -383,3 +378,69 @@ output "cognito_domain" {
 }
 output "user_data_table_name" { value = aws_dynamodb_table.user_data.name }
 output "api_base_url" { value = aws_apigatewayv2_api.api.api_endpoint }
+
+# ── Sign-up confirmation trigger ─────────────────────────────────────────────
+data "archive_file" "pre_signup" {
+  type        = "zip"
+  source_file = "${path.module}/lambda/pre_signup.py"
+  output_path = "${path.module}/.build/pre_signup.zip"
+}
+
+data "aws_iam_policy_document" "pre_signup_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "pre_signup" {
+  name               = "${var.project_name}-pre-signup"
+  assume_role_policy = data.aws_iam_policy_document.pre_signup_assume_role.json
+}
+
+resource "aws_cloudwatch_log_group" "pre_signup" {
+  name              = "/aws/lambda/${var.project_name}-pre-signup"
+  retention_in_days = 30
+}
+
+data "aws_iam_policy_document" "pre_signup" {
+  statement {
+    sid       = "WriteTriggerLogs"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.pre_signup.arn}:*"]
+  }
+}
+
+resource "aws_iam_role_policy" "pre_signup" {
+  name   = "${var.project_name}-pre-signup"
+  role   = aws_iam_role.pre_signup.id
+  policy = data.aws_iam_policy_document.pre_signup.json
+}
+
+resource "aws_lambda_function" "pre_signup" {
+  function_name    = "${var.project_name}-pre-signup"
+  role             = aws_iam_role.pre_signup.arn
+  runtime          = "python3.12"
+  handler          = "pre_signup.handler"
+  filename         = data.archive_file.pre_signup.output_path
+  source_code_hash = data.archive_file.pre_signup.output_base64sha256
+  architectures    = ["x86_64"]
+  memory_size      = 128
+  timeout          = 5
+
+  depends_on = [
+    aws_cloudwatch_log_group.pre_signup,
+    aws_iam_role_policy.pre_signup,
+  ]
+}
+
+resource "aws_lambda_permission" "pre_signup" {
+  statement_id  = "AllowCognitoInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.pre_signup.function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.main.arn
+}

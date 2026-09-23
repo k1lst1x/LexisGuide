@@ -8,12 +8,9 @@ const cognito = vi.hoisted(() => ({
   configured: true,
   cognitoSignIn: vi.fn(),
   cognitoSignUp: vi.fn(),
-  cognitoConfirmSignUp: vi.fn(),
-  cognitoResendSignUpCode: vi.fn(),
   cognitoResetPassword: vi.fn(),
   cognitoConfirmResetPassword: vi.fn(),
   cognitoGoogleSignIn: vi.fn(),
-  cognitoAppleSignIn: vi.fn(),
   cognitoGetCurrentUser: vi.fn(),
   setRememberDevice: vi.fn(),
 }))
@@ -22,12 +19,9 @@ vi.mock('../aws', () => ({
   get authConfigured() { return cognito.configured },
   cognitoSignIn: cognito.cognitoSignIn,
   cognitoSignUp: cognito.cognitoSignUp,
-  cognitoConfirmSignUp: cognito.cognitoConfirmSignUp,
-  cognitoResendSignUpCode: cognito.cognitoResendSignUpCode,
   cognitoResetPassword: cognito.cognitoResetPassword,
   cognitoConfirmResetPassword: cognito.cognitoConfirmResetPassword,
   cognitoGoogleSignIn: cognito.cognitoGoogleSignIn,
-  cognitoAppleSignIn: cognito.cognitoAppleSignIn,
   cognitoGetCurrentUser: cognito.cognitoGetCurrentUser,
   setRememberDevice: cognito.setRememberDevice,
 }))
@@ -74,11 +68,12 @@ describe('AuthSectionOne', () => {
     expect(onSuccess).not.toHaveBeenCalled()
   })
 
-  it('creates an account, verifies the emailed code, and signs in', async () => {
+  it('creates an account and goes straight in, with no code to enter', async () => {
     const user = userEvent.setup()
     const onSuccess = vi.fn()
-    cognito.cognitoSignUp.mockResolvedValue({ nextStep: { signUpStep: 'CONFIRM_SIGN_UP' } })
-    cognito.cognitoConfirmSignUp.mockResolvedValue({})
+    // The pool's pre-sign-up trigger confirms the account, so Cognito reports
+    // it done rather than asking for a code.
+    cognito.cognitoSignUp.mockResolvedValue({ nextStep: { signUpStep: 'DONE' } })
     cognito.cognitoSignIn.mockResolvedValue({ isSignedIn: true })
     render(<AuthSectionOne onSuccess={onSuccess} />)
 
@@ -89,14 +84,25 @@ describe('AuthSectionOne', () => {
     await user.click(screen.getByRole('button', { name: 'Create account' }))
 
     expect(cognito.cognitoSignUp).toHaveBeenCalledWith('person@example.com', STRONG, 'Maya Reyes')
-    expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('We sent a 6-digit code to person@example.com')
-
-    await user.type(screen.getByLabelText('Verification code'), '123456')
-    await user.click(screen.getByRole('button', { name: 'Verify email' }))
-
-    expect(cognito.cognitoConfirmSignUp).toHaveBeenCalledWith('person@example.com', '123456')
     expect(onSuccess).toHaveBeenCalledWith('person@example.com')
+    expect(screen.queryByLabelText('Verification code')).not.toBeInTheDocument()
+  })
+
+  it('reports a problem rather than inventing a code step if sign-up is not confirmed', async () => {
+    const user = userEvent.setup()
+    const onSuccess = vi.fn()
+    // Only reachable if the trigger is missing or failed.
+    cognito.cognitoSignUp.mockResolvedValue({ nextStep: { signUpStep: 'CONFIRM_SIGN_UP' } })
+    render(<AuthSectionOne onSuccess={onSuccess} />)
+
+    await user.type(screen.getByLabelText('First Name'), 'Maya')
+    await fillSignIn(user)
+    await user.click(screen.getByLabelText(/By creating an account/i))
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('support@lexisguide.app')
+    expect(screen.queryByLabelText('Verification code')).not.toBeInTheDocument()
+    expect(onSuccess).not.toHaveBeenCalled()
   })
 
   it('shows the live password checklist while creating an account', async () => {
@@ -112,18 +118,16 @@ describe('AuthSectionOne', () => {
     expect(rules.querySelectorAll('.is-met')).toHaveLength(5)
   })
 
-  it('sends an unverified account to the verification step and can resend the code', async () => {
+  it('points an old unconfirmed account at support, since no code can be sent', async () => {
     const user = userEvent.setup()
     cognito.cognitoSignIn.mockRejectedValue(cognitoError('UserNotConfirmedException'))
-    cognito.cognitoResendSignUpCode.mockResolvedValue({})
     render(<AuthSectionOne initialMode="sign-in" />)
 
     await fillSignIn(user)
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Send a new code' }))
-    expect(cognito.cognitoResendSignUpCode).toHaveBeenCalledWith('person@example.com')
+    expect(await screen.findByRole('alert')).toHaveTextContent('support@lexisguide.app')
+    expect(screen.queryByRole('button', { name: 'Send a new code' })).not.toBeInTheDocument()
   })
 
   it('resets a forgotten password and signs in with the new one', async () => {
@@ -146,15 +150,14 @@ describe('AuthSectionOne', () => {
     expect(onSuccess).toHaveBeenCalledWith('person@example.com')
   })
 
-  it('starts Google and Apple sign-in through Cognito', async () => {
+  it('offers Google as the only social sign-in', async () => {
     const user = userEvent.setup()
     render(<AuthSectionOne />)
 
     await user.click(screen.getByRole('button', { name: 'Sign up with Google' }))
-    await user.click(screen.getByRole('button', { name: 'Sign up with Apple' }))
 
     expect(cognito.cognitoGoogleSignIn).toHaveBeenCalledOnce()
-    expect(cognito.cognitoAppleSignIn).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: /Apple/i })).not.toBeInTheDocument()
   })
 
   it('requires the terms and supports returning to the landing page', async () => {

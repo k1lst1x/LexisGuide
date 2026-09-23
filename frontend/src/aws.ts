@@ -1,12 +1,11 @@
 import { Amplify } from 'aws-amplify'
-// Completes Google/Apple sign-in when Cognito redirects back to the app.
+// Completes Google sign-in when Cognito redirects back to the app.
 import 'aws-amplify/auth/enable-oauth-listener'
 import { cognitoUserPoolsTokenProvider } from 'aws-amplify/auth/cognito'
 import { defaultStorage, sessionStorage } from 'aws-amplify/utils'
 import { 
   signIn, 
   signUp, 
-  confirmSignUp, 
   signInWithRedirect, 
   signOut, 
   getCurrentUser,
@@ -14,7 +13,6 @@ import {
   fetchUserAttributes,
   resetPassword,
   confirmResetPassword,
-  resendSignUpCode,
 } from 'aws-amplify/auth'
 
 // Cognito IDs are public application identifiers, but they must be supplied by
@@ -71,32 +69,15 @@ export async function cognitoSignUp(email: string, password: string, name?: stri
   })
 }
 
-export async function cognitoResendSignUpCode(email: string) {
-  return await resendSignUpCode({ username: email })
-}
-
 /** "Keep me signed in": remember tokens across browser restarts, or only for this tab session. */
 export function setRememberDevice(remember: boolean) {
   if (!authConfigured) return
   cognitoUserPoolsTokenProvider.setKeyValueStorage(remember ? defaultStorage : sessionStorage)
 }
 
-export async function cognitoConfirmSignUp(email: string, confirmationCode: string) {
-  return await confirmSignUp({
-    username: email,
-    confirmationCode,
-  })
-}
-
 export async function cognitoGoogleSignIn() {
   return await signInWithRedirect({
     provider: 'Google',
-  })
-}
-
-export async function cognitoAppleSignIn() {
-  return await signInWithRedirect({
-    provider: 'Apple',
   })
 }
 
