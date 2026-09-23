@@ -237,6 +237,10 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
+      # Lambda does not expose its execution region through the application
+      # environment consistently. Set it explicitly so every SDK client uses
+      # the same region as the deployed Bedrock inference profile.
+      AWS_REGION                            = var.aws_region
       COGNITO_USER_POOL_ID                  = aws_cognito_user_pool.main.id
       COGNITO_USER_POOL_CLIENT_ID           = aws_cognito_user_pool_client.web.id
       USER_DATA_TABLE                       = aws_dynamodb_table.user_data.name
