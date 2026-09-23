@@ -1,8 +1,7 @@
 import { Sparkles } from 'lucide-react'
-import { ChatWidget } from '../../chat/ChatWidget'
+import { AssistantConsole } from '../../chat/AssistantConsole'
 import { assistantQuickPrompts, documentDisplayName, openFindings } from '../data'
 import { useWorkspace } from '../store'
-import { PageHeader } from '../ui'
 
 /** A calm, dedicated place to talk to the authenticated LexisGuide AI. */
 export function AssistantView() {
@@ -22,17 +21,14 @@ export function AssistantView() {
 
   return (
     <div className="ws-page ws-assistant-page">
-      <PageHeader title="Ask LexisGuide" />
       <div className="ws-assistant-context">
         <Sparkles size={16} />
         <span>Current context</span>
         <strong>{documentDisplayName(document)}</strong>
         <em>{findings.length} finding{findings.length === 1 ? '' : 's'}</em>
       </div>
-      <ChatWidget
-        embedded
-        expandingComposer
-        className="cw-ai-page"
+
+      <AssistantConsole
         storageKey="lexisguide:chat-assistant-page"
         suggestions={assistantQuickPrompts.assistant}
         fallback={fallback}

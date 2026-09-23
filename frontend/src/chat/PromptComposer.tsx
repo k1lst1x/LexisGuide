@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { ArrowUp } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { ArrowUp, Mic, Square } from 'lucide-react'
+import { useVoiceInput } from './useVoiceInput'
 
 /* The collapsed pill springs open on focus and settles back when left empty.
    Two timings, as in the reference: the open and close overshoot on a spring,
@@ -20,6 +21,8 @@ export type PromptComposerProps = {
   placeholder?: string
   label?: string
   maxLength?: number
+  /** Offer dictation. Ignored where the browser cannot transcribe. */
+  voice?: boolean
 }
 
 /** The assistant composer: a pill that opens into a card while it is in use. */
@@ -31,6 +34,7 @@ export function PromptComposer({
   placeholder = 'Ask anything…',
   label = 'Ask LexisGuide',
   maxLength = 4000,
+  voice = false,
 }: PromptComposerProps) {
   const [expanded, setExpanded] = useState(false)
   // Typing resizes; opening and closing spring. Keeping them apart is what
@@ -41,10 +45,14 @@ export function PromptComposer({
   const rootRef = useRef<HTMLFormElement>(null)
 
   const hasValue = value.trim() !== ''
+
+  const dictate = useCallback((text: string) => { setTyping(true); onChange(text) }, [onChange])
+  const mic = useVoiceInput(dictate)
+
   // Text arriving from elsewhere (a suggestion, or "discuss this finding") opens
   // the composer just as typing does. Derived during render rather than in an
   // effect, so it never paints collapsed with text already in it.
-  const isOpen = expanded || hasValue
+  const isOpen = expanded || hasValue || mic.recording
 
   // Measure the text at its natural height, then clamp. Measuring with the
   // transition suppressed keeps the animation from chasing its own resize.
@@ -61,11 +69,18 @@ export function PromptComposer({
     setTextHeight(Math.max(MIN_TEXT_HEIGHT, Math.min(natural, MAX_TEXT_HEIGHT)))
   }, [value, isOpen])
 
+  // Dictation runs long; keep the newest words in view.
   useEffect(() => {
-    if (!isOpen) return
+    if (mic.recording && textareaRef.current) {
+      textareaRef.current.scrollTop = textareaRef.current.scrollHeight
+    }
+  }, [value, mic.recording])
+
+  useEffect(() => {
+    if (!isOpen || mic.recording) return
     const timer = window.setTimeout(() => textareaRef.current?.focus(), 50)
     return () => window.clearTimeout(timer)
-  }, [isOpen])
+  }, [isOpen, mic.recording])
 
   const open = () => {
     setTyping(false)
@@ -75,10 +90,15 @@ export function PromptComposer({
   const submit = (event?: FormEvent) => {
     event?.preventDefault()
     if (!hasValue || busy) return
+    if (mic.recording) mic.stop()
     setTyping(false)
     onSubmit(value)
     setExpanded(false)
   }
+
+  // One button, three jobs: send what is written, stop dictating, or start.
+  const action = mic.recording ? 'stop' : hasValue ? 'send' : voice && mic.supported ? 'mic' : 'send'
+  const actionLabel = { send: 'Send question', stop: 'Stop dictation', mic: 'Dictate your question' }[action]
 
   return (
     <form
@@ -92,7 +112,7 @@ export function PromptComposer({
       onBlur={(event) => {
         // Staying inside the composer is not leaving it.
         if (rootRef.current?.contains(event.relatedTarget as Node)) return
-        if (!hasValue) {
+        if (!hasValue && !mic.recording) {
           setTyping(false)
           setExpanded(false)
         }
@@ -142,7 +162,7 @@ export function PromptComposer({
               textareaRef.current?.blur()
             }
           }}
-          placeholder={placeholder}
+          placeholder={mic.recording ? 'Listening…' : placeholder}
           aria-label={label}
           aria-hidden={!isOpen}
           tabIndex={isOpen ? 0 : -1}
@@ -159,17 +179,43 @@ export function PromptComposer({
           }}
         />
 
-        <button type="submit" className="cw-prompt-send" disabled={!hasValue || busy} aria-label="Send question">
-          <ArrowUp size={16} />
+        {/* Driven by the real microphone, so silence reads as silence. */}
+        {mic.recording && (
+          <div className="cw-prompt-levels" aria-hidden="true">
+            {mic.levels.map((level, index) => (
+              <i key={index} style={{ height: `${Math.max(4, level * 24)}px` }} />
+            ))}
+          </div>
+        )}
+
+        <button
+          type={action === 'send' ? 'submit' : 'button'}
+          className={`cw-prompt-send ${mic.recording ? 'is-recording' : ''}`}
+          disabled={action === 'send' && (!hasValue || busy)}
+          aria-label={actionLabel}
+          title={actionLabel}
+          onClick={(event) => {
+            if (action === 'send') return
+            event.preventDefault()
+            if (mic.recording) mic.stop()
+            else void mic.start()
+          }}
+        >
+          {action === 'send' ? <ArrowUp size={16} /> : action === 'stop' ? <Square size={13} /> : <Mic size={15} />}
         </button>
 
         {isOpen && (
           <div className="cw-prompt-meta" aria-hidden="true">
             <span>LexisGuide AI</span>
-            <span>Shift + Enter for a new line</span>
+            <span>{mic.recording ? 'Listening…' : 'Shift + Enter for a new line'}</span>
           </div>
         )}
       </div>
+
+      {mic.error && <p className="cw-prompt-hint is-error" role="alert">{mic.error}</p>}
+      {voice && !mic.supported && !mic.error && (
+        <p className="cw-prompt-hint">Dictation needs Chrome, Edge or Safari. You can type your question here.</p>
+      )}
     </form>
   )
 }
