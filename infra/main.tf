@@ -46,8 +46,8 @@ resource "aws_dynamodb_table" "user_data" {
 }
 
 resource "aws_cognito_user_pool" "main" {
-  name                     = "${var.project_name}-users"
-  username_attributes      = ["email"]
+  name                = "${var.project_name}-users"
+  username_attributes = ["email"]
   # Do not require an email confirmation code during sign-up. Social sign-in
   # providers still establish a verified email through Cognito federation.
   # Password-reset codes remain enabled by the recovery configuration below.
@@ -242,21 +242,21 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      COGNITO_USER_POOL_ID             = aws_cognito_user_pool.main.id
-      COGNITO_USER_POOL_CLIENT_ID      = aws_cognito_user_pool_client.web.id
-      USER_DATA_TABLE                  = aws_dynamodb_table.user_data.name
-      AGENTCORE_RUNTIME_ARN            = var.agentcore_runtime_arn
-      AGENTCORE_ASSISTANT_RUNTIME_ARN  = var.agentcore_assistant_runtime_arn
-      BEDROCK_MODEL_ID                  = var.bedrock_model_id
-      ASSISTANT_MODEL_ID                = var.bedrock_model_id
-      CHAT_RATE_LIMIT_PER_WINDOW                    = var.chat_rate_limit_per_window
-      STATUTE_RATE_LIMIT_PER_WINDOW                 = var.statute_rate_limit_per_window
-      REMOTE_OPERATION_PER_USER_CONCURRENCY         = var.remote_operation_per_user_concurrency
-      REMOTE_OPERATION_GLOBAL_CONCURRENCY           = var.remote_operation_global_concurrency
-      CORS_ALLOW_ORIGINS                            = join(",", var.api_allowed_origins)
-      REVIEW_RATE_LIMIT_PER_WINDOW                  = var.review_rate_limit_per_window
-      REVIEW_RATE_LIMIT_WINDOW_SECONDS              = var.review_rate_limit_window_seconds
-      LAWFIRM_API_KEY_SECRET_ARN                    = var.lawfirm_api_key_secret_arn
+      COGNITO_USER_POOL_ID                  = aws_cognito_user_pool.main.id
+      COGNITO_USER_POOL_CLIENT_ID           = aws_cognito_user_pool_client.web.id
+      USER_DATA_TABLE                       = aws_dynamodb_table.user_data.name
+      AGENTCORE_RUNTIME_ARN                 = var.agentcore_runtime_arn
+      AGENTCORE_ASSISTANT_RUNTIME_ARN       = var.agentcore_assistant_runtime_arn
+      BEDROCK_MODEL_ID                      = var.bedrock_model_id
+      ASSISTANT_MODEL_ID                    = var.bedrock_model_id
+      CHAT_RATE_LIMIT_PER_WINDOW            = var.chat_rate_limit_per_window
+      STATUTE_RATE_LIMIT_PER_WINDOW         = var.statute_rate_limit_per_window
+      REMOTE_OPERATION_PER_USER_CONCURRENCY = var.remote_operation_per_user_concurrency
+      REMOTE_OPERATION_GLOBAL_CONCURRENCY   = var.remote_operation_global_concurrency
+      CORS_ALLOW_ORIGINS                    = join(",", var.api_allowed_origins)
+      REVIEW_RATE_LIMIT_PER_WINDOW          = var.review_rate_limit_per_window
+      REVIEW_RATE_LIMIT_WINDOW_SECONDS      = var.review_rate_limit_window_seconds
+      LAWFIRM_API_KEY_SECRET_ARN            = var.lawfirm_api_key_secret_arn
     }
   }
 
