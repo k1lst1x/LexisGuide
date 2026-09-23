@@ -57,7 +57,12 @@ export async function analyze(body: AnalyzeBody, options: { requireAuth?: boolea
       if (!token) throw new Error('Your AWS session expired. Please sign in again.')
       response = await send()
     }
-    return response.ok ? await response.json() as AnalyzeResult : null
+    if (response.ok) return await response.json() as AnalyzeResult
+    if (options.requireAuth) {
+      const detail = (await response.json().catch(() => null))?.detail
+      throw new Error(typeof detail === 'string' ? detail : 'The AI service could not complete this action.')
+    }
+    return null
   } finally {
     if (timer) window.clearTimeout(timer)
   }
@@ -118,10 +123,20 @@ export async function reviewNewDocument(input: { id: string; title: string; type
   }
 }
 
-/** Re-run, negotiate, or rewrite the current document. Throws when the service is unavailable. */
+/** Re-run, negotiate, or rewrite the current document through the authenticated AI service. */
 export async function runDocumentAction(document: SampleDoc, action: 'review' | 'negotiate' | 'rewrite', jurisdiction: string): Promise<SampleDoc> {
   if (document.text.length > MAX_DOCUMENT_REVIEW_CHARS) throw new Error('This document is too large to re-run as one review. Split it into smaller files so every page can be included.')
-  const result = await analyze({ document_text: document.text, action, jurisdiction: jurisdiction.trim() || undefined })
+  const goals = action === 'negotiate'
+    ? 'Give clause-by-clause negotiation points grounded in exact document excerpts.'
+    : action === 'rewrite'
+      ? 'Draft clear proposed replacement wording for risky or unclear document excerpts.'
+      : 'Re-check the full document for concrete risks and missing information.'
+  const result = await analyze({
+    document_text: document.text,
+    action,
+    jurisdiction: jurisdiction.trim() || undefined,
+    goals,
+  }, { requireAuth: true, timeoutMs: 28_000 })
   if (!result) throw new Error('The AI service could not complete this action. Your document is unchanged.')
   const category = action === 'rewrite' ? 'Proposed rewrite' : action === 'negotiate' ? 'Negotiation point' : 'AI legal review'
   const findings = mapFindings(result.findings ?? [], category, `ai-${action}`)

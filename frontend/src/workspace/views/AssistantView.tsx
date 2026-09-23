@@ -22,11 +22,7 @@ export function AssistantView() {
 
   return (
     <div className="ws-page ws-assistant-page">
-      <PageHeader
-        eyebrow="LexisGuide AI"
-        title="Ask LexisGuide"
-        description="Chat directly with AI about the document and findings in your current review."
-      />
+      <PageHeader title="Ask LexisGuide" />
       <div className="ws-assistant-context">
         <Sparkles size={16} />
         <span>Current context</span>

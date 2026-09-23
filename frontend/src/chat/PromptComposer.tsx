@@ -9,7 +9,7 @@ const SPRING = 'max-width .4s cubic-bezier(.175,.885,.32,1.275), height .4s cubi
 const SETTLE = 'max-width .4s cubic-bezier(.175,.885,.32,1.275), height .15s ease-out'
 
 const COLLAPSED_HEIGHT = 48
-const MIN_TEXT_HEIGHT = 44
+const MIN_TEXT_HEIGHT = 68
 const MAX_TEXT_HEIGHT = 160
 
 export type PromptComposerProps = {
@@ -118,7 +118,11 @@ export function PromptComposer({
           onFocus={open}
           aria-label={label}
           aria-expanded={isOpen}
-          style={{ opacity: isOpen ? 0 : 1, pointerEvents: isOpen ? 'none' : 'auto' }}
+          style={{
+            opacity: isOpen ? 0 : 1,
+            transform: isOpen ? 'scale(1.05) translateY(4px)' : 'scale(1) translateY(0)',
+            pointerEvents: isOpen ? 'none' : 'auto',
+          }}
         >
           {placeholder}
         </button>
@@ -146,15 +150,25 @@ export function PromptComposer({
           style={{
             height: textHeight,
             opacity: isOpen ? 1 : 0,
+            transform: isOpen ? 'scale(1) translateY(0)' : 'scale(.95) translateY(-4px)',
             pointerEvents: isOpen ? 'auto' : 'none',
             overflowY: textHeight >= MAX_TEXT_HEIGHT ? 'auto' : 'hidden',
-            transition: typing ? 'height .15s ease-out' : 'opacity .3s ease-out, height .4s cubic-bezier(.175,.885,.32,1.275)',
+            transition: typing
+              ? 'height .15s ease-out'
+              : 'opacity .3s ease-out, transform .3s cubic-bezier(.175,.885,.32,1.275), height .4s cubic-bezier(.175,.885,.32,1.275)',
           }}
         />
 
         <button type="submit" className="cw-prompt-send" disabled={!hasValue || busy} aria-label="Send question">
           <ArrowUp size={16} />
         </button>
+
+        {isOpen && (
+          <div className="cw-prompt-meta" aria-hidden="true">
+            <span>LexisGuide AI</span>
+            <span>Shift + Enter for a new line</span>
+          </div>
+        )}
       </div>
     </form>
   )
