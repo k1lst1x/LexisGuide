@@ -46,14 +46,10 @@ resource "aws_dynamodb_table" "user_data" {
 resource "aws_cognito_user_pool" "main" {
   name                     = "${var.project_name}-users"
   username_attributes      = ["email"]
-  auto_verified_attributes = ["email"]
-
-  # Email the verification code at sign-up, and recover accounts by email.
-  verification_message_template {
-    default_email_option = "CONFIRM_WITH_CODE"
-    email_subject        = "Your LexisGuide verification code"
-    email_message        = "Your LexisGuide verification code is {####}"
-  }
+  # Do not require an email confirmation code during sign-up. Social sign-in
+  # providers still establish a verified email through Cognito federation.
+  # Password-reset codes remain enabled by the recovery configuration below.
+  auto_verified_attributes = []
 
   account_recovery_setting {
     recovery_mechanism {
