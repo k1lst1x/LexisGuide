@@ -28,6 +28,7 @@ function LawyerVerificationCard() {
     getLawyerVerification()
       .then((value) => {
         setState(value)
+        setLoadFailed(false)
         // Only ever locks. A refresh must not reopen the form after the API has
         // said the attempts are gone, whatever a stale read reports.
         if (value.attempts_remaining === 0 && !value.verified) setLocked(true)
@@ -65,15 +66,6 @@ function LawyerVerificationCard() {
     }
   }
 
-  if (loadFailed) {
-    return (
-      <Card title="Verify your bar licence" id="bar-title">
-        <p className="ws-muted">We could not reach the verification service. Your licence has not been checked.</p>
-        <button type="button" className="ws-btn" onClick={retryLoad}>Try again</button>
-      </Card>
-    )
-  }
-
   if (state?.verified) {
     return (
       <Card title="Bar licence" id="bar-title">
@@ -101,6 +93,13 @@ function LawyerVerificationCard() {
         Practising attorneys can confirm their licence against the state bar directory. You can
         verify once, and you have {remaining} of {state?.max_attempts ?? 3} attempts left.
       </p>
+
+      {loadFailed && (
+        <div className="ws-alert is-warning" role="status">
+          <span>We could not retrieve an earlier verification status. You can still check a bar record below.</span>
+          <button type="button" className="ws-btn" onClick={retryLoad}>Retry status check</button>
+        </div>
+      )}
 
       {locked ? (
         <div className="ws-alert is-critical" role="alert">

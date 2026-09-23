@@ -106,11 +106,13 @@
 .cw-ai-page .cw-msg { max-width: 76%; font-size: 14.5px; }
 /* The dedicated AI page uses a wider writing surface; it springs open on focus
    and returns to its compact pill when left empty. */
-.cw-ai-page .cw-prompt { width: min(860px, 100%); max-width: min(860px, 100%) !important; }
+.cw-ai-page .cw-prompt { width: min(860px, 100%); }
 .cw-ai-page .cw-prompt-card { border-radius: 24px; box-shadow: 0 10px 28px -20px rgba(27,28,20,.38); }
 .cw-ai-page .cw-prompt-card textarea { padding: 15px 66px 0 18px; font-size: 16px; line-height: 1.5; }
 .cw-ai-page .cw-prompt-send { right: 12px; bottom: 12px; width: 42px; height: 42px; background: var(--cw-green); }
 .cw-ai-page .cw-prompt-send:not(:disabled):hover { background: #075943; }
+.cw-ai-page .cw-compose-wrap { flex: none; padding: 16px 20px 4px; }
+.cw-ai-page .cw-foot { flex: none; min-height: 17px; margin: 0 0 16px; padding: 0 20px; line-height: 17px; }
 .cw-prompt-meta { position: absolute; right: 66px; bottom: 18px; left: 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--cw-ink-45); font-size: 11.5px; pointer-events: none; }
 .cw-prompt-meta span:first-child { color: var(--cw-green); font-weight: 600; }
 @media (max-width: 860px) {
