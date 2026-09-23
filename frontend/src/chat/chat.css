@@ -1,5 +1,7 @@
-/* LexisGuide chat popup — same paper, ink and meadow green as the rest of the app */
-.cw {
+/* LexisGuide chat — same paper, ink and meadow green as the rest of the app.
+   These live at the root, not on .cw: the assistant page renders outside the
+   popup, and scoping them to it left every colour there unresolved. */
+:root {
   --cw-ink: #1b1c14;
   --cw-ink-60: rgba(27, 28, 20, .6);
   --cw-ink-45: rgba(27, 28, 20, .45);
@@ -8,10 +10,15 @@
   --cw-line: #ece3cd;
   --cw-line-2: #c9c2ad;
   --cw-green: #00674f;
+  --cw-green-deep: #04533f;
   --cw-green-soft: #e9f3ea;
+  --cw-gold: #e2b46b;
   --cw-serif: 'Newsreader', 'Iowan Old Style', Georgia, serif;
   --cw-sans: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
   --cw-ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+.cw {
   --cw-bottom: 22px;
   position: fixed;
   z-index: 9996;
@@ -234,15 +241,12 @@
   box-shadow: 0 14px 30px -16px rgba(0, 103, 79, .8);
   animation: ac-mark .6s var(--cw-ease) both;
 }
-.ac-hero h2 {
-  max-width: 26ch;
+.ac-hero-line {
+  max-width: 46ch;
   margin: 0;
-  font-family: var(--cw-serif);
-  font-size: clamp(24px, 2.6vw, 32px);
-  font-weight: 400;
-  line-height: 1.25;
-  letter-spacing: -.015em;
-  color: var(--cw-ink);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--cw-ink-60);
   animation: ac-rise .5s var(--cw-ease) 60ms both;
 }
 
@@ -256,21 +260,22 @@
   padding: 0;
 }
 .ac-suggest button {
-  padding: 8px 14px;
-  border: 1px solid var(--cw-line);
+  padding: 9px 15px;
+  border: 1px solid #cfe4d3;
   border-radius: 999px;
-  background: #fffef9;
+  background: var(--cw-green-soft);
   font: inherit;
   font-size: 13px;
-  color: var(--cw-ink) !important;
+  font-weight: 500;
+  color: var(--cw-green-deep) !important;
   transition: border-color .18s, background-color .18s, transform .28s var(--cw-ease), box-shadow .18s;
   animation: ac-rise .45s var(--cw-ease) both;
 }
 .ac-suggest button:hover {
-  border-color: var(--cw-line-2);
-  background: #fff;
+  border-color: var(--cw-green);
+  background: #dceee1;
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px -14px rgba(27, 28, 20, .5);
+  box-shadow: 0 12px 22px -14px rgba(0, 103, 79, .55);
 }
 
 /* ── Transcript ────────────────────────────────────────────── */
@@ -453,7 +458,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ac-hero-mark, .ac-hero h2, .ac-suggest button, .ac-msg, .ac-notice { animation: none !important; }
+  .ac-hero-mark, .ac-hero-line, .ac-suggest button, .ac-msg, .ac-notice { animation: none !important; }
   .ac-suggest button:hover { transform: none; }
 }
 
@@ -510,4 +515,63 @@
 @media (prefers-reduced-motion: reduce) {
   .ac-greeting, .ac-thread .cw-msg { animation: none !important; }
   .cw-prompt-send.is-recording::after { animation: none !important; }
+}
+
+/* ── Glow ring around the composer ───────────────────────────
+   A conic gradient rotating behind the card, masked to a hairline so only the
+   edge shows. Registering the angle lets it animate; browsers without
+   @property keep a still ring rather than a hard edge. */
+@property --ac-glow {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.ac-dock .cw-prompt { position: relative; }
+.ac-dock .cw-prompt::before {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border-radius: 26px;
+  background: conic-gradient(
+    from var(--ac-glow),
+    rgba(0, 103, 79, 0) 0deg,
+    var(--cw-green) 60deg,
+    var(--cw-gold) 130deg,
+    rgba(0, 103, 79, 0) 200deg,
+    rgba(0, 103, 79, 0) 360deg
+  );
+  /* Only the border shows: the fill is punched out. */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: 1.5px;
+  opacity: .5;
+  animation: ac-glow-spin 6s linear infinite;
+  transition: opacity .3s;
+  pointer-events: none;
+}
+/* Brighter while it is being used, and brightest while dictating. */
+.ac-dock .cw-prompt.is-open::before { opacity: .85; }
+.ac-dock .cw-prompt:focus-within::before { opacity: 1; }
+
+.ac-dock .cw-prompt-card {
+  box-shadow: 0 10px 34px -22px rgba(27, 28, 20, .55), 0 0 26px -14px rgba(0, 103, 79, .35);
+}
+
+@keyframes ac-glow-spin {
+  to { --ac-glow: 360deg; }
+}
+
+/* The send button carries the brand green rather than plain ink. */
+.ac-dock .cw-prompt-send {
+  background: var(--cw-green);
+  box-shadow: 0 8px 18px -10px rgba(0, 103, 79, .8);
+}
+.ac-dock .cw-prompt-send:not(:disabled):hover { background: var(--cw-green-deep); }
+.ac-dock .cw-prompt-send:disabled { background: var(--cw-line-2); opacity: .55; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ac-dock .cw-prompt::before { animation: none !important; }
 }

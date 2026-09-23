@@ -67,6 +67,62 @@ def save_record(user_id: str, record_id: str, record: dict[str, Any]) -> dict[st
     return item
 
 
+def get_conversation(user_id: str, conversation_id: str) -> dict[str, Any] | None:
+    """Read one of this user's saved conversations.
+
+    Conversations are keyed under the user's own partition, so a query can only
+    ever reach that person's own history. The conversation id never widens it.
+    """
+    item = (
+        _table()
+        .get_item(Key={"PK": f"USER#{user_id}", "SK": f"CHAT#{conversation_id}"})
+        .get("Item")
+    )
+    if not item:
+        return None
+    return {
+        "conversation_id": conversation_id,
+        "turns": item.get("turns", []),
+        "updated_at": item.get("updated_at", ""),
+        "title": item.get("title", ""),
+    }
+
+
+def save_conversation(
+    user_id: str, conversation_id: str, turns: list[dict[str, Any]], title: str = ""
+) -> dict[str, Any]:
+    """Write a conversation back to the user's own partition."""
+    now = datetime.now(UTC).isoformat()
+    _table().put_item(
+        Item={
+            "PK": f"USER#{user_id}",
+            "SK": f"CHAT#{conversation_id}",
+            "turns": turns,
+            "title": title,
+            "updated_at": now,
+        }
+    )
+    return {"conversation_id": conversation_id, "turns": turns, "updated_at": now, "title": title}
+
+
+def list_conversations(user_id: str, limit: int = 30) -> list[dict[str, Any]]:
+    """The user's conversations, most recently updated first."""
+    response = _table().query(
+        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("CHAT#"),
+    )
+    conversations = [
+        {
+            "conversation_id": item["SK"].removeprefix("CHAT#"),
+            "title": item.get("title", ""),
+            "updated_at": item.get("updated_at", ""),
+            "turns": [],
+        }
+        for item in response.get("Items", [])
+    ]
+    conversations.sort(key=lambda entry: entry["updated_at"], reverse=True)
+    return conversations[:limit]
+
+
 def list_records(user_id: str) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     query_args: dict[str, Any] = {

@@ -4,7 +4,7 @@
    answering identically. */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cognitoGetIdToken } from '../aws'
-import { apiBase } from '../workspace/api'
+import { apiBase, fetchConversation, saveConversation } from '../workspace/api'
 
 export type ChatContext = {
   page?: string
@@ -39,13 +39,15 @@ function load(key: string): { conversationId: string; turns: Turn[] } | null {
 
 export type AssistantChatOptions = {
   storageKey: string
+  /** Also keep this conversation in the signed-in user's own server history. */
+  persist?: boolean
   context?: ChatContext
   greeting?: string
   /** Local answer used when the live agent is unavailable. */
   fallback: (question: string) => string
 }
 
-export function useAssistantChat({ storageKey, context, greeting, fallback }: AssistantChatOptions) {
+export function useAssistantChat({ storageKey, context, greeting, fallback, persist = false }: AssistantChatOptions) {
   const [saved] = useState(() => load(storageKey))
   const [conversationId, setConversationId] = useState(saved?.conversationId ?? newId())
   const welcome: Turn = {
@@ -67,6 +69,36 @@ export function useAssistantChat({ storageKey, context, greeting, fallback }: As
   useEffect(() => {
     try { window.localStorage.setItem(storageKey, JSON.stringify({ conversationId, turns: turns.slice(-40) })) } catch { /* optional */ }
   }, [storageKey, conversationId, turns])
+
+  // The server copy is the one that follows the person between devices. Local
+  // storage stays as an offline cache and as what shows before this resolves.
+  const restored = useRef(false)
+  useEffect(() => {
+    if (!persist || restored.current) return
+    restored.current = true
+    let cancelled = false
+    void fetchConversation(conversationId).then((stored) => {
+      if (cancelled || !stored?.length) return
+      // Only adopt the server copy when this browser has nothing of its own,
+      // so a conversation in progress is never replaced mid-sentence.
+      if (turnsRef.current.some((turn) => turn.id !== 'welcome')) return
+      turnsRef.current = stored as Turn[]
+      setTurns(stored as Turn[])
+    })
+    return () => { cancelled = true }
+  }, [persist, conversationId])
+
+  // Write back after the exchange settles rather than on every keystroke.
+  useEffect(() => {
+    if (!persist || busyRef.current) return
+    const asked = turns.filter((turn) => turn.id !== 'welcome')
+    if (!asked.length) return
+    const title = asked.find((turn) => turn.role === 'user')?.content.slice(0, 120) ?? ''
+    const timer = window.setTimeout(() => {
+      void saveConversation(conversationId, turns.slice(-60), title)
+    }, 800)
+    return () => window.clearTimeout(timer)
+  }, [persist, conversationId, turns])
 
   // The context and fallback are rebuilt on every render of the caller; holding
   // them in refs keeps `ask` stable so effects do not re-fire per keystroke.
