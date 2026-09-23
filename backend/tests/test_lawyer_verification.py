@@ -267,13 +267,17 @@ def test_malformed_input_is_refused_before_the_provider_is_called(
 def test_status_reading_treats_anything_unrecognised_as_unverified() -> None:
     """An unfamiliar status must fail closed: never grant on a word we do not know."""
     assert lawfirm.read_bar_status(ACTIVE_RECORD)["active"] is True
-    assert lawfirm.read_bar_status(
-        {"verified": True, "admission": {"status": "in good standing"}}
-    )["active"] is True
+    assert (
+        lawfirm.read_bar_status({"verified": True, "admission": {"status": "in good standing"}})[
+            "active"
+        ]
+        is True
+    )
     for status in ["Suspended", "Disbarred", "Inactive", "Retired", "", "pending review"]:
-        assert lawfirm.read_bar_status(
-            {"verified": False, "admission": {"status": status}}
-        )["active"] is False
+        assert (
+            lawfirm.read_bar_status({"verified": False, "admission": {"status": status}})["active"]
+            is False
+        )
 
 
 def test_provider_no_record_response_is_not_misread_as_an_inactive_lawyer() -> None:
