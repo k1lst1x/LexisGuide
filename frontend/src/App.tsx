@@ -6,6 +6,7 @@ import { SplashScreen } from './SplashScreen'
 import { TransitionLoader } from './TransitionLoader'
 import { cognitoGetCurrentUser, cognitoSignOut } from './aws'
 import { Landing } from './landing/Landing'
+import { RETURN_TO_ADMIN_KEY, adminPath } from './admin/route'
 
 const WORKSPACE_KEY = 'lexisguide:workspace'
 const WORKSPACE_USER_KEY = 'lexisguide:workspace-user'
@@ -117,6 +118,13 @@ export function App() {
   // Google/Apple sign-in returns to /auth/callback; Amplify exchanges the code, then tells us here.
   useEffect(() => {
     return Hub.listen('auth', ({ payload }) => {
+      // A Google sign-in started from the admin portal goes back there, not into the workspace.
+      if ((payload.event === 'signInWithRedirect' || payload.event === 'signInWithRedirect_failure')
+        && window.sessionStorage.getItem(RETURN_TO_ADMIN_KEY)) {
+        window.sessionStorage.removeItem(RETURN_TO_ADMIN_KEY)
+        window.location.replace(adminPath())
+        return
+      }
       if (payload.event === 'signInWithRedirect') {
         void cognitoGetCurrentUser().then((user) => {
           if (user) handleAuthSuccess(user.email)

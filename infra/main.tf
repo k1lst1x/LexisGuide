@@ -93,6 +93,15 @@ resource "aws_cognito_user_pool" "main" {
   }
 }
 
+# Members of this group can sign in to the admin portal at /admin. The API
+# reads the group from the ID token and then confirms it with Cognito on every
+# admin request. Add the first admin by hand; see AWS_AUTH_SETUP.md.
+resource "aws_cognito_user_group" "admins" {
+  name         = "admins"
+  user_pool_id = aws_cognito_user_pool.main.id
+  description  = "LexisGuide administrators: full access to the admin portal."
+}
+
 resource "aws_cognito_user_pool_domain" "main" {
   domain       = var.cognito_domain_prefix
   user_pool_id = aws_cognito_user_pool.main.id
@@ -170,6 +179,34 @@ data "aws_iam_policy_document" "api_lambda" {
       "dynamodb:UpdateItem",
     ]
     resources = [aws_dynamodb_table.user_data.arn]
+  }
+
+  # Only the admin routes use these: a Scan for table-wide tallies and
+  # listings, and batched deletes when an admin erases an account.
+  statement {
+    sid = "AdministerUserRecords"
+    actions = [
+      "dynamodb:BatchWriteItem",
+      "dynamodb:Scan",
+    ]
+    resources = [aws_dynamodb_table.user_data.arn]
+  }
+
+  statement {
+    sid = "AdministerUserPool"
+    actions = [
+      "cognito-idp:AdminAddUserToGroup",
+      "cognito-idp:AdminDeleteUser",
+      "cognito-idp:AdminDisableUser",
+      "cognito-idp:AdminEnableUser",
+      "cognito-idp:AdminGetUser",
+      "cognito-idp:AdminListGroupsForUser",
+      "cognito-idp:AdminRemoveUserFromGroup",
+      "cognito-idp:AdminUserGlobalSignOut",
+      "cognito-idp:ListUsers",
+      "cognito-idp:ListUsersInGroup",
+    ]
+    resources = [aws_cognito_user_pool.main.arn]
   }
 
   dynamic "statement" {
@@ -275,7 +312,7 @@ resource "aws_apigatewayv2_api" "api" {
   cors_configuration {
     allow_credentials = true
     allow_headers     = ["Authorization", "Content-Type"]
-    allow_methods     = ["GET", "POST", "PUT", "OPTIONS"]
+    allow_methods     = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     allow_origins     = var.api_allowed_origins
     max_age           = 86400
   }

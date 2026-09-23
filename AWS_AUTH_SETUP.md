@@ -129,3 +129,70 @@ verification message template and remove the trigger.
 Accounts created before the trigger existed are still UNCONFIRMED and cannot be
 fixed from the browser, because no code can be sent. Confirm them with
 `aws cognito-idp admin-confirm-sign-up`.
+
+## Admin portal
+
+Admins manage accounts, shared workspaces, and bar verifications at `/admin`
+(https://k1lst1x.github.io/LexisGuide/admin in production). It has its own
+sign-in screen and uses the same Cognito accounts as the app.
+
+An admin is any account in the Cognito `admins` group, which Terraform creates.
+The API reads the group from the ID token and then confirms it with Cognito on
+every admin request, so removing someone from the group or disabling them takes
+effect immediately rather than when their token expires. Every change made in
+the portal is written to an audit log (kept for a year) with the admin who made
+it. An admin cannot disable, delete, or demote their own account; another admin
+must.
+
+### Adding the first admin
+
+Nobody is in the group after the first apply. Add yourself with the AWS CLI;
+after that, admins can grant access to others from the portal.
+
+For an existing email-and-password account, the email works as the username:
+
+```bash
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id <cognito_user_pool_id> \
+  --username you@example.com \
+  --group-name admins
+```
+
+A Google account's username is `Google_<id>`, not the email. Look it up first:
+
+```bash
+aws cognito-idp list-users --user-pool-id <cognito_user_pool_id> \
+  --filter 'email = "you@gmail.com"' --query 'Users[].Username'
+```
+
+To create a new admin account instead, issue a temporary password; the portal
+asks for a new one on first sign-in:
+
+```bash
+aws cognito-idp admin-create-user --user-pool-id <cognito_user_pool_id> \
+  --username admin@example.com --temporary-password '<Temp-Passw0rd!>' \
+  --user-attributes Name=email,Value=admin@example.com Name=email_verified,Value=true \
+  --message-action SUPPRESS
+aws cognito-idp admin-add-user-to-group --user-pool-id <cognito_user_pool_id> \
+  --username admin@example.com --group-name admins
+```
+
+Someone already signed in when they were added only gets the group claim with a
+fresh token; the portal refreshes it once automatically, and signing out and in
+again always works.
+
+### What admins can do
+
+- **Accounts:** search by email; enable or disable; sign out everywhere; grant or
+  remove admin access; delete an account together with its documents,
+  conversations, bar verification, and any workspace it hosts.
+- **Bar verification:** reset a locked verification so the person gets their
+  attempts back, or record a bar membership checked by hand, with a note for the
+  audit log.
+- **Workspaces:** list every workspace with its host and members, remove a
+  member, or delete the workspace.
+- **Overview and audit log:** account and data totals, and every admin action.
+
+The totals and workspace list come from a DynamoDB Scan. That is fine at this
+project's scale; at many thousands of rows it would call for a GSI or
+maintained counters instead.

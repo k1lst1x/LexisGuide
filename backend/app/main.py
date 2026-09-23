@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.admin_routes import router as admin_router
 from app.api.v1.routes import router as v1_router
 
 load_dotenv()
@@ -42,3 +43,4 @@ app.add_middleware(
 )
 
 app.include_router(v1_router)
+app.include_router(admin_router)
