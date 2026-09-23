@@ -479,6 +479,9 @@ def consume_workspace_invite(token: str, user: dict[str, str]) -> dict[str, Any]
         raise
 
     workspace_id = invite["workspace_id"]
+    # The workspace may have been deleted since the invite was issued.
+    if not table.get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": "META"}).get("Item"):
+        return None
     now = datetime.now(UTC).isoformat()
     table.put_item(
         Item={
@@ -502,3 +505,216 @@ def consume_workspace_invite(token: str, user: dict[str, str]) -> dict[str, Any]
         }
     )
     return table.get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": "META"}).get("Item")
+
+
+# ── Admin ────────────────────────────────────────────────────────────────────
+# Everything below serves the admin portal only. Routes reach it through
+# ``current_admin``; nothing here checks who is asking.
+
+AUDIT_PARTITION = "AUDIT"
+AUDIT_RETENTION_SECONDS = 365 * 24 * 60 * 60
+
+
+def _scan(**scan_args: Any) -> list[dict[str, Any]]:
+    """Read every matching item. A Scan reads the whole table, so only the
+    admin portal uses it, and only for tallies and listings no key can answer."""
+    items: list[dict[str, Any]] = []
+    while True:
+        response = _table().scan(**scan_args)
+        items.extend(response.get("Items", []))
+        last_evaluated_key = response.get("LastEvaluatedKey")
+        if last_evaluated_key is None:
+            return items
+        scan_args["ExclusiveStartKey"] = last_evaluated_key
+
+
+def _query_partition(partition: str) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    query_args: dict[str, Any] = {"KeyConditionExpression": Key("PK").eq(partition)}
+    while True:
+        response = _table().query(**query_args)
+        items.extend(response.get("Items", []))
+        last_evaluated_key = response.get("LastEvaluatedKey")
+        if last_evaluated_key is None:
+            return items
+        query_args["ExclusiveStartKey"] = last_evaluated_key
+
+
+def _delete_keys(keys: list[dict[str, str]]) -> None:
+    with _table().batch_writer() as batch:
+        for key in keys:
+            batch.delete_item(Key=key)
+
+
+def admin_data_totals() -> dict[str, int]:
+    """Count what the table holds, in one pass over the user and workspace rows."""
+    items = _scan(
+        ProjectionExpression="PK, SK, verified, attempts",
+        FilterExpression=Attr("PK").begins_with("USER#") | Attr("PK").begins_with("WORKSPACE#"),
+    )
+    totals = {
+        "workspaces": 0,
+        "documents": 0,
+        "conversations": 0,
+        "lawyers_verified": 0,
+        "lawyers_locked": 0,
+    }
+    for item in items:
+        pk, sk = item["PK"], item["SK"]
+        if pk.startswith("WORKSPACE#") and sk == "META":
+            totals["workspaces"] += 1
+        elif sk.startswith("RECORD#"):
+            totals["documents"] += 1
+        elif sk.startswith("CHAT#"):
+            totals["conversations"] += 1
+        elif sk == "LAWYER":
+            if item.get("verified"):
+                totals["lawyers_verified"] += 1
+            elif int(item.get("attempts", 0)) >= LAWYER_VERIFICATION_MAX_ATTEMPTS:
+                totals["lawyers_locked"] += 1
+    return totals
+
+
+def admin_list_workspaces() -> list[dict[str, Any]]:
+    """Every workspace with its owner and member count, newest first."""
+    items = _scan(FilterExpression=Attr("PK").begins_with("WORKSPACE#"))
+    workspaces: dict[str, dict[str, Any]] = {}
+    members: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        workspace_id = item["PK"].removeprefix("WORKSPACE#")
+        if item["SK"] == "META":
+            workspaces[workspace_id] = item
+        elif item["SK"].startswith("MEMBER#"):
+            members.setdefault(workspace_id, []).append(item)
+    listed = []
+    for workspace_id, meta in workspaces.items():
+        roster = members.get(workspace_id, [])
+        owner = next((member for member in roster if member.get("role") == "owner"), {})
+        listed.append(
+            {
+                "id": workspace_id,
+                "name": meta.get("name", ""),
+                "owner_id": meta.get("owner_id", ""),
+                "owner_email": owner.get("email", ""),
+                "created_at": meta.get("created_at", ""),
+                "member_count": len(roster),
+                "linked_document_title": meta.get("linked_document_title"),
+            }
+        )
+    listed.sort(key=lambda workspace: workspace["created_at"], reverse=True)
+    return listed
+
+
+def admin_get_workspace(workspace_id: str) -> dict[str, Any] | None:
+    return _table().get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": "META"}).get("Item")
+
+
+def admin_delete_workspace(workspace_id: str) -> None:
+    """Remove a workspace, its memberships, and each member's pointer to it."""
+    items = _query_partition(f"WORKSPACE#{workspace_id}")
+    keys = [{"PK": item["PK"], "SK": item["SK"]} for item in items]
+    keys += [
+        {"PK": f"USER#{item['user_id']}", "SK": f"WORKSPACE#{workspace_id}"}
+        for item in items
+        if item["SK"].startswith("MEMBER#") and item.get("user_id")
+    ]
+    _delete_keys(keys)
+
+
+def admin_remove_workspace_member(workspace_id: str, user_id: str) -> None:
+    _delete_keys(
+        [
+            {"PK": f"WORKSPACE#{workspace_id}", "SK": f"MEMBER#{user_id}"},
+            {"PK": f"USER#{user_id}", "SK": f"WORKSPACE#{workspace_id}"},
+        ]
+    )
+
+
+def admin_user_data(user_id: str) -> dict[str, Any]:
+    """What the table holds for one person: counts, workspaces, and bar status."""
+    items = _query_partition(f"USER#{user_id}")
+    workspaces = []
+    for item in items:
+        if item["SK"].startswith("WORKSPACE#"):
+            workspace_id = item["SK"].removeprefix("WORKSPACE#")
+            meta = admin_get_workspace(workspace_id) or {}
+            workspaces.append(
+                {
+                    "id": workspace_id,
+                    "name": meta.get("name") or item.get("name", ""),
+                    "role": item.get("role", "member"),
+                }
+            )
+    profile = next((item for item in items if item["SK"] == "PROFILE"), {})
+    return {
+        "display_name": profile.get("display_name", ""),
+        "documents": sum(item["SK"].startswith("RECORD#") for item in items),
+        "conversations": sum(item["SK"].startswith("CHAT#") for item in items),
+        "workspaces": workspaces,
+        "lawyer_verification": get_lawyer_verification(user_id),
+    }
+
+
+def admin_delete_user_data(user_id: str) -> None:
+    """Erase one person's rows. Workspaces they host go with them, since a
+    workspace without its host has no one who can manage it; elsewhere they
+    are simply removed from the member list."""
+    items = _query_partition(f"USER#{user_id}")
+    for item in items:
+        if not item["SK"].startswith("WORKSPACE#"):
+            continue
+        workspace_id = item["SK"].removeprefix("WORKSPACE#")
+        if item.get("role") == "owner":
+            admin_delete_workspace(workspace_id)
+        else:
+            admin_remove_workspace_member(workspace_id, user_id)
+    _delete_keys([{"PK": item["PK"], "SK": item["SK"]} for item in items])
+
+
+def admin_reset_lawyer_verification(user_id: str) -> dict[str, Any]:
+    """Clear a bar verification and its spent attempts, so the person can try again."""
+    _table().delete_item(Key={"PK": f"USER#{user_id}", "SK": "LAWYER"})
+    return get_lawyer_verification(user_id)
+
+
+def record_admin_action(
+    actor: dict[str, str], action: str, target: str, detail: str = ""
+) -> dict[str, Any]:
+    """Append one line to the admin audit log. Entries expire after a year."""
+    now = datetime.now(UTC)
+    entry = {
+        "at": now.isoformat(),
+        "actor_id": actor["sub"],
+        "actor_email": actor.get("email", ""),
+        "action": action,
+        "target": target,
+        "detail": detail,
+    }
+    _table().put_item(
+        Item={
+            "PK": AUDIT_PARTITION,
+            "SK": f"{entry['at']}#{uuid4()}",
+            "expires_at": int(now.timestamp()) + AUDIT_RETENTION_SECONDS,
+            **entry,
+        }
+    )
+    return entry
+
+
+def list_admin_actions(limit: int = 100) -> list[dict[str, Any]]:
+    response = _table().query(
+        KeyConditionExpression=Key("PK").eq(AUDIT_PARTITION),
+        ScanIndexForward=False,
+        Limit=limit,
+    )
+    return [
+        {
+            "at": item.get("at", ""),
+            "actor_id": item.get("actor_id", ""),
+            "actor_email": item.get("actor_email", ""),
+            "action": item.get("action", ""),
+            "target": item.get("target", ""),
+            "detail": item.get("detail", ""),
+        }
+        for item in response.get("Items", [])
+    ]

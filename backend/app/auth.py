@@ -31,9 +31,10 @@ def _jwk_client() -> PyJWKClient:
     )
 
 
-def current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
-) -> dict[str, str]:
+ADMIN_GROUP = "admins"
+
+
+def _verified_claims(credentials: HTTPAuthorizationCredentials | None) -> dict:
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -52,13 +53,46 @@ def current_user(
         )
         if claims.get("token_use") != "id":
             raise ValueError("Expected Cognito ID token.")
-        return {
-            "sub": claims["sub"],
-            "email": claims.get("email", ""),
-            "name": claims.get("name", ""),
-        }
+        if "sub" not in claims:
+            raise ValueError("A token without a subject identifies no one.")
+        return claims
     except (KeyError, RuntimeError, ValueError, jwt.PyJWTError) as error:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired Cognito token.",
         ) from error
+
+
+def current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict[str, str]:
+    claims = _verified_claims(credentials)
+    return {
+        "sub": claims["sub"],
+        "email": claims.get("email", ""),
+        "name": claims.get("name", ""),
+    }
+
+
+def current_admin(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict[str, str]:
+    """A signed-in member of the Cognito admins group, or a 403.
+
+    Membership is read from the signed ID token, so it is Cognito's word and
+    never the browser's. Someone added to the group needs a fresh token (sign
+    in again, or refresh) before the claim appears.
+    """
+    claims = _verified_claims(credentials)
+    groups = claims.get("cognito:groups") or []
+    if ADMIN_GROUP not in groups:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account does not have admin access.",
+        )
+    return {
+        "sub": claims["sub"],
+        "username": claims.get("cognito:username", ""),
+        "email": claims.get("email", ""),
+        "name": claims.get("name", ""),
+    }

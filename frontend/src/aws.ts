@@ -6,6 +6,7 @@ import { defaultStorage, sessionStorage } from 'aws-amplify/utils'
 import { 
   signIn, 
   signUp, 
+  confirmSignIn,
   signInWithRedirect, 
   signOut, 
   getCurrentUser,
@@ -67,6 +68,11 @@ export async function cognitoSignUp(email: string, password: string, name?: stri
       },
     },
   })
+}
+
+/** Finish a sign-in that Cognito paused, e.g. to replace an admin-issued temporary password. */
+export async function cognitoConfirmNewPassword(newPassword: string) {
+  return await confirmSignIn({ challengeResponse: newPassword })
 }
 
 /** "Keep me signed in": remember tokens across browser restarts, or only for this tab session. */
