@@ -6,7 +6,6 @@ import { SplashScreen } from './SplashScreen'
 import { TransitionLoader } from './TransitionLoader'
 import { cognitoGetCurrentUser, cognitoSignOut } from './aws'
 import { Landing } from './landing/Landing'
-import { ChatWidget } from './chat/ChatWidget'
 
 const WORKSPACE_KEY = 'lexisguide:workspace'
 const WORKSPACE_USER_KEY = 'lexisguide:workspace-user'
@@ -137,20 +136,12 @@ export function App() {
     screen = <DashboardV2 onClose={closeDashboard} onSignOut={handleSignOut} userEmail={currentUser.email} />
   } else if (showApp) {
     screen = (
-      <>
-        <Landing
-          userEmail={currentUser?.email}
-          onOpenWorkspace={openDashboard}
-          onSignIn={() => setAuthOpen(true)}
-          onSignOut={handleSignOut}
-        />
-        <ChatWidget
-          storageKey="lexisguide:chat-landing"
-          context={{ page: 'Landing page' }}
-          onSignIn={() => setAuthOpen(true)}
-          suggestions={['What can LexisGuide do?', 'What does “indemnify” mean?', 'Is this risky: “Either party may terminate this agreement.”']}
-        />
-      </>
+      <Landing
+        userEmail={currentUser?.email}
+        onOpenWorkspace={openDashboard}
+        onSignIn={() => setAuthOpen(true)}
+        onSignOut={handleSignOut}
+      />
     )
   }
 

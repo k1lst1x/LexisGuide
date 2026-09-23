@@ -40,17 +40,23 @@ type AnalyzeBody = {
 
 /** POST /api/v1/analyze. Returns null when the service is unreachable or declines. */
 export async function analyze(body: AnalyzeBody, options: { requireAuth?: boolean; timeoutMs?: number } = {}): Promise<AnalyzeResult | null> {
-  const token = await cognitoGetIdToken()
+  let token = await cognitoGetIdToken()
   if (options.requireAuth && !token) throw new Error('A signed-in session is required for the deployed AI service.')
   const controller = new AbortController()
   const timer = options.timeoutMs ? window.setTimeout(() => controller.abort(), options.timeoutMs) : undefined
   try {
-    const response = await fetch(`${apiBase()}/api/v1/analyze`, {
+    const send = () => fetch(`${apiBase()}/api/v1/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       signal: controller.signal,
       body: JSON.stringify(body),
     })
+    let response = await send()
+    if (response.status === 401 && token) {
+      token = await cognitoGetIdToken(true)
+      if (!token) throw new Error('Your AWS session expired. Please sign in again.')
+      response = await send()
+    }
     return response.ok ? await response.json() as AnalyzeResult : null
   } finally {
     if (timer) window.clearTimeout(timer)
