@@ -1,6 +1,6 @@
 # AWS authentication, API deployment, and user storage
 
-LexisGuide uses Amazon Cognito for email/password, Google, and Apple sign-in. API
+LexisGuide uses Amazon Cognito for email/password and Google sign-in. API
 Gateway and the API both verify Cognito ID tokens before accessing DynamoDB, where
 every record is partitioned by the Cognito user ID. GitHub Pages is static: the
 production API runs as FastAPI on AWS Lambda behind API Gateway.
@@ -10,9 +10,13 @@ production API runs as FastAPI on AWS Lambda behind API Gateway.
 1. Copy infra/terraform.tfvars.example to infra/terraform.tfvars.
 2. Choose a globally unique Cognito domain prefix.
 3. Register the Cognito callback URL `https://<cognito-domain>/oauth2/idpresponse`
-   with Google and Apple. The application callback is
+   with Google. The application callback is
    `https://k1lst1x.github.io/LexisGuide/auth/callback`.
-4. Add Google OAuth and Apple developer values to terraform.tfvars. Never commit this file.
+4. Add the Google OAuth values to terraform.tfvars. Never commit this file.
+   The deploy workflow holds them as `GOOGLE_CLIENT_ID` and the
+   `GOOGLE_CLIENT_SECRET` secret. Applying locally without them plans to destroy
+   the deployed Google provider, so either copy the values in or let the
+   workflow apply.
 5. If enabling statute lookup, rotate the lawfirm.dev key first, then store the replacement
    in Secrets Manager. Use the resulting ARN—not the key—in terraform.tfvars:
 
@@ -104,3 +108,24 @@ Backend needs AWS_REGION, COGNITO_USER_POOL_ID, COGNITO_USER_POOL_CLIENT_ID, and
 Use the Terraform-created IAM role for the deployed API. It is limited to the
 DynamoDB table and the configured AgentCore runtime. Never put AWS access keys in
 the frontend.
+
+## Sign-up without a verification code
+
+Sign-up takes an email and a password and goes straight into the workspace. No
+code is emailed.
+
+Two pieces make that work, and both are required. `auto_verified_attributes` is
+empty, which stops Cognito sending a code; on its own that leaves every new
+account UNCONFIRMED and unable to sign in. The `lexisguide-pre-signup` Lambda,
+wired to the pool's pre-sign-up trigger, is what confirms the account and marks
+the email verified so password reset still works.
+
+The trade-off: nobody proves they own the address they sign up with. Someone can
+register with another person's email, which both denies that person the address
+and sends later reset mail to an inbox the account holder may not control. To
+require proof again, restore `auto_verified_attributes = ["email"]` with the
+verification message template and remove the trigger.
+
+Accounts created before the trigger existed are still UNCONFIRMED and cannot be
+fixed from the browser, because no code can be sent. Confirm them with
+`aws cognito-idp admin-confirm-sign-up`.

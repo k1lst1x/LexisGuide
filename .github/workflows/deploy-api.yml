@@ -42,10 +42,6 @@ jobs:
       TF_VAR_agentcore_assistant_runtime_arn: ${{ vars.AGENTCORE_ASSISTANT_RUNTIME_ARN }}
       TF_VAR_google_client_id: ${{ vars.GOOGLE_CLIENT_ID }}
       TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-      TF_VAR_apple_client_id: ${{ vars.APPLE_CLIENT_ID }}
-      TF_VAR_apple_team_id: ${{ vars.APPLE_TEAM_ID }}
-      TF_VAR_apple_key_id: ${{ vars.APPLE_KEY_ID }}
-      TF_VAR_apple_private_key: ${{ secrets.APPLE_PRIVATE_KEY }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
