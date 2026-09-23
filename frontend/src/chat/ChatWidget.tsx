@@ -1,27 +1,15 @@
 /* The LexisGuide chat popup: a bottom-right launcher and panel that talks to the
    LexisGuideAssistant agent (AgentCore) through /api/v1/chat. When the visitor is
    signed out or the service is unreachable, it answers from a local guide instead. */
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowUp, Minus, RotateCcw, Sparkles } from 'lucide-react'
-import { cognitoGetIdToken } from '../aws'
-import { apiBase } from '../workspace/api'
 import { defaultGuide } from './guide'
 import './chat.css'
 import { PromptComposer } from './PromptComposer'
+import { RichText } from './RichText'
+import { useAssistantChat, type ChatContext } from './useAssistantChat'
 
-export type ChatContext = {
-  page?: string
-  document_title?: string
-  document_type?: string
-  document_score?: number
-  document_excerpt?: string
-  open_findings?: string[]
-  current_finding?: string
-  jurisdiction?: string
-}
-
-type Turn = { id: string; role: 'user' | 'assistant'; content: string; local?: boolean }
-type Mode = 'live' | 'guide' | 'unknown'
+export type { ChatContext }
 
 type Props = {
   storageKey: string
@@ -39,64 +27,14 @@ type Props = {
   footer?: ReactNode
   /** Render as a full-page conversation, without the floating launcher. */
   embedded?: boolean
-  /** Use the composer that springs open from a pill. Suits the roomy page,
-      not the popup, where the panel is already a fixed size. */
+  /** Use the composer that springs open from a pill. */
   expandingComposer?: boolean
 }
 
-const MAX_HISTORY = 12
-
-function newId() {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `c-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function load(key: string): { conversationId: string; turns: Turn[] } | null {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(key) || 'null')
-    if (parsed && typeof parsed.conversationId === 'string' && Array.isArray(parsed.turns)
-      && parsed.turns.every((t: Turn) => typeof t?.content === 'string' && (t.role === 'user' || t.role === 'assistant'))) return parsed
-  } catch { /* start fresh */ }
-  return null
-}
-
-/** Paragraphs, "- " bullets, numbered steps and **bold**, rendered as React nodes (never HTML). */
-function RichText({ text }: { text: string }) {
-  const inline = (line: string) => line.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-    part.startsWith('**') && part.endsWith('**') ? <strong key={i}>{part.slice(2, -2)}</strong> : <Fragment key={i}>{part}</Fragment>)
-  const blocks: ReactNode[] = []
-  let list: { ordered: boolean; items: string[] } | null = null
-  const flush = () => {
-    if (!list) return
-    const Tag = list.ordered ? 'ol' : 'ul'
-    blocks.push(<Tag key={blocks.length}>{list.items.map((item, i) => <li key={i}>{inline(item)}</li>)}</Tag>)
-    list = null
-  }
-  text.split('\n').forEach((raw) => {
-    const line = raw.trim()
-    const bullet = line.match(/^[-*•]\s+(.*)$/)
-    const numbered = line.match(/^\d+[.)]\s+(.*)$/)
-    if (bullet || numbered) {
-      const ordered = !!numbered
-      if (!list || list.ordered !== ordered) { flush(); list = { ordered, items: [] } }
-      list.items.push((bullet ?? numbered)![1])
-      return
-    }
-    flush()
-    if (line) blocks.push(<p key={blocks.length}>{inline(line)}</p>)
-  })
-  flush()
-  return <>{blocks}</>
-}
 
 export function ChatWidget({ storageKey, context, suggestions = [], fallback = defaultGuide, greeting, open: controlledOpen, onOpenChange, pendingQuestion, onSignIn, className = '', footer, embedded = false, expandingComposer = false }: Props) {
-  const [saved] = useState(() => load(storageKey))
-  const [conversationId, setConversationId] = useState(saved?.conversationId ?? newId())
-  const welcome: Turn = { id: 'welcome', role: 'assistant', content: greeting ?? 'Hi! I’m the LexisGuide assistant. Ask me about a notice or agreement, a legal term, or how to use LexisGuide.', local: true }
-  const [turns, setTurns] = useState<Turn[]>(saved?.turns?.length ? saved.turns : [welcome])
-  const [input, setInput] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [mode, setMode] = useState<Mode>('unknown')
-  const [notice, setNotice] = useState('')
+  const chat = useAssistantChat({ storageKey, context, greeting, fallback })
+  const { turns, input, setInput, busy, mode, notice, ask, reset, status } = chat
   const [localOpen, setLocalOpen] = useState(false)
   const open = embedded || (controlledOpen ?? localOpen)
   const setOpen = (value: boolean) => { onOpenChange?.(value); if (controlledOpen === undefined) setLocalOpen(value) }
@@ -104,11 +42,8 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastPending = useRef<number | null>(null)
 
-  useEffect(() => {
-    try { window.localStorage.setItem(storageKey, JSON.stringify({ conversationId, turns: turns.slice(-40) })) } catch { /* optional */ }
-  }, [storageKey, conversationId, turns])
   useEffect(() => { listRef.current?.scrollTo?.({ top: listRef.current.scrollHeight, behavior: 'smooth' }) }, [turns.length, busy, open])
-  useEffect(() => { if (open) window.setTimeout(() => inputRef.current?.focus(), 60) }, [open])
+  useEffect(() => { if (open && !expandingComposer) window.setTimeout(() => inputRef.current?.focus(), 60) }, [open, expandingComposer])
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
@@ -116,57 +51,11 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const callAgent = async (history: Turn[]): Promise<string | null> => {
-    let token = await cognitoGetIdToken().catch(() => null)
-    if (!token) { setMode('guide'); setNotice('signed-out'); return null }
-    const body = JSON.stringify({
-      conversation_id: conversationId,
-      messages: history.filter((t) => t.id !== 'welcome').slice(-MAX_HISTORY).map(({ role, content }) => ({ role, content: content.slice(0, 4000) })),
-      context: { ...context, open_findings: context?.open_findings?.slice(0, 12) },
-    })
-    const send = (auth: string) => fetch(`${apiBase()}/api/v1/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth}` }, body })
-    let response = await send(token)
-    if (response.status === 401) {
-      token = await cognitoGetIdToken(true).catch(() => null)
-      if (!token) { setMode('guide'); setNotice('signed-out'); return null }
-      response = await send(token)
-    }
-    if (response.status === 429) { setNotice('You’re sending messages quickly. Please wait a minute and try again.'); return null }
-    if (!response.ok) throw new Error(`chat ${response.status}`)
-    const data = await response.json() as { reply?: string }
-    setMode('live')
-    setNotice('')
-    return data.reply?.trim() || null
-  }
-
-  const ask = async (question: string) => {
-    const text = question.trim()
-    if (!text || busy) return
-    const userTurn: Turn = { id: newId(), role: 'user', content: text }
-    const history = [...turns, userTurn]
-    setTurns(history)
-    setInput('')
-    setBusy(true)
-    let reply: string | null = null
-    try {
-      reply = await callAgent(history)
-    } catch {
-      setMode('guide')
-      setNotice('The AI agent is unavailable right now, so I’m answering from the built-in guide.')
-    }
-    setTurns((current) => [...current, { id: newId(), role: 'assistant', content: reply ?? fallback(text), local: !reply }])
-    setBusy(false)
-  }
-
   useEffect(() => {
     if (!pendingQuestion || pendingQuestion.id === lastPending.current) return
     lastPending.current = pendingQuestion.id
     void ask(pendingQuestion.text)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingQuestion])
-
-  const reset = () => { setConversationId(newId()); setTurns([welcome]); setNotice('') }
-  const status = mode === 'live' ? 'AI agent · online' : mode === 'guide' ? 'Guide mode' : 'Here to help'
+  }, [pendingQuestion, ask])
 
   return (
     <div className={`cw ${open ? 'is-open' : ''} ${className}`}>
