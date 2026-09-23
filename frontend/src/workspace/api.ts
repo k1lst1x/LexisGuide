@@ -173,6 +173,40 @@ export async function workspaceRequest<T>(path: string, init: RequestInit = {}):
   return response.json() as Promise<T>
 }
 
+export type StoredTurn = { id: string; role: 'user' | 'assistant'; content: string; local?: boolean }
+
+/** Read a saved conversation from the signed-in user's own history. */
+export async function fetchConversation(conversationId: string): Promise<StoredTurn[] | null> {
+  const token = await cognitoGetIdToken().catch(() => null)
+  if (!token) return null
+  try {
+    const response = await fetch(`${apiBase()}/api/v1/me/conversations/${conversationId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!response.ok) return null
+    const body = await response.json() as { turns?: StoredTurn[] }
+    return body.turns ?? null
+  } catch {
+    // Offline: the local copy is what the person sees.
+    return null
+  }
+}
+
+/** Write a conversation back. Silent on failure: the local copy still holds. */
+export async function saveConversation(conversationId: string, turns: StoredTurn[], title = ''): Promise<void> {
+  const token = await cognitoGetIdToken().catch(() => null)
+  if (!token) return
+  try {
+    await fetch(`${apiBase()}/api/v1/me/conversations/${conversationId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ turns, title }),
+    })
+  } catch {
+    // Keeping history is best-effort; the local copy still holds.
+  }
+}
+
 export type LawyerVerification = {
   verified: boolean
   attempts_used: number

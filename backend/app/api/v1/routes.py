@@ -1,7 +1,7 @@
 from datetime import date
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from lexisguide_assistant import ChatReply, ChatRequest
 from pydantic import BaseModel, Field
 from review_contract import ReviewResult
@@ -24,9 +24,11 @@ from app.storage import (
     consume_workspace_invite,
     create_workspace,
     create_workspace_invite,
+    get_conversation,
     get_lawyer_verification,
     get_profile,
     get_workspace_membership,
+    list_conversations,
     list_records,
     list_workspace_members,
     list_workspaces,
@@ -34,6 +36,7 @@ from app.storage import (
     release_lawyer_attempt,
     release_remote_operation,
     reserve_lawyer_attempt,
+    save_conversation,
     save_lawyer_verification,
     save_record,
     set_workspace_linked_document,
@@ -136,6 +139,39 @@ class LawyerVerification(BaseModel):
     status: str = ""
     admitted_on: str = ""
     verified_at: str = ""
+
+
+
+CONVERSATION_ID = r"^[A-Za-z0-9-]{8,64}$"
+MAX_STORED_TURNS = 60
+
+
+class StoredTurn(BaseModel):
+    id: str = Field(min_length=1, max_length=80)
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=4_000)
+    local: bool = False
+
+
+class ConversationBody(BaseModel):
+    """What the browser sends back to be kept. Bounded so one person cannot
+    fill the table: 60 turns of 4k is well inside a DynamoDB item."""
+
+    turns: list[StoredTurn] = Field(max_length=MAX_STORED_TURNS)
+    title: str = Field(default="", max_length=160)
+
+
+class Conversation(BaseModel):
+    conversation_id: str
+    turns: list[StoredTurn] = Field(default_factory=list)
+    updated_at: str = ""
+    title: str = ""
+
+
+class ConversationSummary(BaseModel):
+    conversation_id: str
+    title: str = ""
+    updated_at: str = ""
 
 
 class StatuteLookup(BaseModel):
@@ -392,6 +428,41 @@ async def verify_lawyer(
             ),
         )
     return LawyerVerification(**save_lawyer_verification(user["sub"], record))
+
+
+@router.get("/me/conversations", response_model=list[ConversationSummary])
+async def list_my_conversations(
+    user: dict[str, str] = Depends(current_user),
+) -> list[ConversationSummary]:
+    return [ConversationSummary(**row) for row in list_conversations(user["sub"])]
+
+
+@router.get("/me/conversations/{conversation_id}", response_model=Conversation)
+async def read_conversation(
+    conversation_id: str = Path(pattern=CONVERSATION_ID),
+    user: dict[str, str] = Depends(current_user),
+) -> Conversation:
+    """Read one conversation. The user's own id is the partition, so this can
+    only ever return their history, whatever id is asked for."""
+    stored = get_conversation(user["sub"], conversation_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="No such conversation.")
+    return Conversation(**stored)
+
+
+@router.put("/me/conversations/{conversation_id}", response_model=Conversation)
+async def write_conversation(
+    payload: ConversationBody,
+    conversation_id: str = Path(pattern=CONVERSATION_ID),
+    user: dict[str, str] = Depends(current_user),
+) -> Conversation:
+    saved = save_conversation(
+        user["sub"],
+        conversation_id,
+        [turn.model_dump() for turn in payload.turns],
+        payload.title.strip(),
+    )
+    return Conversation(**saved)
 
 
 @router.get("/me", response_model=UserProfile)

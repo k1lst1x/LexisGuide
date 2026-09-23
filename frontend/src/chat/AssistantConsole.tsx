@@ -64,7 +64,7 @@ export function AssistantConsole({
   greeting,
   pendingQuestion,
 }: AssistantConsoleProps) {
-  const chat = useAssistantChat({ storageKey, context, greeting, fallback })
+  const chat = useAssistantChat({ storageKey, context, greeting, fallback, persist: true })
   const threadRef = useRef<HTMLDivElement>(null)
   const lastPending = useRef<number | null>(null)
 
@@ -100,7 +100,9 @@ export function AssistantConsole({
       ) : (
         <div className="ac-hero">
           <span className="ac-hero-mark" aria-hidden="true"><Sparkles size={22} /></span>
-          <h2>{greeting}</h2>
+          {/* The greeting is the transcript's first line once anything is
+              asked, so here it only needs to be a caption, not a headline. */}
+          <p className="ac-hero-line">{greeting}</p>
           {suggestions.length > 0 && (
             <div className="ac-suggest" aria-label="Suggested questions">
               {suggestions.map((suggestion, index) => (

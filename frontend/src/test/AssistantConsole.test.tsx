@@ -62,7 +62,9 @@ describe('AssistantConsole', () => {
     await user.click(screen.getByRole('button', { name: 'What should I review first?' }))
 
     expect(await screen.findByText('Start with the termination clause.')).toBeInTheDocument()
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    // The page also loads and saves history, so pick out the chat call itself.
+    const chatCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/v1/chat'))!
+    const body = JSON.parse((chatCall[1] as RequestInit).body as string)
     expect(body.messages).toEqual([{ role: 'user', content: 'What should I review first?' }])
   })
 
@@ -117,5 +119,42 @@ describe('AssistantConsole', () => {
 
     expect(container.querySelector('.ac-status.is-live')).not.toBeNull()
     expect(screen.getByText('AI agent · online')).toBeInTheDocument()
+  })
+
+  it('saves the conversation to the signed-in user’s own history', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith('/api/v1/chat')) {
+        return { ok: true, status: 200, json: async () => ({ reply: 'Saved answer.' }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ turns: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AssistantConsole {...props} />)
+
+    await user.click(screen.getByRole('button', { name: 'What should I review first?' }))
+    await screen.findByText('Saved answer.')
+
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PUT')
+      expect(put).toBeTruthy()
+      // The route is scoped to the caller; the server keys it under their own id.
+      expect(String(put![0])).toContain('/api/v1/me/conversations/')
+      const body = JSON.parse((put![1] as RequestInit).body as string)
+      expect(body.turns.map((turn: { content: string }) => turn.content)).toContain('What should I review first?')
+      expect(body.title).toBe('What should I review first?')
+    }, { timeout: 3000 })
+  })
+
+  it('restores the saved history when this browser has none', async () => {
+    const stored = [
+      { id: 'a1', role: 'user', content: 'Earlier question', local: false },
+      { id: 'a2', role: 'assistant', content: 'Earlier answer', local: false },
+    ]
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ turns: stored }) })))
+    render(<AssistantConsole {...props} />)
+
+    expect(await screen.findByText('Earlier question')).toBeInTheDocument()
+    expect(screen.getByText('Earlier answer')).toBeInTheDocument()
   })
 })
