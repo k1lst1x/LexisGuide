@@ -357,6 +357,16 @@ resource "aws_apigatewayv2_route" "health" {
   authorization_type = "NONE"
 }
 
+# CORS preflight has no bearer token by design. Without this explicit route,
+# the JWT-protected `$default` route rejects browser OPTIONS requests before
+# the actual authenticated chat request can reach Lambda.
+resource "aws_apigatewayv2_route" "preflight" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "OPTIONS /{proxy+}"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "NONE"
+}
+
 resource "aws_cloudwatch_log_group" "api_gateway" {
   name              = "/aws/apigateway/${var.project_name}-http-api"
   retention_in_days = 30
@@ -399,6 +409,7 @@ resource "aws_apigatewayv2_stage" "api" {
   depends_on = [
     aws_apigatewayv2_route.api,
     aws_apigatewayv2_route.health,
+    aws_apigatewayv2_route.preflight,
   ]
 }
 
