@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, ChevronDown, ListTodo, MessageSquare, PencilLine, RotateCcw, Sparkles, Wand2, X } from 'lucide-react'
+import { MessageLoading } from '../../components/ui/message-loading'
 import { useWorkspace } from '../store'
 import { bySeverity, documentDisplayName, documentKind, openFindings, type Finding, type SampleDoc } from '../data'
 import { ProgressLine, ScoreMeter } from '../charts'
@@ -168,8 +169,10 @@ export function ReviewView() {
             <input value={ws.jurisdiction} onChange={(event) => ws.setJurisdiction(event.target.value)} placeholder="e.g. Illinois" aria-label="Legal jurisdiction" />
           </label>
           <div className="ws-menu-anchor" ref={actionsRef}>
-            <button type="button" className="ws-btn ws-btn-dark" aria-haspopup="menu" aria-expanded={actionsOpen} onClick={() => setActionsOpen((v) => !v)} disabled={!!ws.busyAction}>
-              <Wand2 size={15} /> {ws.busyAction ? 'Working…' : 'AI actions'} <ChevronDown size={14} />
+            <button type="button" className={`ws-btn ws-btn-dark ${ws.busyAction ? 'is-working' : ''}`} aria-haspopup="menu" aria-expanded={actionsOpen} onClick={() => setActionsOpen((v) => !v)} disabled={!!ws.busyAction}>
+              {ws.busyAction ? <MessageLoading className="ws-ai-loading" /> : <Wand2 size={15} />}
+              <span aria-live="polite">{ws.busyAction ? 'Working…' : 'AI actions'}</span>
+              <ChevronDown size={14} aria-hidden="true" />
             </button>
             {actionsOpen && (
               <div className="ws-popover ws-menu" role="menu" aria-label="AI document actions">

@@ -158,6 +158,10 @@
 .ws-btn:hover:not(:disabled) { background: #fff; border-color: var(--line-2); transform: translateY(-1px); }
 .ws-btn-dark { border-color: transparent; background: var(--ink); color: #fff !important; box-shadow: inset 0 1px 1px rgba(255,255,255,.16), 0 8px 20px -12px rgba(27,28,20,.6); }
 .ws-btn-dark:hover:not(:disabled) { background: #2c2d23; border-color: transparent; }
+.ws-btn-dark.is-working { min-width: 176px; justify-content: center; background: #96968f; border-color: #96968f; color: #fff !important; box-shadow: 0 9px 21px -13px rgba(27,28,20,.45); cursor: wait; }
+.ws-ai-loading { width: 22px; height: 22px; flex: 0 0 22px; }
+.lg-message-loading { display: inline-block; color: currentColor; }
+@media (prefers-reduced-motion: reduce) { .lg-message-loading animate { display: none; } }
 .ws-btn-green { border-color: transparent; background: var(--green); color: #fff !important; box-shadow: inset 0 1px 1px rgba(255,255,255,.18), 0 8px 18px -10px rgba(0,103,79,.7); }
 .ws-btn-green:hover:not(:disabled) { background: #00583f; border-color: transparent; }
 .ws-btn-sm { height: 30px; padding: 0 11px; font-size: 12.5px; }
