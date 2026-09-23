@@ -31,6 +31,7 @@ describe('AssistantConsole', () => {
     expect(screen.getByRole('button', { name: 'Ask LexisGuide' })).toBeInTheDocument()
     // The transcript only exists once there is something in it.
     expect(container.querySelector('.ac-thread')).toBeNull()
+    expect(container.querySelector('.ac-hero')).not.toBeNull()
   })
 
   it('answers a question and keeps the greeting as the transcript opener', async () => {
@@ -49,7 +50,7 @@ describe('AssistantConsole', () => {
     const thread = container.querySelector('.ac-thread')!
     expect(thread).not.toBeNull()
     expect(thread).toHaveTextContent('Hi, I have your lease in context.')
-    expect(container.querySelector('.ac-greeting')).toBeNull()
+    expect(container.querySelector('.ac-hero')).toBeNull()
   })
 
   it('sends a suggestion straight to the agent', async () => {
@@ -88,5 +89,33 @@ describe('AssistantConsole', () => {
       expect(screen.queryByRole('button', { name: 'What should I review first?' })).not.toBeInTheDocument()
     })
     expect(screen.getByRole('button', { name: /New conversation/ })).toBeInTheDocument()
+  })
+
+  it('marks each answer with the assistant avatar and offers to copy it', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', reply('A lien is a claim against property.'))
+    const { container } = render(<AssistantConsole {...props} />)
+
+    await user.click(screen.getByRole('button', { name: 'What should I review first?' }))
+    await screen.findByText('A lien is a claim against property.')
+
+    // The greeting has no copy button; only real answers do.
+    expect(screen.getAllByRole('button', { name: 'Copy answer' })).toHaveLength(1)
+    expect(container.querySelectorAll('.ac-msg-assistant .ac-avatar').length).toBe(2)
+    expect(container.querySelector('.ac-msg-user')).not.toBeNull()
+  })
+
+  it('reports whether the answer came from the agent or the local guide', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', reply('From the agent.'))
+    const { container } = render(<AssistantConsole {...props} />)
+
+    expect(container.querySelector('.ac-status.is-unknown')).not.toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'What should I review first?' }))
+    await screen.findByText('From the agent.')
+
+    expect(container.querySelector('.ac-status.is-live')).not.toBeNull()
+    expect(screen.getByText('AI agent · online')).toBeInTheDocument()
   })
 })
