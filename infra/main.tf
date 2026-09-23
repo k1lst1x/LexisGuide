@@ -230,7 +230,9 @@ data "aws_iam_policy_document" "api_lambda" {
       ]
       resources = [
         "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/${statement.value}",
-        "arn:aws:bedrock:${var.aws_region}::foundation-model/*",
+        # Cross-region inference profiles may route a request to any enabled
+        # foundation-model region. The profile itself remains account-scoped.
+        "arn:aws:bedrock:*::foundation-model/*",
       ]
     }
   }
