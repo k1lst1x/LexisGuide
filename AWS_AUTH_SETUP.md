@@ -12,6 +12,10 @@ production API runs as FastAPI on AWS Lambda behind API Gateway.
 3. Register the Cognito callback URL `https://<cognito-domain>/oauth2/idpresponse`
    with Google. The application callback is
    `https://k1lst1x.github.io/LexisGuide/auth/callback`.
+   The Cognito domain includes the prefix and region, so a new stack (another
+   account, region, or `COGNITO_DOMAIN_PREFIX`) has a new callback URL. Add it
+   to the Google client's **Authorized redirect URIs** before switching the
+   site over, or Google rejects every sign-in with `redirect_uri_mismatch`.
 4. Add the Google OAuth values to terraform.tfvars. Never commit this file.
    The deploy workflow holds them as `GOOGLE_CLIENT_ID` and the
    `GOOGLE_CLIENT_SECRET` secret. Applying locally without them plans to destroy
