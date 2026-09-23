@@ -362,6 +362,21 @@ async def verify_lawyer(
     finally:
         release_remote_operation(lease)
 
+    if not record["found"]:
+        remaining = get_lawyer_verification(user["sub"])["attempts_remaining"]
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No {payload.jurisdiction.upper()} bar record matches number "
+                f"{payload.bar_number}. "
+                + (
+                    f"You have {remaining} attempt{'s' if remaining != 1 else ''} left."
+                    if remaining
+                    else SUPPORT_MESSAGE
+                )
+            ),
+        )
+
     if not record["active"]:
         remaining = get_lawyer_verification(user["sub"])["attempts_remaining"]
         described = record["status"] or "not current"

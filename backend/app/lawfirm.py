@@ -1,4 +1,4 @@
-"""Provenance-preserving client for the optional lawfirm.dev statute API.
+"""Provenance-preserving client for the optional lawfirm.dev legal-data API.
 
 Keys resolve only on the backend. Production should use an AWS Secrets Manager ARN;
 ``LAWFIRM_API_KEY`` exists solely for local development.
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date
+from datetime import UTC, date, datetime
 from functools import lru_cache
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -114,11 +114,20 @@ class LawFirmClient:
         return self._get("/statutes/lookup", query, "statute")
 
     def lookup_attorney(self, bar_number: str, jurisdiction: str) -> dict[str, Any]:
-        """Look up one bar record. A 404 means no such record and is the caller's to handle."""
+        """Verify one bar-admission record. A 404 means no such record.
+
+        lawfirm.dev documents this separately from attorney search: verification
+        is ``/bar-admissions/verify`` and uses the camel-cased ``barNumber``
+        query parameter. Keeping this exact provider contract here means the
+        frontend never needs (or receives) the provider key.
+        """
         if not self.api_key:
             raise LawFirmUnavailableError("Attorney lookup is not configured.")
-        query = {"bar": bar_number.strip(), "jurisdiction": jurisdiction.strip().upper()}
-        return self._get("/attorneys/lookup", query, "attorney")
+        query = {
+            "barNumber": bar_number.strip(),
+            "jurisdiction": jurisdiction.strip().upper(),
+        }
+        return self._get("/bar-admissions/verify", query, "bar admission")
 
 
 # A bar record counts only when the provider calls it current. Anything else
@@ -145,6 +154,21 @@ def attorney_record(payload: dict[str, Any]) -> dict[str, Any]:
     return attorney if isinstance(attorney, dict) else payload
 
 
+def _admission_record(payload: dict[str, Any]) -> dict[str, Any]:
+    admission = payload.get("admission")
+    return admission if isinstance(admission, dict) else {}
+
+
+def _date_value(value: Any) -> str:
+    """Normalise the provider's ISO strings and millisecond timestamps for display."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(value / 1000, tz=UTC).date().isoformat()
+        except (OverflowError, OSError, ValueError):
+            return ""
+    return value.strip() if isinstance(value, str) else ""
+
+
 def read_bar_status(payload: dict[str, Any]) -> dict[str, Any]:
     """Normalise one bar record.
 
@@ -153,15 +177,36 @@ def read_bar_status(payload: dict[str, Any]) -> dict[str, Any]:
     unrecognised status is treated as not verified rather than as verified.
     """
     record = attorney_record(payload)
-    status = _first(record, "status", "barStatus", "licenseStatus", "standing").lower()
+    admission = _admission_record(payload)
+    status = _first(admission, "status", "barStatus", "licenseStatus", "standing") or _first(
+        record, "status", "barStatus", "licenseStatus", "standing"
+    )
+    status = status.lower()
     normalised = status.replace(" ", "_").replace("-", "_")
+    # ``/bar-admissions/verify`` deliberately returns HTTP 200 for an unknown
+    # bar number; ``admission: null`` is the provider's clear no-record answer.
+    found = bool(admission) or bool(record and record is not payload)
+    provider_verified = payload.get("verified")
+    bar_number = _first(admission, "barNumber", "bar", "licenseNumber") or _first(
+        record, "barNumber", "bar", "licenseNumber"
+    )
+    jurisdiction = _first(admission, "jurisdiction", "state", "barJurisdiction") or _first(
+        record, "jurisdiction", "state", "barJurisdiction"
+    )
+    admitted_on = _date_value(admission.get("admittedAt")) or _first(
+        record, "admissionDate", "admittedOn", "admitted"
+    )
     return {
-        "active": normalised in ACTIVE_BAR_STATUSES,
+        "found": found,
+        # The provider promises `verified: true` only for an active admission.
+        # Still require both signals so an unexpected response cannot verify a
+        # person merely because it contains a familiar status word.
+        "active": provider_verified is True and normalised in ACTIVE_BAR_STATUSES,
         "status": status,
-        "name": _first(record, "name", "fullName", "displayName"),
-        "bar_number": _first(record, "barNumber", "bar", "licenseNumber"),
-        "jurisdiction": _first(record, "jurisdiction", "state", "barJurisdiction"),
-        "admitted_on": _first(record, "admissionDate", "admittedOn", "admitted"),
+        "name": _first(record, "canonicalName", "name", "fullName", "displayName"),
+        "bar_number": bar_number,
+        "jurisdiction": jurisdiction,
+        "admitted_on": admitted_on,
         "source_checked_at": _first(record, "verifiedAt", "lastVerified", "retrievedAt"),
     }
 

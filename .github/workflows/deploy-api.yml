@@ -37,6 +37,7 @@ jobs:
       # The ARN only names the secret; the key stays in Secrets Manager and is
       # read by the Lambda at runtime. Unset here, the statute route is disabled.
       TF_VAR_lawfirm_api_key_secret_arn: ${{ vars.LAWFIRM_API_KEY_SECRET_ARN }}
+      TF_VAR_bedrock_model_id: ${{ vars.BEDROCK_MODEL_ID || 'us.amazon.nova-2-lite-v1:0' }}
       TF_VAR_agentcore_runtime_arn: ${{ vars.AGENTCORE_RUNTIME_ARN }}
       TF_VAR_agentcore_assistant_runtime_arn: ${{ vars.AGENTCORE_ASSISTANT_RUNTIME_ARN }}
       TF_VAR_google_client_id: ${{ vars.GOOGLE_CLIENT_ID }}

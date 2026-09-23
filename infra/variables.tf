@@ -44,6 +44,12 @@ variable "agentcore_runtime_arn" {
   default     = ""
 }
 
+variable "bedrock_model_id" {
+  description = "Bedrock inference-profile ID for direct document review and assistant chat."
+  type        = string
+  default     = "us.amazon.nova-2-lite-v1:0"
+}
+
 variable "agentcore_assistant_runtime_arn" {
   description = "Deployed LexisGuideAssistant AgentCore runtime ARN for /api/v1/chat. Empty disables live chat."
   type        = string

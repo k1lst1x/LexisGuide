@@ -18,6 +18,8 @@ provider "aws" {
   region = var.aws_region
 }
 
+data "aws_caller_identity" "current" {}
+
 resource "aws_dynamodb_table" "user_data" {
   name         = "${var.project_name}-user-data"
   billing_mode = "PAY_PER_REQUEST"
@@ -184,6 +186,23 @@ data "aws_iam_policy_document" "api_lambda" {
     }
   }
 
+  # The system inference profile is account-scoped, while it may route to
+  # supported AWS foundation models. Keep both resource classes explicit.
+  dynamic "statement" {
+    for_each = var.bedrock_model_id == "" ? [] : [var.bedrock_model_id]
+    content {
+      sid = "InvokeLexisGuideBedrockModel"
+      actions = [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream",
+      ]
+      resources = [
+        "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/${statement.value}",
+        "arn:aws:bedrock:${var.aws_region}::foundation-model/*",
+      ]
+    }
+  }
+
   dynamic "statement" {
     for_each = var.agentcore_assistant_runtime_arn == "" ? [] : [var.agentcore_assistant_runtime_arn]
     content {
@@ -228,10 +247,12 @@ resource "aws_lambda_function" "api" {
       USER_DATA_TABLE                  = aws_dynamodb_table.user_data.name
       AGENTCORE_RUNTIME_ARN            = var.agentcore_runtime_arn
       AGENTCORE_ASSISTANT_RUNTIME_ARN  = var.agentcore_assistant_runtime_arn
+      BEDROCK_MODEL_ID                  = var.bedrock_model_id
+      ASSISTANT_MODEL_ID                = var.bedrock_model_id
       CHAT_RATE_LIMIT_PER_WINDOW                    = var.chat_rate_limit_per_window
       STATUTE_RATE_LIMIT_PER_WINDOW                 = var.statute_rate_limit_per_window
-      REMOTE_OPERATION_PER_USER_CONCURRENCY = var.remote_operation_per_user_concurrency
-      REMOTE_OPERATION_GLOBAL_CONCURRENCY   = var.remote_operation_global_concurrency
+      REMOTE_OPERATION_PER_USER_CONCURRENCY         = var.remote_operation_per_user_concurrency
+      REMOTE_OPERATION_GLOBAL_CONCURRENCY           = var.remote_operation_global_concurrency
       CORS_ALLOW_ORIGINS                            = join(",", var.api_allowed_origins)
       REVIEW_RATE_LIMIT_PER_WINDOW                  = var.review_rate_limit_per_window
       REVIEW_RATE_LIMIT_WINDOW_SECONDS              = var.review_rate_limit_window_seconds

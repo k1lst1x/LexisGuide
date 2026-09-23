@@ -73,6 +73,11 @@ function useWorkspaceState(userEmail?: string) {
   const [addMessage, setAddMessage] = useState('')
 
   const [messagesByWorkspace, setMessagesByWorkspace] = useState<Record<string, WorkspaceMessage[]>>(messageGroups)
+  // Do not recreate a cleared account's sample conversation in storage just by
+  // mounting the dashboard. Persist once a person actually sends or changes a
+  // message, while continuing to retain an existing conversation on reload.
+  const messagesWereStored = useRef(window.localStorage.getItem(MESSAGE_STORAGE_KEY) !== null)
+  const messagesChanged = useRef(false)
   const [reactionsByWorkspace, setReactionsByWorkspace] = useState<Record<string, Record<string, string[]>>>({})
   const [tasks, setTasks] = useState<WorkspaceTask[]>(defaultTasks)
   const [draft, setDraft] = useState('')
@@ -101,7 +106,11 @@ function useWorkspaceState(userEmail?: string) {
   const isDemo = !documents.some((doc) => doc.id.startsWith('upload-'))
 
   useEffect(() => { window.localStorage.setItem(LAST_SECTION_KEY, nav) }, [nav])
-  useEffect(() => { window.localStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(messagesByWorkspace)) }, [messagesByWorkspace])
+  useEffect(() => {
+    if (messagesWereStored.current || messagesChanged.current) {
+      window.localStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(messagesByWorkspace))
+    }
+  }, [messagesByWorkspace])
   useEffect(() => { window.localStorage.setItem(RESOLVED_KEY, JSON.stringify(resolved)) }, [resolved])
   useEffect(() => { activeWorkspaceRef.current = activeWorkspace }, [activeWorkspace])
   useEffect(() => {
@@ -295,6 +304,7 @@ function useWorkspaceState(userEmail?: string) {
   const sendMessage = useCallback((text: string, attachment?: string | null) => {
     const trimmed = text.trim()
     if (!trimmed) return
+    messagesChanged.current = true
     setMessagesByWorkspace((current) => ({
       ...current,
       [activeMessageWorkspace]: [...(current[activeMessageWorkspace] ?? []), { id: `message-${Date.now()}`, user: 'You (Reviewer)', text: trimmed, time: 'Just now', saved: false, attachment: attachment || undefined }],
@@ -311,6 +321,7 @@ function useWorkspaceState(userEmail?: string) {
   }, [activeMessageWorkspace])
 
   const toggleSaved = useCallback((messageId: string) => {
+    messagesChanged.current = true
     setMessagesByWorkspace((current) => ({
       ...current,
       [activeMessageWorkspace]: (current[activeMessageWorkspace] ?? []).map((message) => message.id === messageId ? { ...message, saved: !message.saved } : message),

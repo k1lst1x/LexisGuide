@@ -35,6 +35,11 @@ function LawyerVerificationCard() {
       .catch(() => setLoadFailed(true))
   }, [])
 
+  const retryLoad = () => {
+    setLoadFailed(false)
+    load()
+  }
+
   useEffect(load, [load])
 
   const submit = async (event: React.FormEvent) => {
@@ -63,7 +68,8 @@ function LawyerVerificationCard() {
   if (loadFailed) {
     return (
       <Card title="Verify your bar licence" id="bar-title">
-        <p className="ws-muted">Verification is unavailable right now. Please try again later.</p>
+        <p className="ws-muted">We could not reach the verification service. Your licence has not been checked.</p>
+        <button type="button" className="ws-btn" onClick={retryLoad}>Try again</button>
       </Card>
     )
   }

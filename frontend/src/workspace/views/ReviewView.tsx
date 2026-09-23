@@ -134,6 +134,7 @@ export function ReviewView() {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleState, setTitleState] = useState({ documentId: doc.id, draft: doc.title })
   const [actionsOpen, setActionsOpen] = useState(false)
+  const actionsRef = useRef<HTMLDivElement>(null)
   const resolved = ws.resolved[doc.id] ?? []
   const actionable = doc.findings.filter((f) => f.severity !== 'pass')
   const openList = openFindings(doc, resolved)
@@ -144,6 +145,14 @@ export function ReviewView() {
 
   const titleDraft = titleState.documentId === doc.id ? titleState.draft : doc.title
   const saveTitle = () => { if (ws.renameDocument(titleDraft)) setEditingTitle(false) }
+
+  useEffect(() => {
+    const close = (event: MouseEvent) => {
+      if (actionsRef.current && !actionsRef.current.contains(event.target as Node)) setActionsOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [])
 
   return (
     <div className="ws-page ws-review">
@@ -158,12 +167,12 @@ export function ReviewView() {
             <span>Jurisdiction</span>
             <input value={ws.jurisdiction} onChange={(event) => ws.setJurisdiction(event.target.value)} placeholder="e.g. Illinois" aria-label="Legal jurisdiction" />
           </label>
-          <div className="ws-menu-anchor">
+          <div className="ws-menu-anchor" ref={actionsRef}>
             <button type="button" className="ws-btn ws-btn-dark" aria-haspopup="menu" aria-expanded={actionsOpen} onClick={() => setActionsOpen((v) => !v)} disabled={!!ws.busyAction}>
               <Wand2 size={15} /> {ws.busyAction ? 'Working…' : 'AI actions'} <ChevronDown size={14} />
             </button>
             {actionsOpen && (
-              <div className="ws-popover ws-menu" role="menu" onMouseLeave={() => setActionsOpen(false)}>
+              <div className="ws-popover ws-menu" role="menu" aria-label="AI document actions">
                 {([
                   ['review', 'Re-check this document', 'Run the review again with your jurisdiction.'],
                   ['negotiate', 'Suggest negotiation points', 'What to ask for, clause by clause.'],

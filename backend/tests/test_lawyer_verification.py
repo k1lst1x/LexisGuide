@@ -18,15 +18,14 @@ from app import lawfirm, storage
 from app.api.v1 import routes
 
 ACTIVE_RECORD = {
-    "result": {
-        "attorney": {
-            "name": "Dana Okafor",
-            "barNumber": "1234567",
-            "jurisdiction": "FL",
-            "status": "Active",
-            "admissionDate": "2011-05-02",
-        }
-    }
+    "verified": True,
+    "admission": {
+        "barNumber": "1234567",
+        "jurisdiction": "FL",
+        "status": "active",
+        "admittedAt": 1306281600000,
+    },
+    "attorney": {"canonicalName": "Dana Okafor"},
 }
 
 
@@ -164,7 +163,7 @@ def test_a_suspended_record_is_refused_and_counts(
     authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ledger = FakeLedger().install(monkeypatch)
-    provider(monkeypatch, {"result": {"attorney": {"status": "Suspended"}}})
+    provider(monkeypatch, {"verified": False, "admission": {"status": "Suspended"}, "attorney": {}})
 
     response = post(authenticated_client)
 
@@ -268,9 +267,20 @@ def test_malformed_input_is_refused_before_the_provider_is_called(
 def test_status_reading_treats_anything_unrecognised_as_unverified() -> None:
     """An unfamiliar status must fail closed: never grant on a word we do not know."""
     assert lawfirm.read_bar_status(ACTIVE_RECORD)["active"] is True
-    assert lawfirm.read_bar_status({"attorney": {"status": "in good standing"}})["active"] is True
+    assert lawfirm.read_bar_status(
+        {"verified": True, "admission": {"status": "in good standing"}}
+    )["active"] is True
     for status in ["Suspended", "Disbarred", "Inactive", "Retired", "", "pending review"]:
-        assert lawfirm.read_bar_status({"attorney": {"status": status}})["active"] is False
+        assert lawfirm.read_bar_status(
+            {"verified": False, "admission": {"status": status}}
+        )["active"] is False
+
+
+def test_provider_no_record_response_is_not_misread_as_an_inactive_lawyer() -> None:
+    record = lawfirm.read_bar_status({"verified": False, "admission": None, "attorney": None})
+
+    assert record["found"] is False
+    assert record["active"] is False
 
 
 def test_attorney_lookup_sends_the_documented_query(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -295,8 +305,8 @@ def test_attorney_lookup_sends_the_documented_query(monkeypatch: pytest.MonkeyPa
 
     lawfirm.LawFirmClient("test-key").lookup_attorney("1234567", "fl")
 
-    assert "/attorneys/lookup?" in captured["url"]
-    assert "bar=1234567" in captured["url"]
+    assert "/bar-admissions/verify?" in captured["url"]
+    assert "barNumber=1234567" in captured["url"]
     assert "jurisdiction=FL" in captured["url"]
     assert captured["auth"] == "Bearer test-key"
 
