@@ -18,10 +18,13 @@ dependencies = [
   "PyJWT[crypto]>=2.10,<3.0",
   "python-dotenv>=1.1,<2.0",
   "uvicorn[standard]>=0.38,<0.54",
+  "web3>=7.6,<8",
 ]
 
 [project.optional-dependencies]
 dev = [
+  # An in-memory EVM, so the ledger tests run the real contract bytecode.
+  "eth-tester[py-evm]>=0.12,<0.14",
   "httpx>=0.28,<0.29",
   "pytest>=8.3,<10.0",
   "ruff>=0.14,<0.17",
