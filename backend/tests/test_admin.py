@@ -122,6 +122,8 @@ def test_the_portal_requires_a_token(client: TestClient) -> None:
 
 
 def _claims(monkeypatch: pytest.MonkeyPatch, claims: dict[str, Any]) -> None:
+    claims.setdefault("cognito:username", "admin-user")
+    claims.setdefault("iat", 1_800_000_000)
     monkeypatch.setattr(auth, "_settings", lambda: ("us-east-1", "pool-id", "client-id"))
     monkeypatch.setattr(
         auth,
@@ -130,6 +132,10 @@ def _claims(monkeypatch: pytest.MonkeyPatch, claims: dict[str, Any]) -> None:
             "Jwk", (), {"get_signing_key_from_jwt": lambda self, t: type("K", (), {"key": "k"})()}
         )(),
     )
+    monkeypatch.setattr(auth, "_cognito_user_pool", lambda: type("Pool", (), {
+        "admin_get_user": lambda self, **_: {"Enabled": True}
+    })())
+    monkeypatch.setattr(auth, "user_sessions_valid_after", lambda _username: 0)
     monkeypatch.setattr(auth.jwt, "decode", lambda *_, **__: claims)
 
 
@@ -186,6 +192,26 @@ def test_a_removed_admin_is_refused_before_their_token_expires(
 def test_an_admin_sees_their_session(admin_client: TestClient) -> None:
     body = admin_client.get("/api/v1/admin/session").json()
     assert body["email"] == "admin@example.com"
+
+
+def test_global_sign_out_records_the_api_session_cutoff_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, str]] = []
+
+    class Cognito:
+        def admin_user_global_sign_out(self, *, UserPoolId: str, Username: str) -> None:
+            assert UserPoolId == "pool-id"
+            calls.append(("cognito", Username))
+
+    monkeypatch.setattr(admin, "_cognito", lambda: (Cognito(), "pool-id"))
+    monkeypatch.setattr(
+        admin, "invalidate_user_sessions", lambda username: calls.append(("cutoff", username))
+    )
+
+    admin.sign_out_everywhere("person-user")
+
+    assert calls == [("cutoff", "person-user"), ("cognito", "person-user")]
 
 
 # ── Managing accounts ────────────────────────────────────────────────────────

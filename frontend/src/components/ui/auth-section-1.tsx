@@ -3,10 +3,12 @@ import { useId, useState } from "react";
 import type { ReactNode } from "react";
 import {
   authConfigured,
+  cognitoConfirmSignUp,
   cognitoConfirmResetPassword,
   cognitoGetCurrentUser,
   cognitoGoogleSignIn,
   cognitoResetPassword,
+  cognitoResendSignUpCode,
   cognitoSignIn,
   cognitoSignUp,
   setRememberDevice,
@@ -19,7 +21,7 @@ export type AuthSectionOneProps = {
   initialMode?: "sign-in" | "sign-up";
 };
 
-type Mode = "sign-in" | "sign-up" | "forgot" | "reset";
+type Mode = "sign-in" | "sign-up" | "confirm" | "forgot" | "reset";
 
 /** Mirrors the user pool's password policy (infra/main.tf). */
 const PASSWORD_RULES: Array<[string, (value: string) => boolean]> = [
@@ -71,10 +73,8 @@ export default function AuthSectionOne({ onSuccess, onCancel, initialMode = "sig
       if (name === "UserAlreadyAuthenticatedException") {
         await finishSignIn();
       } else if (name === "UserNotConfirmedException") {
-        // Sign-up confirms accounts server-side, so this only happens to
-        // accounts made before that trigger existed. There is no code to
-        // enter any more, so say who can fix it.
-        setError("This account was created before sign-in changed and needs support to enable it. Please contact support@lexisguide.app.");
+        go("confirm");
+        setInfo("Confirm your email address to finish signing in.");
       } else {
         setError(authErrorMessage(caught));
       }
@@ -90,10 +90,8 @@ export default function AuthSectionOne({ onSuccess, onCancel, initialMode = "sig
       const step = result.nextStep?.signInStep;
       if (result.isSignedIn || step === "DONE") return finishSignIn();
       if (step === "CONFIRM_SIGN_UP") {
-        // Amplify reports this as a step rather than throwing. Only accounts
-        // made before sign-up started confirming itself can be in this state,
-        // and no code can be sent to them, so name the way out.
-        setError("This account was created before sign-in changed and needs support to enable it. Please contact support@lexisguide.app.");
+        go("confirm");
+        setInfo("Confirm your email address to finish signing in.");
         return;
       }
       if (step === "RESET_PASSWORD") {
@@ -109,14 +107,31 @@ export default function AuthSectionOne({ onSuccess, onCancel, initialMode = "sig
       const name = `${firstName} ${lastName}`.trim();
       const result = await cognitoSignUp(email.trim(), password, name || undefined);
       if (result.nextStep?.signUpStep === "CONFIRM_SIGN_UP") {
-        // The pool's pre-sign-up trigger confirms new accounts, so reaching
-        // here means it is missing or failed. Do not invent a code step.
-        setError("Sign-up could not be completed. Please contact support@lexisguide.app.");
+        go("confirm");
+        setInfo(`We sent a verification code to ${email.trim()}.`);
         return;
       }
       setRememberDevice(remember);
       await cognitoSignIn(email.trim(), password);
       await finishSignIn();
+    });
+
+  const confirm = () =>
+    run(async () => {
+      await cognitoConfirmSignUp(email.trim(), code.trim());
+      setRememberDevice(remember);
+      const result = await cognitoSignIn(email.trim(), password);
+      if (result.isSignedIn || result.nextStep?.signInStep === "DONE") {
+        await finishSignIn();
+        return;
+      }
+      setError("Your email was confirmed, but sign-in needs another step. Please try again.");
+    });
+
+  const resendConfirmation = () =>
+    run(async () => {
+      await cognitoResendSignUpCode(email.trim());
+      setInfo(`We sent a new verification code to ${email.trim()}.`);
     });
 
   const requestReset = () =>
@@ -145,6 +160,7 @@ export default function AuthSectionOne({ onSuccess, onCancel, initialMode = "sig
     if (busy) return;
     if (mode === "sign-in") void signIn();
     else if (mode === "sign-up") void signUp();
+    else if (mode === "confirm") void confirm();
     else if (mode === "forgot") void requestReset();
     else void reset();
   };
@@ -152,18 +168,20 @@ export default function AuthSectionOne({ onSuccess, onCancel, initialMode = "sig
   const heading = {
     "sign-in": "Welcome back",
     "sign-up": "Create an account",
+    confirm: "Confirm your email",
     forgot: "Reset your password",
     reset: "Choose a new password",
   }[mode];
   const subheading = {
     "sign-in": "Pick up where your legal review left off.",
     "sign-up": "Save your reviews and pick them up on any device.",
+    confirm: "Enter the code we sent to verify that this email belongs to you.",
     forgot: "We'll email you a code to reset it.",
     reset: "Enter the code from your email and a new password.",
   }[mode];
   const submitLabel = busy
     ? "Please wait…"
-    : { "sign-in": "Sign in", "sign-up": "Create account", forgot: "Send reset code", reset: "Reset password" }[mode];
+    : { "sign-in": "Sign in", "sign-up": "Create account", confirm: "Confirm email", forgot: "Send reset code", reset: "Reset password" }[mode];
   const passwordToCheck = mode === "reset" ? newPassword : password;
 
   return (
@@ -214,13 +232,13 @@ export default function AuthSectionOne({ onSuccess, onCancel, initialMode = "sig
                 </div>
               )}
 
-              <FieldInput label="Email address" value={email} type="email" onChange={setEmail} autoComplete="email" readOnly={mode === "reset"} />
+              <FieldInput label="Email address" value={email} type="email" onChange={setEmail} autoComplete="email" readOnly={mode === "reset" || mode === "confirm"} />
 
               {(mode === "sign-in" || mode === "sign-up") && (
                 <FieldInput label="Password" value={password} type="password" onChange={setPassword} autoComplete={isSignUp ? "new-password" : "current-password"} />
               )}
 
-              {mode === "reset" && (
+              {(mode === "reset" || mode === "confirm") && (
                 <FieldInput label="Verification code" value={code} onChange={setCode} autoComplete="one-time-code" inputMode="numeric" />
               )}
 
@@ -260,7 +278,12 @@ export default function AuthSectionOne({ onSuccess, onCancel, initialMode = "sig
 
               <button type="submit" className="auth-submit-btn" disabled={busy}>{submitLabel}</button>
 
-              {(mode === "forgot" || mode === "reset") && (
+              {mode === "confirm" && (
+                <p className="auth-mobile-switch auth-inline-links">
+                  Didn't receive it? <button type="button" onClick={() => void resendConfirmation()} disabled={busy}>Send a new code</button>
+                </p>
+              )}
+              {(mode === "confirm" || mode === "forgot" || mode === "reset") && (
                 <p className="auth-mobile-switch auth-inline-links">
                   <button type="button" onClick={() => go("sign-in")}>Back to sign in</button>
                 </p>

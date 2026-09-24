@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -19,6 +20,9 @@ class FakeTable:
         self.query_requests: list[dict[str, Any]] = []
         self.delete_requests: list[dict[str, Any]] = []
         self.update_requests: list[dict[str, Any]] = []
+        self.transaction_requests: list[dict[str, Any]] = []
+        self.name = "user-data"
+        self.meta = SimpleNamespace(client=FakeTransactionClient(self.transaction_requests))
 
     def get_item(self, **kwargs: Any) -> dict[str, Any]:
         self.get_requests.append(kwargs)
@@ -31,13 +35,21 @@ class FakeTable:
 
     def query(self, **kwargs: Any) -> dict[str, Any]:
         self.query_requests.append(kwargs)
-        return self.responses.pop(0)
+        return self.responses.pop(0) if self.responses else {"Items": []}
 
     def delete_item(self, **kwargs: Any) -> None:
         self.delete_requests.append(kwargs)
 
     def update_item(self, **kwargs: Any) -> None:
         self.update_requests.append(kwargs)
+
+
+class FakeTransactionClient:
+    def __init__(self, requests: list[dict[str, Any]]) -> None:
+        self.requests = requests
+
+    def transact_write_items(self, **kwargs: Any) -> None:
+        self.requests.append(kwargs)
 
 
 @pytest.fixture
@@ -82,6 +94,66 @@ def test_record_storage_uses_users_partition_key(table: FakeTable) -> None:
         "title": "Notice",
     }
     assert table.put_requests == [{"Item": record}]
+
+
+def test_new_record_and_its_quota_are_written_in_one_conditional_transaction(
+    table: FakeTable,
+) -> None:
+    record = storage.create_record_with_limit(
+        "user-123", "record-456", {"type": "document", "title": "Notice"}
+    )
+
+    assert record is not None
+    transaction = table.transaction_requests[0]["TransactItems"]
+    assert transaction[0]["Put"]["ConditionExpression"] == "attribute_not_exists(PK)"
+    assert transaction[1]["Update"]["TableName"] == "user-data"
+    assert transaction[1]["Update"]["ConditionExpression"] is not None
+
+
+def test_legacy_records_count_toward_the_new_storage_limit(
+    table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(storage, "_count_user_resources", lambda *_: storage.MAX_RECORDS_PER_USER)
+
+    assert storage.create_record_with_limit("user-123", "record-456", {}) is None
+    assert table.transaction_requests == []
+
+
+def test_concurrent_first_write_for_one_conversation_becomes_an_update(
+    table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class ExistingConversationClient(FakeTransactionClient):
+        def transact_write_items(self, **kwargs: Any) -> None:
+            self.requests.append(kwargs)
+            raise ClientError(
+                {
+                    "Error": {"Code": "TransactionCanceledException", "Message": "exists"},
+                    "CancellationReasons": [{"Code": "ConditionalCheckFailed"}, {"Code": "None"}],
+                },
+                "TransactWriteItems",
+            )
+
+    table.meta = SimpleNamespace(client=ExistingConversationClient(table.transaction_requests))
+    table.get_responses = [{}]
+    saved = storage.save_conversation_with_limit("user-123", "chat-456", [], "Updated")
+
+    assert saved[0] == "updated"
+    assert table.put_requests[0]["Item"]["SK"] == "CHAT#chat-456"
+
+
+def test_existing_conversation_remains_updatable_when_the_storage_cap_is_full(
+    table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    table.get_responses = [{"Item": {"turns": [], "title": "Old", "updated_at": "then"}}]
+    monkeypatch.setattr(
+        storage, "_count_user_resources", lambda *_: storage.MAX_CONVERSATIONS_PER_USER
+    )
+
+    outcome, saved = storage.save_conversation_with_limit("user-123", "chat-456", [], "New")
+
+    assert outcome == "updated"
+    assert saved is not None
+    assert table.transaction_requests == []
 
 
 def test_record_list_collects_all_dynamodb_pages(monkeypatch: pytest.MonkeyPatch) -> None:

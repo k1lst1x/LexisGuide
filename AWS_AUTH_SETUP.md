@@ -113,26 +113,16 @@ Use the Terraform-created IAM role for the deployed API. It is limited to the
 DynamoDB table and the configured AgentCore runtime. Never put AWS access keys in
 the frontend.
 
-## Sign-up without a verification code
+## Password sign-up email verification
 
-Sign-up takes an email and a password and goes straight into the workspace. No
-code is emailed.
+Password sign-up sends a Cognito verification code. The browser asks for that
+code before it signs the person in, so an account's verified email claim means
+the account holder proved control of the mailbox.
 
-Two pieces make that work, and both are required. `auto_verified_attributes` is
-empty, which stops Cognito sending a code; on its own that leaves every new
-account UNCONFIRMED and unable to sign in. The `lexisguide-pre-signup` Lambda,
-wired to the pool's pre-sign-up trigger, is what confirms the account and marks
-the email verified so password reset still works.
-
-The trade-off: nobody proves they own the address they sign up with. Someone can
-register with another person's email, which both denies that person the address
-and sends later reset mail to an inbox the account holder may not control. To
-require proof again, restore `auto_verified_attributes = ["email"]` with the
-verification message template and remove the trigger.
-
-Accounts created before the trigger existed are still UNCONFIRMED and cannot be
-fixed from the browser, because no code can be sent. Confirm them with
-`aws cognito-idp admin-confirm-sign-up`.
+`auto_verified_attributes = ["email"]` is the enforcement point. Do not add a
+pre-sign-up Lambda that sets `autoConfirmUser` or `autoVerifyEmail`: it would
+let an attacker register another person's address and block the real owner.
+Federated sign-in continues to use the identity provider's verified-email claim.
 
 ## Admin portal
 

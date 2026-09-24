@@ -14,6 +14,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from app.auth import ADMIN_GROUP, _settings
+from app.storage import invalidate_user_sessions
 
 # Enough to tally a hackathon-sized pool in a few calls without letting one
 # overview request page through an unbounded directory.
@@ -153,6 +154,9 @@ def set_enabled(username: str, enabled: bool) -> None:
     if enabled:
         client.admin_enable_user(UserPoolId=pool, Username=username)
     else:
+        # Store the cutoff first: even if Cognito is temporarily unavailable,
+        # the API will fail closed for every already-issued ID token.
+        invalidate_user_sessions(username)
         client.admin_disable_user(UserPoolId=pool, Username=username)
         # A disabled account keeps any refresh token it holds; revoke those too.
         client.admin_user_global_sign_out(UserPoolId=pool, Username=username)
@@ -160,6 +164,9 @@ def set_enabled(username: str, enabled: bool) -> None:
 
 def sign_out_everywhere(username: str) -> None:
     client, pool = _cognito()
+    # Cognito revokes refresh tokens, but the API also consults this durable
+    # cutoff because a signature-valid ID token is otherwise self-contained.
+    invalidate_user_sessions(username)
     client.admin_user_global_sign_out(UserPoolId=pool, Username=username)
 
 
@@ -175,4 +182,5 @@ def set_admin(username: str, admin: bool) -> None:
 
 def delete_user(username: str) -> None:
     client, pool = _cognito()
+    invalidate_user_sessions(username)
     client.admin_delete_user(UserPoolId=pool, Username=username)

@@ -11,10 +11,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
-    archive = {
-      source  = "hashicorp/archive"
-      version = "~> 2.0"
-    }
   }
 }
 
@@ -52,16 +48,9 @@ resource "aws_dynamodb_table" "user_data" {
 resource "aws_cognito_user_pool" "main" {
   name                = "${var.project_name}-users"
   username_attributes = ["email"]
-  # Do not require an email confirmation code during sign-up. Social sign-in
-  # providers still establish a verified email through Cognito federation.
-  # Password-reset codes remain enabled by the recovery configuration below.
-  auto_verified_attributes = []
-
-  # Clearing the list above only stops the email being sent. Without this
-  # trigger a new account stays UNCONFIRMED and can never sign in.
-  lambda_config {
-    pre_sign_up = aws_lambda_function.pre_signup.arn
-  }
+  # Password accounts become usable only after the person proves control of
+  # the address. Federated providers establish the claim through Cognito.
+  auto_verified_attributes = ["email"]
 
   account_recovery_setting {
     recovery_mechanism {
@@ -176,6 +165,7 @@ data "aws_iam_policy_document" "api_lambda" {
       "dynamodb:GetItem",
       "dynamodb:PutItem",
       "dynamodb:Query",
+      "dynamodb:TransactWriteItems",
       "dynamodb:UpdateItem",
     ]
     resources = [aws_dynamodb_table.user_data.arn]
@@ -428,69 +418,3 @@ output "cognito_domain" {
 }
 output "user_data_table_name" { value = aws_dynamodb_table.user_data.name }
 output "api_base_url" { value = aws_apigatewayv2_api.api.api_endpoint }
-
-# ── Sign-up confirmation trigger ─────────────────────────────────────────────
-data "archive_file" "pre_signup" {
-  type        = "zip"
-  source_file = "${path.module}/lambda/pre_signup.py"
-  output_path = "${path.module}/.build/pre_signup.zip"
-}
-
-data "aws_iam_policy_document" "pre_signup_assume_role" {
-  statement {
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-  }
-}
-
-resource "aws_iam_role" "pre_signup" {
-  name               = "${var.project_name}-pre-signup"
-  assume_role_policy = data.aws_iam_policy_document.pre_signup_assume_role.json
-}
-
-resource "aws_cloudwatch_log_group" "pre_signup" {
-  name              = "/aws/lambda/${var.project_name}-pre-signup"
-  retention_in_days = 30
-}
-
-data "aws_iam_policy_document" "pre_signup" {
-  statement {
-    sid       = "WriteTriggerLogs"
-    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-    resources = ["${aws_cloudwatch_log_group.pre_signup.arn}:*"]
-  }
-}
-
-resource "aws_iam_role_policy" "pre_signup" {
-  name   = "${var.project_name}-pre-signup"
-  role   = aws_iam_role.pre_signup.id
-  policy = data.aws_iam_policy_document.pre_signup.json
-}
-
-resource "aws_lambda_function" "pre_signup" {
-  function_name    = "${var.project_name}-pre-signup"
-  role             = aws_iam_role.pre_signup.arn
-  runtime          = "python3.12"
-  handler          = "pre_signup.handler"
-  filename         = data.archive_file.pre_signup.output_path
-  source_code_hash = data.archive_file.pre_signup.output_base64sha256
-  architectures    = ["x86_64"]
-  memory_size      = 128
-  timeout          = 5
-
-  depends_on = [
-    aws_cloudwatch_log_group.pre_signup,
-    aws_iam_role_policy.pre_signup,
-  ]
-}
-
-resource "aws_lambda_permission" "pre_signup" {
-  statement_id  = "AllowCognitoInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.pre_signup.function_name
-  principal     = "cognito-idp.amazonaws.com"
-  source_arn    = aws_cognito_user_pool.main.arn
-}

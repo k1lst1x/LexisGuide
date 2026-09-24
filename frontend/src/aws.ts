@@ -6,6 +6,8 @@ import { defaultStorage, sessionStorage } from 'aws-amplify/utils'
 import { 
   signIn, 
   signUp, 
+  confirmSignUp,
+  resendSignUpCode,
   confirmSignIn,
   signInWithRedirect, 
   signOut, 
@@ -68,6 +70,14 @@ export async function cognitoSignUp(email: string, password: string, name?: stri
       },
     },
   })
+}
+
+export async function cognitoConfirmSignUp(email: string, confirmationCode: string) {
+  return await confirmSignUp({ username: email, confirmationCode })
+}
+
+export async function cognitoResendSignUpCode(email: string) {
+  return await resendSignUpCode({ username: email })
 }
 
 /** Finish a sign-in that Cognito paused, e.g. to replace an admin-issued temporary password. */
