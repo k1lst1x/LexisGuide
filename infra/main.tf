@@ -247,6 +247,15 @@ data "aws_iam_policy_document" "api_lambda" {
   }
 
   dynamic "statement" {
+    for_each = var.ledger_private_key_secret_arn == "" ? [] : [var.ledger_private_key_secret_arn]
+    content {
+      sid       = "ReadLedgerRecorderKey"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value]
+    }
+  }
+
+  dynamic "statement" {
     for_each = var.lawfirm_api_key_secret_arn == "" ? [] : [var.lawfirm_api_key_secret_arn]
     content {
       sid       = "ReadLawFirmApiKey"
@@ -291,6 +300,10 @@ resource "aws_lambda_function" "api" {
       REVIEW_RATE_LIMIT_PER_WINDOW          = var.review_rate_limit_per_window
       REVIEW_RATE_LIMIT_WINDOW_SECONDS      = var.review_rate_limit_window_seconds
       LAWFIRM_API_KEY_SECRET_ARN            = var.lawfirm_api_key_secret_arn
+      LEDGER_CONTRACT_ADDRESS               = var.ledger_contract_address
+      LEDGER_CHAIN_ID                       = var.ledger_chain_id
+      LEDGER_RPC_URL                        = var.ledger_rpc_url
+      LEDGER_PRIVATE_KEY_SECRET_ARN         = var.ledger_private_key_secret_arn
     }
   }
 

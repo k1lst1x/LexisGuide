@@ -21,6 +21,7 @@ backend/           FastAPI API and tests, packaged as an AWS Lambda
 agentcore/runtime/ AgentCore service that performs the model invocation
 infra/             Terraform for Cognito, DynamoDB, Lambda, and API Gateway
 packages/review_contract/ Shared review request/result models and canonical prompt
+blockchain/        DocumentLedger contract: each document change recorded on Base
 ```
 
 ## Live landing page
