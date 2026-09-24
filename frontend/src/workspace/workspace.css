@@ -160,6 +160,7 @@
 .ws-btn-dark:hover:not(:disabled) { background: #2c2d23; border-color: transparent; }
 .ws-btn-dark.is-working { min-width: 176px; justify-content: center; background: #96968f; border-color: #96968f; color: #fff !important; box-shadow: 0 9px 21px -13px rgba(27,28,20,.45); cursor: wait; }
 .ws-ai-loading { width: 22px; height: 22px; flex: 0 0 22px; }
+.ws-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .lg-message-loading { display: inline-block; color: currentColor; }
 @media (prefers-reduced-motion: reduce) { .lg-message-loading animate { display: none; } }
 .ws-btn-green { border-color: transparent; background: var(--green); color: #fff !important; box-shadow: inset 0 1px 1px rgba(255,255,255,.18), 0 8px 18px -10px rgba(0,103,79,.7); }

@@ -171,7 +171,8 @@ export function ReviewView() {
           <div className="ws-menu-anchor" ref={actionsRef}>
             <button type="button" className={`ws-btn ws-btn-dark ${ws.busyAction ? 'is-working' : ''}`} aria-haspopup="menu" aria-expanded={actionsOpen} onClick={() => setActionsOpen((v) => !v)} disabled={!!ws.busyAction}>
               {ws.busyAction ? <MessageLoading className="ws-ai-loading" /> : <Wand2 size={15} />}
-              <span aria-live="polite">{ws.busyAction ? 'Working…' : 'AI actions'}</span>
+              {!ws.busyAction && <span>AI actions</span>}
+              {ws.busyAction && <span className="ws-sr-only" aria-live="polite">AI action in progress</span>}
               <ChevronDown size={14} aria-hidden="true" />
             </button>
             {actionsOpen && (
