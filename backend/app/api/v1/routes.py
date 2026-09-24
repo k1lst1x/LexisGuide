@@ -1,9 +1,10 @@
+import json
 from datetime import date
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from lexisguide_assistant import ChatReply, ChatRequest
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from review_contract import ReviewResult
 
 from app.auth import current_user
@@ -22,6 +23,7 @@ from app.storage import (
     consume_review_quota,
     consume_statute_quota,
     consume_workspace_invite,
+    create_record_with_limit,
     create_workspace,
     create_workspace_invite,
     get_conversation,
@@ -36,9 +38,8 @@ from app.storage import (
     release_lawyer_attempt,
     release_remote_operation,
     reserve_lawyer_attempt,
-    save_conversation,
+    save_conversation_with_limit,
     save_lawyer_verification,
-    save_record,
     set_workspace_linked_document,
 )
 
@@ -78,6 +79,14 @@ class UserRecordCreate(BaseModel):
     type: str = Field(pattern="^(document|review|workspace)$")
     title: str = Field(min_length=1, max_length=200)
     payload: dict = Field(default_factory=dict)
+
+    @field_validator("payload")
+    @classmethod
+    def bound_serialized_payload(cls, value: dict) -> dict:
+        # Count and per-item bounds together cap a user's persistent footprint.
+        if len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()) > 32_000:
+            raise ValueError("Record payload is too large.")
+        return value
 
 
 class UserRecord(BaseModel):
@@ -456,12 +465,19 @@ async def write_conversation(
     conversation_id: str = Path(pattern=CONVERSATION_ID),
     user: dict[str, str] = Depends(current_user),
 ) -> Conversation:
-    saved = save_conversation(
+    outcome, saved = save_conversation_with_limit(
         user["sub"],
         conversation_id,
         [turn.model_dump() for turn in payload.turns],
         payload.title.strip(),
     )
+    if outcome == "limit":
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Conversation storage limit reached. Update an existing conversation instead.",
+        )
+    if saved is None:  # Defensive guard for a future storage implementation.
+        raise RuntimeError("Conversation storage returned no saved conversation.")
     return Conversation(**saved)
 
 
@@ -510,7 +526,12 @@ async def create_record(
     user: dict[str, str] = Depends(current_user),
 ) -> UserRecord:
     record_id = str(uuid4())
-    record = save_record(user["sub"], record_id, payload.model_dump())
+    record = create_record_with_limit(user["sub"], record_id, payload.model_dump())
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Record storage limit reached.",
+        )
     return UserRecord(
         id=record_id,
         type=record["type"],

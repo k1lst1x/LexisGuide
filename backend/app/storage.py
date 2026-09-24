@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
+from boto3.dynamodb.types import TypeSerializer
 from botocore.exceptions import ClientError
 
 INVITE_TTL_SECONDS = 24 * 60 * 60
@@ -27,6 +28,11 @@ REMOTE_OPERATION_GLOBAL_CONCURRENCY = 8
 # The API Lambda times out after 29 seconds. A one-minute lease releases a
 # crashed invocation without allowing a live request to lose its slot early.
 REMOTE_OPERATION_LEASE_SECONDS = 60
+# A bounded item size plus a bounded item count puts a hard ceiling on durable
+# user-controlled data, even when an authenticated client writes continuously.
+MAX_RECORDS_PER_USER = 500
+MAX_CONVERSATIONS_PER_USER = 100
+RESOURCE_WRITE_RETRIES = 5
 
 
 @dataclass(frozen=True)
@@ -61,9 +67,143 @@ def put_profile(user_id: str, profile: dict[str, Any]) -> dict[str, Any]:
     return item
 
 
+def invalidate_user_sessions(username: str) -> int:
+    """Reject all ID tokens issued at or before this administrator action."""
+    valid_after = int(time.time())
+    _table().put_item(
+        Item={
+            "PK": f"AUTH#{username}",
+            "SK": "SESSION",
+            "valid_after": valid_after,
+        }
+    )
+    return valid_after
+
+
+def user_sessions_valid_after(username: str) -> int:
+    item = _table().get_item(Key={"PK": f"AUTH#{username}", "SK": "SESSION"}).get("Item", {})
+    valid_after = item.get("valid_after", 0)
+    return valid_after if isinstance(valid_after, int) and valid_after >= 0 else 0
+
+
 def save_record(user_id: str, record_id: str, record: dict[str, Any]) -> dict[str, Any]:
     item = {"PK": f"USER#{user_id}", "SK": f"RECORD#{record_id}", **record}
     _table().put_item(Item=item)
+    return item
+
+
+def _count_user_resources(user_id: str, prefix: str) -> int:
+    """Count all matching rows, including legacy rows created before quotas existed."""
+    query_args: dict[str, Any] = {
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}")
+        & Key("SK").begins_with(prefix),
+        "Select": "COUNT",
+    }
+    total = 0
+    while True:
+        response = _table().query(**query_args)
+        total += response.get("Count", len(response.get("Items", [])))
+        last_evaluated_key = response.get("LastEvaluatedKey")
+        if last_evaluated_key is None:
+            return total
+        query_args["ExclusiveStartKey"] = last_evaluated_key
+
+
+def _quota_count(user_id: str, kind: str) -> int:
+    item = _table().get_item(
+        Key={"PK": f"USER#{user_id}", "SK": f"QUOTA#{kind}"}
+    ).get("Item", {})
+    value = item.get("count", 0)
+    return value if isinstance(value, int) and value >= 0 else 0
+
+
+def _serialize(values: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    serializer = TypeSerializer()
+    return {key: serializer.serialize(value) for key, value in values.items()}
+
+
+def _cancellation_reason(error: ClientError, index: int) -> str | None:
+    reasons = error.response.get("CancellationReasons", [])
+    if index >= len(reasons):
+        return None
+    return reasons[index].get("Code")
+
+
+def _create_resource_with_limit(
+    user_id: str,
+    *,
+    kind: str,
+    prefix: str,
+    limit: int,
+    item: dict[str, Any],
+) -> str:
+    """Atomically write one new row and its exact user quota.
+
+    The initial count is reconciled from existing rows, so accounts created
+    before this guardrail cannot receive a second allocation. A conditional
+    transaction keeps the item and quota inseparable under concurrent writes.
+    """
+    for _ in range(RESOURCE_WRITE_RETRIES):
+        stored_count = _count_user_resources(user_id, prefix)
+        observed_quota = _quota_count(user_id, kind)
+        count = max(stored_count, observed_quota)
+        if count >= limit:
+            return "limit"
+
+        table = _table()
+        try:
+            table.meta.client.transact_write_items(
+                TransactItems=[
+                    {
+                        "Put": {
+                            "TableName": table.name,
+                            "Item": _serialize(item),
+                            "ConditionExpression": "attribute_not_exists(PK)",
+                        }
+                    },
+                    {
+                        "Update": {
+                            "TableName": table.name,
+                            "Key": _serialize(
+                                {"PK": f"USER#{user_id}", "SK": f"QUOTA#{kind}"}
+                            ),
+                            "UpdateExpression": "SET #count = :new_count",
+                            "ConditionExpression": (
+                                "attribute_not_exists(#count) OR #count = :observed_count"
+                            ),
+                            "ExpressionAttributeNames": {"#count": "count"},
+                            "ExpressionAttributeValues": _serialize(
+                                {":new_count": count + 1, ":observed_count": observed_quota}
+                            ),
+                        }
+                    },
+                ]
+            )
+            return "created"
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") != "TransactionCanceledException":
+                raise
+            if _cancellation_reason(error, 0) == "ConditionalCheckFailed":
+                return "exists"
+            # Another request updated the quota after our read. Reconcile and retry.
+    raise RuntimeError("Could not reserve persistent storage after concurrent writes.")
+
+
+def create_record_with_limit(
+    user_id: str, record_id: str, record: dict[str, Any]
+) -> dict[str, Any] | None:
+    item = {"PK": f"USER#{user_id}", "SK": f"RECORD#{record_id}", **record}
+    result = _create_resource_with_limit(
+        user_id,
+        kind="RECORDS",
+        prefix="RECORD#",
+        limit=MAX_RECORDS_PER_USER,
+        item=item,
+    )
+    if result == "limit":
+        return None
+    if result != "created":
+        raise RuntimeError("A generated record id unexpectedly already exists.")
     return item
 
 
@@ -103,6 +243,44 @@ def save_conversation(
         }
     )
     return {"conversation_id": conversation_id, "turns": turns, "updated_at": now, "title": title}
+
+
+def save_conversation_with_limit(
+    user_id: str, conversation_id: str, turns: list[dict[str, Any]], title: str = ""
+) -> tuple[str, dict[str, Any] | None]:
+    """Create a conversation under its cap, or safely update an existing one.
+
+    A concurrent first write with the same id sees the conditional item write
+    fail and becomes an update; it never consumes another capacity slot.
+    """
+    if get_conversation(user_id, conversation_id) is not None:
+        return "updated", save_conversation(user_id, conversation_id, turns, title)
+
+    now = datetime.now(UTC).isoformat()
+    item = {
+        "PK": f"USER#{user_id}",
+        "SK": f"CHAT#{conversation_id}",
+        "turns": turns,
+        "title": title,
+        "updated_at": now,
+    }
+    result = _create_resource_with_limit(
+        user_id,
+        kind="CONVERSATIONS",
+        prefix="CHAT#",
+        limit=MAX_CONVERSATIONS_PER_USER,
+        item=item,
+    )
+    if result == "created":
+        return "created", {
+            "conversation_id": conversation_id,
+            "turns": turns,
+            "updated_at": now,
+            "title": title,
+        }
+    if result == "exists":
+        return "updated", save_conversation(user_id, conversation_id, turns, title)
+    return "limit", None
 
 
 def list_conversations(user_id: str, limit: int = 30) -> list[dict[str, Any]]:

@@ -22,7 +22,7 @@ class FakeStore:
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> "FakeStore":
         monkeypatch.setattr(routes, "get_conversation", self.get)
-        monkeypatch.setattr(routes, "save_conversation", self.save)
+        monkeypatch.setattr(routes, "save_conversation_with_limit", self.save_with_limit)
         monkeypatch.setattr(routes, "list_conversations", self.list)
         return self
 
@@ -40,6 +40,12 @@ class FakeStore:
         }
         self.rows[(user_id, conversation_id)] = row
         return row
+
+    def save_with_limit(
+        self, user_id: str, conversation_id: str, turns: list[dict[str, Any]], title: str = ""
+    ) -> tuple[str, dict[str, Any]]:
+        outcome = "updated" if (user_id, conversation_id) in self.rows else "created"
+        return outcome, self.save(user_id, conversation_id, turns, title)
 
     def list(self, user_id: str, limit: int = 30) -> list[dict[str, Any]]:
         return [
@@ -145,3 +151,30 @@ def test_an_over_long_conversation_is_refused(
     )
 
     assert response.status_code == 422
+
+
+def test_a_new_conversation_is_refused_at_the_storage_limit(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = FakeStore().install(monkeypatch)
+    monkeypatch.setattr(routes, "save_conversation_with_limit", lambda *_: ("limit", None))
+
+    response = authenticated_client.put(
+        f"/api/v1/me/conversations/{CONVERSATION}", json={"turns": TURNS}
+    )
+
+    assert response.status_code == 429
+    assert store.rows == {}
+
+
+def test_updating_an_existing_conversation_does_not_consume_another_slot(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = FakeStore().install(monkeypatch)
+    store.save("user-123", CONVERSATION, TURNS)
+    response = authenticated_client.put(
+        f"/api/v1/me/conversations/{CONVERSATION}", json={"turns": TURNS, "title": "Updated"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Updated"

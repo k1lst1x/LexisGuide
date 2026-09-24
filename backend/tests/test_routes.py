@@ -218,11 +218,13 @@ def test_create_record_generates_id_and_validates_type(
 ) -> None:
     captured: dict[str, Any] = {}
 
-    def fake_save_record(user_id: str, record_id: str, record: dict[str, Any]) -> dict[str, Any]:
+    def fake_create_record(
+        user_id: str, record_id: str, record: dict[str, Any]
+    ) -> dict[str, Any]:
         captured.update(user_id=user_id, record_id=record_id, record=record)
         return record
 
-    monkeypatch.setattr(routes, "save_record", fake_save_record)
+    monkeypatch.setattr(routes, "create_record_with_limit", fake_create_record)
 
     response = authenticated_client.post(
         "/api/v1/me/records",
@@ -248,6 +250,28 @@ def test_create_record_generates_id_and_validates_type(
 def test_create_record_validates_title_length(authenticated_client: TestClient, title: str) -> None:
     response = authenticated_client.post(
         "/api/v1/me/records", json={"type": "document", "title": title}
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_record_rejects_storage_overflow(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(routes, "create_record_with_limit", lambda *_: None)
+
+    response = authenticated_client.post(
+        "/api/v1/me/records", json={"type": "document", "title": "Notice", "payload": {}}
+    )
+
+    assert response.status_code == 429
+    assert "storage limit" in response.json()["detail"]
+
+
+def test_create_record_rejects_an_oversized_payload(authenticated_client: TestClient) -> None:
+    response = authenticated_client.post(
+        "/api/v1/me/records",
+        json={"type": "document", "title": "Notice", "payload": {"text": "x" * 32_001}},
     )
 
     assert response.status_code == 422
