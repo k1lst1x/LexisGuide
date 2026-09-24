@@ -7,6 +7,7 @@ import {
   type Finding, type NavItem, type SampleDoc, type WorkspaceMember, type WorkspaceMessage, type WorkspaceSummary, type WorkspaceTask,
 } from './data'
 import { reviewNewDocument, runDocumentAction, workspaceRequest } from './api'
+import { recordChange, recordEdit, sha256Hex } from './ledger'
 
 const RESOLVED_KEY = 'lexisguide:resolved-findings'
 const LOCAL_WORKSPACES_KEY = 'lexisguide:local-workspaces'
@@ -235,14 +236,14 @@ function useWorkspaceState(userEmail?: string) {
         type = extracted.type
         text = extracted.text
         id = `upload-${input.file.name}-${input.file.lastModified}-${input.file.size}`
-        hash = `local-${input.file.size}-${input.file.lastModified}`
+        hash = await sha256Hex(text)
       } else {
         text = cleanExtractedText(input.text)
         if (!text) throw new Error('Paste the document text to review it.')
         title = input.title.trim() || 'Pasted document'
         type = 'Pasted document'
         id = `upload-pasted-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}-${text.length}`
-        hash = `local-pasted-${text.length}`
+        hash = await sha256Hex(text)
       }
       setAddStage('checking')
       setAddMessage(`Checking ${title} for unclear or risky terms…`)
@@ -251,6 +252,7 @@ function useWorkspaceState(userEmail?: string) {
       setDocuments((current) => [reviewed, ...current.filter((doc) => doc.id !== reviewed.id)])
       setSelectedId(reviewed.id)
       setActiveFindingId(openFindings(reviewed)[0]?.id ?? reviewed.findings[0]?.id ?? null)
+      void recordChange({ documentId: reviewed.id, kind: 'created', text: reviewed.text, title })
       setAddStage('done')
       setAddMessage(`${title} review is ready.`)
       setNotice(`${title} review is ready. Select a highlighted passage to see why it needs attention.`)
@@ -269,6 +271,7 @@ function useWorkspaceState(userEmail?: string) {
     try {
       const updated = await runDocumentAction(selected, action, jurisdiction)
       updateDocument(updated)
+      void recordChange({ documentId: updated.id, kind: 'reviewed', text: updated.text, title: updated.title })
       setActiveFindingId(updated.findings[0]?.id ?? null)
       setNotice(`${action === 'rewrite' ? 'Proposed rewrites' : action === 'negotiate' ? 'Negotiation points' : 'Updated review'} ready. Nothing was applied automatically.`)
     } catch (error) {
@@ -283,13 +286,16 @@ function useWorkspaceState(userEmail?: string) {
       setNotice('This suggestion could not be matched to the exact text, so nothing was changed.')
       return
     }
-    updateDocument({ ...selected, text: selected.text.replace(finding.evidence, finding.suggestedRewrite), version: 'Working copy · edit applied' })
+    const text = selected.text.replace(finding.evidence, finding.suggestedRewrite)
+    updateDocument({ ...selected, text, version: 'Working copy · edit applied' })
+    void recordChange({ documentId: selected.id, kind: 'rewrite_applied', text, title: selected.title })
     setResolved((current) => ({ ...current, [selected.id]: [...new Set([...(current[selected.id] ?? []), finding.id])] }))
     setNotice('The suggested wording was applied to a working copy. Review it before sharing.')
   }, [selected, updateDocument])
 
   const editText = useCallback((text: string) => {
     updateDocument({ ...selected, text, version: 'Working copy · edited' })
+    recordEdit({ documentId: selected.id, text, title: selected.title })
   }, [selected, updateDocument])
 
   const renameDocument = useCallback((title: string) => {
@@ -300,6 +306,7 @@ function useWorkspaceState(userEmail?: string) {
     }
     if (nextTitle === selected.title) return true
     updateDocument({ ...selected, title: nextTitle, version: 'Working copy · renamed' })
+    void recordChange({ documentId: selected.id, kind: 'renamed', text: selected.text, title: nextTitle })
     setNotice(`Document renamed to “${nextTitle}”.`)
     return true
   }, [selected, updateDocument])

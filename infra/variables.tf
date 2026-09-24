@@ -208,3 +208,32 @@ variable "google_client_secret" {
   default   = ""
   sensitive = true
 }
+
+variable "ledger_contract_address" {
+  description = "DocumentLedger contract address. Empty turns the document ledger off."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.ledger_contract_address == "" || can(regex("^0x[0-9a-fA-F]{40}$", var.ledger_contract_address))
+    error_message = "ledger_contract_address must be empty or a 0x-prefixed 20-byte address."
+  }
+}
+
+variable "ledger_chain_id" {
+  description = "Chain the ledger contract lives on: 84532 for Base Sepolia, 8453 for Base."
+  type        = number
+  default     = 84532
+}
+
+variable "ledger_rpc_url" {
+  description = "JSON-RPC endpoint for the ledger chain. The public Base Sepolia endpoint is rate limited; use a provider URL for real traffic."
+  type        = string
+  default     = "https://sepolia.base.org"
+}
+
+variable "ledger_private_key_secret_arn" {
+  description = "Secrets Manager ARN holding the recorder wallet key (raw string or JSON private_key field)."
+  type        = string
+  default     = ""
+}

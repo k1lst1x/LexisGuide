@@ -909,3 +909,51 @@
 /* A provider outage is not the person's fault, so it reads as a caution. */
 .ws-alert.is-warning { border-left-color: var(--amber); background: #fdf8ec; }
 .ws-alert.is-warning strong { color: var(--amber); }
+
+/* ───── On-chain history ───── */
+.ws-chain-card { margin-bottom: 16px; }
+.ws-spin { animation: ws-spin 1s linear infinite; }
+@keyframes ws-spin { to { transform: rotate(360deg); } }
+.ws-chain-note { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; color: var(--ink-60); }
+.ws-chain-network { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; padding: 9px 12px; border-radius: 12px; background: var(--sand); box-shadow: inset 0 0 0 1px var(--line); font-size: 13px; color: var(--ink-80); }
+.ws-chain-network .ws-link { margin-left: auto; }
+.ws-chain-live { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.ws-chain-live::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--green); opacity: 0; animation: ws-chain-pulse 2s var(--ease) infinite; }
+.ws-chain-live.is-waiting { background: var(--amber); }
+.ws-chain-live.is-waiting::after { border-color: var(--amber); animation-duration: 1s; }
+@keyframes ws-chain-pulse { 0% { opacity: .7; transform: scale(.6); } 100% { opacity: 0; transform: scale(1.6); } }
+.ws-chain-integrity { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; padding: 9px 12px; border-radius: 12px; font-size: 13px; }
+.ws-chain-integrity svg { flex: none; margin-top: 2px; }
+.ws-chain-integrity.is-match { background: var(--green-soft); color: var(--green); }
+.ws-chain-integrity.is-changed { background: #fdf0c7; color: #7d560c; }
+.ws-chain { display: flex; flex-direction: column; }
+.ws-chain li { position: relative; display: grid; grid-template-columns: 104px 1fr; gap: 14px; padding: 12px 0; animation: ws-chain-in .4s var(--ease) both; }
+.ws-chain li:not(:last-child)::before { content: ''; position: absolute; left: 51px; top: 64px; bottom: -12px; width: 2px; background: repeating-linear-gradient(var(--line-2) 0 4px, transparent 4px 8px); }
+@keyframes ws-chain-in { from { opacity: 0; transform: translateY(-6px); } }
+.ws-chain-block { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 52px; padding: 0 6px; border-radius: 12px; background: var(--ink); color: #fffaeb; text-align: center; }
+.ws-chain-block span { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; opacity: .7; }
+.ws-chain-block strong, .ws-chain-block a { font: 600 13px 'JetBrains Mono', ui-monospace, monospace; color: inherit; text-decoration: none; font-variant-numeric: tabular-nums; }
+.ws-chain-block a:hover { text-decoration: underline; }
+.ws-chain li.is-pending .ws-chain-block { background: #fdf0c7; color: #7d560c; }
+.ws-chain li.is-pending .ws-chain-block span { opacity: 1; text-transform: none; letter-spacing: 0; font-size: 12px; }
+.ws-chain li.is-failed .ws-chain-block { background: #fbe3dc; color: #9c3726; }
+.ws-chain li.is-failed .ws-chain-block span { opacity: 1; text-transform: none; letter-spacing: 0; font-size: 12px; }
+.ws-chain-body { min-width: 0; }
+.ws-chain-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.ws-chain-title strong { font-size: 14.5px; font-weight: 500; }
+.ws-chain-title .ws-pill { gap: 4px; padding: 1px 8px; font-size: 11.5px; }
+.ws-chain-body small { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-45); overflow-wrap: anywhere; }
+.ws-chain-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 6px; }
+.ws-chain-meta code, .ws-chain-link { display: inline-flex; align-items: center; gap: 4px; font: 11.5px 'JetBrains Mono', ui-monospace, monospace; color: var(--ink-60); }
+.ws-chain-meta code { padding: 3px 8px; border-radius: 6px; background: var(--sand); }
+.ws-chain-link { margin-top: 5px; color: var(--ink-45); overflow-wrap: anywhere; }
+.ws-chain-error { margin-top: 5px; font-size: 12.5px; color: #9c3726; }
+.ws-chain-foot { display: flex; align-items: center; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-45); }
+@media (max-width: 640px) {
+  .ws-chain li { grid-template-columns: 76px 1fr; gap: 10px; }
+  .ws-chain li:not(:last-child)::before { left: 37px; }
+  .ws-chain-network .ws-link { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-chain li, .ws-chain-live::after, .ws-spin { animation: none; }
+}

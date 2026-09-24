@@ -23,6 +23,8 @@ CHAT_RATE_LIMIT_WINDOW_SECONDS = 60
 CHAT_RATE_LIMIT_PER_WINDOW = 20
 STATUTE_RATE_LIMIT_WINDOW_SECONDS = 60
 STATUTE_RATE_LIMIT_PER_WINDOW = 20
+# Every ledger change is a transaction the recorder wallet pays for.
+LEDGER_RATE_LIMIT_PER_WINDOW = 30
 REMOTE_OPERATION_PER_USER_CONCURRENCY = 2
 REMOTE_OPERATION_GLOBAL_CONCURRENCY = 8
 # The API Lambda times out after 29 seconds. A one-minute lease releases a
@@ -896,3 +898,102 @@ def list_admin_actions(limit: int = 100) -> list[dict[str, Any]]:
         }
         for item in response.get("Items", [])
     ]
+
+
+# ── Document ledger ──────────────────────────────────────────────────────────
+# One row per document change, in the owner's partition. A row is written as
+# pending before anything is broadcast, and every transaction hash tried for it
+# is kept, so a send whose outcome was lost can always be found again.
+
+LEDGER_WRITER_PARTITION = "LEDGER#WRITER"
+
+
+def consume_ledger_quota(user_id: str) -> bool:
+    return _consume_quota(
+        "LEDGER",
+        user_id,
+        60,
+        _bounded_positive_int("LEDGER_RATE_LIMIT_PER_WINDOW", LEDGER_RATE_LIMIT_PER_WINDOW, 1_000),
+    )
+
+
+def acquire_ledger_writer() -> RemoteOperationLease | None:
+    """Claim the single right to sign with the recorder wallet.
+
+    One writer at a time keeps the wallet's nonces in order. The lease expires
+    by itself, so a Lambda that dies mid-send cannot hold it forever.
+    """
+    slot = _acquire_remote_slot(LEDGER_WRITER_PARTITION, 1)
+    return RemoteOperationLease((slot,)) if slot else None
+
+
+def _ledger_prefix(document_key: str) -> str:
+    return f"LEDGER#{document_key}#"
+
+
+def _ledger_view(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: (
+            int(value) if key in {"block_number", "block_time", "sequence", "attempts"} else value
+        )
+        for key, value in item.items()
+        if key not in {"PK", "SK"}
+    } | {"sort_key": item["SK"]}
+
+
+def create_ledger_change(user_id: str, document_key: str, change: dict[str, Any]) -> dict[str, Any]:
+    """Store a new pending change. Resubmitting the same change id is a no-op."""
+    now = datetime.now(UTC).isoformat()
+    item = {
+        "PK": f"USER#{user_id}",
+        "SK": f"{_ledger_prefix(document_key)}{now}#{change['change_id']}",
+        **change,
+        "document_key": document_key,
+        "status": "pending",
+        "created_at": now,
+        "attempts": 0,
+        "tx_hashes": [],
+    }
+    existing = find_ledger_change(user_id, document_key, change["change_id"])
+    if existing:
+        return existing
+    _table().put_item(Item=item)
+    return _ledger_view(item)
+
+
+def find_ledger_change(user_id: str, document_key: str, change_id: str) -> dict[str, Any] | None:
+    return next(
+        (
+            row
+            for row in list_ledger_changes(user_id, document_key)
+            if row["change_id"] == change_id
+        ),
+        None,
+    )
+
+
+def list_ledger_changes(user_id: str, document_key: str) -> list[dict[str, Any]]:
+    """One document's changes, oldest first."""
+    items: list[dict[str, Any]] = []
+    query_args: dict[str, Any] = {
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}")
+        & Key("SK").begins_with(_ledger_prefix(document_key))
+    }
+    while True:
+        response = _table().query(**query_args)
+        items.extend(response.get("Items", []))
+        last_evaluated_key = response.get("LastEvaluatedKey")
+        if last_evaluated_key is None:
+            return [_ledger_view(item) for item in items]
+        query_args["ExclusiveStartKey"] = last_evaluated_key
+
+
+def update_ledger_change(user_id: str, sort_key: str, fields: dict[str, Any]) -> None:
+    names = {f"#f{index}": name for index, name in enumerate(fields)}
+    values = {f":v{index}": value for index, value in enumerate(fields.values())}
+    _table().update_item(
+        Key={"PK": f"USER#{user_id}", "SK": sort_key},
+        UpdateExpression="SET " + ", ".join(f"#f{i} = :v{i}" for i in range(len(fields))),
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=values,
+    )

@@ -37,6 +37,10 @@ jobs:
       # The ARN only names the secret; the key stays in Secrets Manager and is
       # read by the Lambda at runtime. Unset here, the statute route is disabled.
       TF_VAR_lawfirm_api_key_secret_arn: ${{ vars.LAWFIRM_API_KEY_SECRET_ARN }}
+      TF_VAR_ledger_contract_address: ${{ vars.LEDGER_CONTRACT_ADDRESS }}
+      TF_VAR_ledger_chain_id: ${{ vars.LEDGER_CHAIN_ID || '84532' }}
+      TF_VAR_ledger_rpc_url: ${{ vars.LEDGER_RPC_URL || 'https://sepolia.base.org' }}
+      TF_VAR_ledger_private_key_secret_arn: ${{ vars.LEDGER_PRIVATE_KEY_SECRET_ARN }}
       TF_VAR_bedrock_model_id: ${{ vars.BEDROCK_MODEL_ID || 'us.amazon.nova-2-lite-v1:0' }}
       TF_VAR_agentcore_runtime_arn: ${{ vars.AGENTCORE_RUNTIME_ARN }}
       TF_VAR_agentcore_assistant_runtime_arn: ${{ vars.AGENTCORE_ASSISTANT_RUNTIME_ARN }}
