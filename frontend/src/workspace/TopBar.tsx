@@ -120,10 +120,55 @@ export function Notifications() {
   const close = useCallback(() => setOpen(false), [])
   useOutside(ref, close)
   const open_ = openFindings(ws.selected, ws.resolved[ws.selected.id]).length
+  const latestDocument = ws.documents.find((document) => document.id.startsWith('upload-')) ?? ws.selected
+  const teammateMessage = ws.activeWorkspace
+    ? [...ws.comments].reverse().find((message) => message.authorEmail?.toLowerCase() !== ws.userEmail?.toLowerCase())
+    : undefined
+  const dismissAnd = (action: () => void) => {
+    action()
+    setOpen(false)
+  }
   const items = [
-    { title: 'Review ready', detail: `${documentDisplayName(ws.selected)} has ${open_} item${open_ === 1 ? '' : 's'} to review.`, time: 'Just now' },
-    { title: 'AI scan updated', detail: `${ws.selected.findings.length} checks were evaluated on the current document.`, time: 'Today' },
-    { title: 'Tip', detail: 'Mark findings resolved as you go to track progress on Home.', time: 'Today' },
+    {
+      id: 'review-ready',
+      category: 'Review',
+      title: 'Review ready',
+      detail: `${documentDisplayName(ws.selected)} has ${open_} item${open_ === 1 ? '' : 's'} to review.`,
+      time: 'Just now',
+      onClick: () => dismissAnd(() => ws.openInReview(ws.selected)),
+    },
+    {
+      id: 'scan-updated',
+      category: 'Document',
+      title: 'AI scan updated',
+      detail: `${ws.selected.findings.length} checks were evaluated on the current document.`,
+      time: 'Today',
+      onClick: () => dismissAnd(() => ws.openInReview(ws.selected)),
+    },
+    ...(latestDocument.id !== ws.selected.id ? [{
+      id: `document-${latestDocument.id}`,
+      category: 'Document',
+      title: 'Recent document activity',
+      detail: `${documentDisplayName(latestDocument)} is ready to review.`,
+      time: 'Recently added',
+      onClick: () => dismissAnd(() => ws.openInReview(latestDocument)),
+    }] : []),
+    ...(teammateMessage ? [{
+      id: `message-${teammateMessage.id}`,
+      category: 'Workspace',
+      title: `${teammateMessage.user} posted in ${ws.activeWorkspace?.name ?? 'your workspace'}`,
+      detail: teammateMessage.text.length > 120 ? `${teammateMessage.text.slice(0, 117)}…` : teammateMessage.text,
+      time: teammateMessage.time,
+      onClick: () => dismissAnd(() => ws.go('team')),
+    }] : []),
+    {
+      id: 'product-update',
+      category: 'Product update',
+      title: 'What’s new in LexisGuide',
+      detail: 'Use AI to re-check a document, draft revisions, apply approved wording, and create follow-up tasks.',
+      time: 'Latest product update',
+      onClick: () => dismissAnd(() => ws.go('assistant')),
+    },
   ]
   return (
     <div className="ws-menu-anchor" ref={ref}>
@@ -132,8 +177,14 @@ export function Notifications() {
       </button>
       {open && (
         <section className="ws-popover ws-notify" role="dialog" aria-label="Latest announcements">
-          <h3>Notifications</h3>
-          {items.map((item) => <div key={item.title} className="ws-notify-item"><strong>{item.title}</strong><p>{item.detail}</p><small>{item.time}</small></div>)}
+          <header className="ws-notify-head"><div><h3>Notifications</h3><p>Latest activity in your workspace</p></div><button type="button" onClick={() => dismissAnd(() => ws.go('chain'))}>View activity</button></header>
+          {items.map((item) => (
+            <button key={item.id} type="button" className="ws-notify-item" onClick={item.onClick}>
+              <span className="ws-notify-meta">{item.category}<small>{item.time}</small></span>
+              <strong>{item.title}</strong>
+              <p>{item.detail}</p>
+            </button>
+          ))}
         </section>
       )}
     </div>
