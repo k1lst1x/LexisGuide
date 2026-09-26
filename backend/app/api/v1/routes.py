@@ -670,8 +670,7 @@ async def read_workspace_messages(
     if not get_workspace_channel(workspace_id, channel_id):
         raise HTTPException(status_code=404, detail="Channel not found.")
     return [
-        WorkspaceMessage(**message)
-        for message in list_workspace_messages(workspace_id, channel_id)
+        WorkspaceMessage(**message) for message in list_workspace_messages(workspace_id, channel_id)
     ]
 
 
