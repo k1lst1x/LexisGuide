@@ -334,27 +334,37 @@ function useWorkspaceState(userEmail?: string) {
     }
   }, [jurisdiction])
 
-  const runAction = useCallback(async (action: ReviewAction) => {
+  const runAction = useCallback(async (action: ReviewAction, applyApprovedRewrite = false) => {
     const targetFinding = action === 'rewrite' ? activeFinding : null
     if (action === 'rewrite' && !targetFinding?.evidence) {
       setNotice('Select a highlighted finding before drafting a targeted revision.')
       return
     }
     setBusyAction(action)
-    setNotice(action === 'rewrite' ? 'Preparing a proposed revision for this finding…' : action === 'negotiate' ? 'Preparing negotiation points…' : 'Re-checking the document…')
+    setNotice(action === 'rewrite'
+      ? applyApprovedRewrite ? 'Updating this finding in your working copy…' : 'Preparing a proposed revision for this finding…'
+      : action === 'negotiate' ? 'Preparing negotiation points…' : 'Re-checking the document…')
     try {
-      // A rewrite is intentionally sent as just the selected evidence, not the
-      // whole document. The returned draft is attached to that finding, then
-      // the person can apply it to their working copy after reviewing it.
+      // A rewrite is intentionally sent as just the selected evidence, never
+      // the whole document. Approval can then apply that exact draft directly
+      // to the matching passage in the working copy.
       const actionDocument = targetFinding ? { ...selected, text: targetFinding.evidence, findings: [targetFinding] } : selected
       const updated = await runDocumentAction(actionDocument, action, jurisdiction)
       if (targetFinding) {
         const draft = updated.findings.find((finding) => finding.suggestedRewrite)?.suggestedRewrite
         if (!draft) throw new Error('The AI did not return replacement wording for this finding. Your document is unchanged.')
-        updateDocument({
-          ...selected,
-          findings: selected.findings.map((finding) => finding.id === targetFinding.id ? { ...finding, suggestedRewrite: draft } : finding),
-        })
+        const findings = selected.findings.map((finding) => finding.id === targetFinding.id ? { ...finding, suggestedRewrite: draft } : finding)
+        if (applyApprovedRewrite) {
+          const range = findRewriteRange(selected.text, targetFinding.evidence)
+          if (!range) throw new Error('The approved change could not be matched to the document text, so nothing was changed.')
+          const text = `${selected.text.slice(0, range.start)}${draft}${selected.text.slice(range.end)}`
+          updateDocument({ ...selected, text, findings, version: 'Working copy · AI change applied' })
+          void recordChange({ documentId: selected.id, kind: 'rewrite_applied', text, title: selected.title })
+          setResolved((current) => ({ ...current, [selected.id]: [...new Set([...(current[selected.id] ?? []), targetFinding.id])] }))
+          setNotice('Updated the selected finding in your working copy.')
+          return
+        }
+        updateDocument({ ...selected, findings })
         setActiveFindingId(targetFinding.id)
         setNotice('A targeted draft is ready. Review it, then choose Apply to working copy when you are ready.')
       } else {

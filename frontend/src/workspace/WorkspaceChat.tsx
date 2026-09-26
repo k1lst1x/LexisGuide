@@ -53,8 +53,8 @@ export function WorkspaceChat({ userEmail }: { userEmail?: string }) {
       }}
       onWorkspaceAction={(action) => {
         if (action === 'apply_rewrite') {
-          if (current) ws.applyRewrite(current)
-          else ws.setNotice('Select a finding with suggested wording before applying a draft.')
+          if (current) void ws.runAction('rewrite', true)
+          else ws.setNotice('Select a finding before applying an approved change.')
         } else if (action === 'resolve') {
           if (current) ws.resolveAndNext(current.id)
           else ws.setNotice('Select a finding before marking it resolved.')
