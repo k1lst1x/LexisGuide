@@ -1,6 +1,7 @@
 /* Workspace data: document model, sample documents, and text extraction.
    Extracted from the original DashboardV2 so views can share it. */
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+import { loadModule } from '../staleBuild'
 
 export type SampleDoc = {
   id: string
@@ -319,7 +320,7 @@ export async function extractDocumentText(file: File): Promise<ExtractedDocument
   const extension = fileExtension(file)
 
   if (file.type === 'application/pdf' || extension === 'pdf') {
-    const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const { getDocument, GlobalWorkerOptions } = await loadModule(() => import('pdfjs-dist/legacy/build/pdf.mjs'))
     GlobalWorkerOptions.workerSrc = pdfWorkerUrl
     const pdf = await getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
     const pages: string[] = []
@@ -336,7 +337,7 @@ export async function extractDocumentText(file: File): Promise<ExtractedDocument
   }
 
   if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || extension === 'docx') {
-    const mammoth = await import('mammoth')
+    const mammoth = await loadModule(() => import('mammoth'))
     const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
     const text = cleanExtractedText(result.value)
     if (!text) throw new Error('No readable text was found in this Word document. Try pasting the document text instead.')
