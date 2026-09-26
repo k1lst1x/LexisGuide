@@ -99,6 +99,9 @@ export type AdminWorkspace = {
   linked_document_title: string | null
 }
 
+export type IntegrationStatus = { configured: boolean; ready: boolean; detail: string }
+export type Integrations = { bar_verification: IntegrationStatus; document_ledger: IntegrationStatus }
+
 export type AdminWorkspaceMember = { user_id: string; email: string; name: string; role: string; joined_at: string }
 
 const user = (username: string) => `/users/${encodeURIComponent(username)}`
@@ -123,6 +126,7 @@ export const adminApi = {
   deleteWorkspace: (id: string) => adminRequest(`/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   removeMember: (id: string, userId: string) =>
     adminRequest(`/workspaces/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+  integrations: () => adminRequest<Integrations>('/integrations'),
   audit: (limit = 200) => adminRequest<AuditEntry[]>(`/audit?limit=${limit}`),
 }
 

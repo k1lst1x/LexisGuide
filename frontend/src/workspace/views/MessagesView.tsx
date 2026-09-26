@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { AtSign, Bookmark, Check, ChevronDown, Copy, FileText, Hash, Info, KeyRound, LockKeyhole, Paperclip, Plus, Reply, Search, Send, Smile, Trash2, UsersRound, X } from 'lucide-react'
+import { AtSign, Bookmark, Check, ChevronDown, Copy, FileText, Hash, Info, KeyRound, LockKeyhole, Paperclip, Plus, Reply, Search, Send, Settings, Smile, Trash2, UsersRound, X } from 'lucide-react'
 import { BrowseChannelsDialog, ChannelDetailsDialog, ChannelList, CreateChannelDialog, JoinBar, type DetailsTab } from './Channels'
 import { useChannels } from '../channels'
+import { WorkspaceSettingsDialog } from './WorkspaceSettings'
 import { useWorkspace } from '../store'
 import { documentDisplayName, documentKind, openFindings, type SampleDoc } from '../data'
 import { Empty } from '../ui'
@@ -119,7 +120,7 @@ export function MessagesView() {
   const [railWidth, setRailWidth] = useState(240)
   const [detailsWidth, setDetailsWidth] = useState(300)
   const [newTask, setNewTask] = useState('')
-  const [dialog, setDialog] = useState<null | { kind: 'create' } | { kind: 'browse' } | { kind: 'details'; tab: DetailsTab }>(null)
+  const [dialog, setDialog] = useState<null | { kind: 'create' } | { kind: 'browse' } | { kind: 'details'; tab: DetailsTab } | { kind: 'workspace' }>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -210,7 +211,12 @@ export function MessagesView() {
         <aside className="ws-msg-rail" aria-label="Conversations">
           <div className="ws-msg-rail-head"><h1>Messages</h1><button type="button" className="ws-icon-btn" aria-label="Search this space" onClick={() => setSearchOpen(true)}><Search size={16} /></button></div>
           {ws.workspaces.length > 0 && <>
-            <span className="ws-rail-label">Workspaces</span>
+            <div className="ws-channel-label">
+              <span className="ws-rail-label">Workspaces</span>
+              {ws.activeWorkspace && !ws.activeWorkspace.id.startsWith('local-') && (
+                <button type="button" className="ws-icon-btn" aria-label={`Settings for ${ws.activeWorkspace.name}`} title="Workspace settings and members" onClick={() => setDialog({ kind: 'workspace' })}><Settings size={15} /></button>
+              )}
+            </div>
             <div className="ws-workspace-list" aria-label="Your workspaces">
               {ws.workspaces.map((workspace) => {
                 const active = workspace.id === ws.activeWorkspace?.id
@@ -412,8 +418,9 @@ export function MessagesView() {
         <BrowseChannelsDialog channels={channels} onClose={() => setDialog(null)} onOpen={(channel) => { setDialog(null); channels.select(channel.id) }} onCreate={() => setDialog({ kind: 'create' })} />
       )}
       {dialog?.kind === 'details' && (
-        <ChannelDetailsDialog key={`${activeChannel?.id}-${dialog.tab}`} channels={channels} tab={dialog.tab} canManage={canManageChannel} onClose={() => setDialog(null)} />
+        <ChannelDetailsDialog key={`${activeChannel?.id}-${dialog.tab}`} channels={channels} tab={dialog.tab} canManage={canManageChannel} canDelete={!channels.shared || Boolean(activeChannel?.can_delete)} onClose={() => setDialog(null)} />
       )}
+      {dialog?.kind === 'workspace' && <WorkspaceSettingsDialog onClose={() => setDialog(null)} />}
 
       {searchOpen && (
         <div className="ws-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) setSearchOpen(false) }}>

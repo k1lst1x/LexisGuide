@@ -1,6 +1,6 @@
-import { adminApi } from '../api'
+import { adminApi, type IntegrationStatus } from '../api'
 import { useAdminData } from '../hooks'
-import { ErrorNote, Spinner } from '../ui'
+import { Badge, ErrorNote, Spinner } from '../ui'
 import { AuditList } from './AuditView'
 
 type Props = { onOpen: (section: 'users' | 'workspaces' | 'audit') => void }
@@ -40,6 +40,8 @@ export function OverviewView({ onOpen }: Props) {
         })}
       </div>
 
+      <Integrations />
+
       <section className="adm-panel">
         <div className="adm-panel-head">
           <h2>Recent admin activity</h2>
@@ -48,5 +50,38 @@ export function OverviewView({ onOpen }: Props) {
         <AuditList entries={overview.recent_actions} />
       </section>
     </div>
+  )
+}
+
+function IntegrationRow({ name, status }: { name: string; status: IntegrationStatus }) {
+  return (
+    <li className="adm-integration">
+      <div>
+        <strong>{name}</strong>
+        <p className="adm-muted">{status.detail}</p>
+      </div>
+      {status.ready ? <Badge tone="green">Ready</Badge> : status.configured ? <Badge tone="red">Needs attention</Badge> : <Badge tone="amber">Not set up</Badge>}
+    </li>
+  )
+}
+
+/** Configuration health for outside services. Checking never uses their quotas. */
+function Integrations() {
+  const { data, error, reload } = useAdminData(adminApi.integrations)
+  return (
+    <section className="adm-panel">
+      <div className="adm-panel-head">
+        <div>
+          <h2>Integrations</h2>
+          <p className="adm-muted">Checked without calling the providers, so no bar-verification lookups are used.</p>
+        </div>
+      </div>
+      {error ? <ErrorNote message={error} onRetry={reload} /> : !data ? <Spinner /> : (
+        <ul className="adm-list">
+          <IntegrationRow name="Bar license verification (lawfirm.dev)" status={data.bar_verification} />
+          <IntegrationRow name="Document ledger (blockchain)" status={data.document_ledger} />
+        </ul>
+      )}
+    </section>
   )
 }

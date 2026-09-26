@@ -171,7 +171,7 @@ export function BrowseChannelsDialog({ channels, onClose, onOpen, onCreate }: { 
 
 export type DetailsTab = 'about' | 'members' | 'settings'
 
-export function ChannelDetailsDialog({ channels, tab: initialTab, canManage, onClose }: { channels: Channels; tab: DetailsTab; canManage: boolean; onClose: () => void }) {
+export function ChannelDetailsDialog({ channels, tab: initialTab, canManage, canDelete, onClose }: { channels: Channels; tab: DetailsTab; canManage: boolean; canDelete: boolean; onClose: () => void }) {
   const channel = channels.active
   const [tab, setTab] = useState<DetailsTab>(initialTab)
   const [editing, setEditing] = useState<'name' | 'description' | null>(null)
@@ -273,7 +273,7 @@ export function ChannelDetailsDialog({ channels, tab: initialTab, canManage, onC
                 <button type="button" className="ws-btn ws-btn-sm" disabled={busy} onClick={() => void run(async () => { await channels.leave(channel); onClose() })}><LogOut size={13} /> Leave #{channel.name}</button>
               </section>
             )}
-            {canManage && (
+            {canDelete && (
               <section className="ws-about-card ws-danger-card">
                 <header><strong>Delete channel</strong></header>
                 <p className="ws-muted">Removes the channel and every message in it for everyone. This can’t be undone.</p>
@@ -287,7 +287,7 @@ export function ChannelDetailsDialog({ channels, tab: initialTab, canManage, onC
                 )}
               </section>
             )}
-            {!canManage && !channel.is_member && <p className="ws-muted">Join this channel to take part. Only its creator or a workspace admin can change or delete it.</p>}
+            {!canDelete && <p className="ws-muted">Only workspace admins can delete channels.{!channel.is_member ? ' Join this channel to take part.' : ''}</p>}
           </>}
         </div>
       )}

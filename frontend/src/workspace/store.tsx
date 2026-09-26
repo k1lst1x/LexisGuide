@@ -472,14 +472,19 @@ function useWorkspaceState(userEmail?: string) {
       // A just-created DynamoDB membership can take a moment to appear in a
       // normal-consistency query. Retain client-created groups until the API
       // reports them, rather than making the sidebar briefly lose the group.
+      // Only on-device groups and ones created in the last two minutes are kept
+      // when missing; anything else was deleted or left and must disappear.
+      const recent = Date.now() - 2 * 60_000
+      const keep = (item: WorkspaceSummary) => item.id.startsWith('local-') || Date.parse(item.created_at) > recent
       setWorkspaces((current) => {
         const returned = new Set(next.map((item) => item.id))
-        const merged = [...next, ...current.filter((item) => !returned.has(item.id))]
+        const merged = [...next, ...current.filter((item) => !returned.has(item.id) && keep(item))]
         saveLocalWorkspaces(merged)
         return merged
       })
       const active = activeWorkspaceRef.current
-      const target = next.find((item) => item.id === active?.id) ?? active ?? next[0] ?? null
+      const target = next.find((item) => item.id === active?.id) ?? (active && keep(active) ? active : null) ?? next[0] ?? null
+      if (target?.id !== active?.id) setActiveChannelId('general')
       activeWorkspaceRef.current = target
       setActiveWorkspace(target)
       if (target) setMembers(await workspaceRequest<WorkspaceMember[]>(`/workspaces/${target.id}/members`))
@@ -565,6 +570,28 @@ function useWorkspaceState(userEmail?: string) {
     } catch (error) { setWorkspaceNotice(error instanceof Error ? error.message : 'Could not join workspace.') }
   }, [])
 
+  /** Re-read the active workspace's roster, e.g. after a role change. */
+  const refreshMembers = useCallback(async () => {
+    const workspace = activeWorkspaceRef.current
+    if (!workspace || workspace.id.startsWith('local-')) return
+    try { setMembers(await workspaceRequest<WorkspaceMember[]>(`/workspaces/${workspace.id}/members`)) } catch { /* keep the last roster */ }
+  }, [])
+
+  /** Drop a workspace the person deleted or left. */
+  const forgetWorkspace = useCallback((id: string) => {
+    setWorkspaces((current) => {
+      const next = current.filter((item) => item.id !== id)
+      saveLocalWorkspaces(next)
+      return next
+    })
+    if (activeWorkspaceRef.current?.id === id) {
+      activeWorkspaceRef.current = null
+      setActiveWorkspace(null)
+      setActiveChannelId('general')
+      setMembers([])
+    }
+  }, [])
+
   const selectWorkspace = useCallback(async (id: string) => {
     const workspace = workspaces.find((item) => item.id === id) ?? null
     activeWorkspaceRef.current = workspace
@@ -591,7 +618,7 @@ function useWorkspaceState(userEmail?: string) {
     notice, setNotice, addOpen, setAddOpen, addStage, setAddStage, addMessage, addDocument, isDemo, stats,
     comments, reactions, toggleReaction, toggleSaved, deleteMessage, sendMessage, draft, setDraft, composerFocus, focusComposer, tasks, addTask, toggleTask,
     messageTab, setMessageTab, discuss,
-    workspaces, activeWorkspace, activeChannelId, setActiveChannelId, members, workspaceNotice, refreshWorkspaces, createWorkspace, createInvite, joinWorkspace, selectWorkspace,
+    workspaces, activeWorkspace, activeChannelId, setActiveChannelId, members, refreshMembers, forgetWorkspace, workspaceNotice, refreshWorkspaces, createWorkspace, createInvite, joinWorkspace, selectWorkspace,
     assistantOpen, setAssistantOpen, assistantQuestion, askAssistant,
   }
 }

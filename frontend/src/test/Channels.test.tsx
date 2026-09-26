@@ -6,9 +6,10 @@ import { DashboardV2 } from '../DashboardV2'
 
 vi.mock('../aws', () => ({ cognitoGetIdToken: vi.fn().mockResolvedValue('id-token') }))
 
-type Channel = { id: string; name: string; description: string; created_at: string; created_by_name: string; member_count: number; is_member: boolean; can_manage: boolean; last_message_at: string }
+type Channel = { id: string; name: string; description: string; created_at: string; created_by_name: string; member_count: number; is_member: boolean; can_manage: boolean; can_delete?: boolean; last_message_at: string }
 
 let channels: Channel[]
+let myRole = 'member'
 let calls: Array<{ method: string; path: string; body: Record<string, unknown> | null }>
 
 const PEOPLE = [
@@ -19,6 +20,7 @@ const PEOPLE = [
 beforeEach(() => {
   window.localStorage.clear()
   calls = []
+  myRole = 'member'
   channels = [
     { id: 'general', name: 'General', description: 'Everyone in the workspace.', created_at: '', created_by_name: '', member_count: 2, is_member: true, can_manage: false, last_message_at: '' },
     { id: 'ch-deadlines', name: 'deadlines', description: 'Every date we must not miss.', created_at: '2026-09-24T00:00:00Z', created_by_name: 'Ada', member_count: 1, is_member: false, can_manage: false, last_message_at: '' },
@@ -30,11 +32,11 @@ beforeEach(() => {
     calls.push({ method, path, body })
     const json = (data: unknown, status = 200) => Promise.resolve(new Response(status === 204 ? null : JSON.stringify(data), { status }))
     const channel = (id: string) => channels.find((item) => item.id === id)!
-    if (path === '/workspaces' && method === 'GET') return json([{ id: 'ws-1', name: 'Lease review', owner_id: 'u-ada', created_at: '', role: 'member' }])
+    if (path === '/workspaces' && method === 'GET') return json([{ id: 'ws-1', name: 'Lease review', owner_id: 'u-ada', created_at: '', role: myRole }])
     if (path === '/workspaces/ws-1/members') return json(PEOPLE)
     if (path === '/workspaces/ws-1/channels' && method === 'GET') return json(channels)
     if (path === '/workspaces/ws-1/channels' && method === 'POST') {
-      const created = { id: 'ch-new', name: body.name, description: body.description, created_at: '2026-09-26T00:00:00Z', created_by_name: 'You', member_count: 1, is_member: true, can_manage: true, last_message_at: '' }
+      const created = { id: 'ch-new', name: body.name, description: body.description, created_at: '2026-09-26T00:00:00Z', created_by_name: 'You', member_count: 1, is_member: true, can_manage: true, can_delete: myRole !== 'member', last_message_at: '' }
       channels = [...channels, created]
       return json(created, 201)
     }
@@ -58,7 +60,7 @@ async function openWorkspace() {
   const user = userEvent.setup()
   render(<DashboardV2 onClose={vi.fn()} userEmail="bob@example.com" />)
   await user.click(screen.getByRole('button', { name: 'Messages' }))
-  await user.click(await screen.findByRole('button', { name: /Lease review/ }))
+  await user.click(await screen.findByRole('button', { name: /^L\s*Lease review/ }))
   await screen.findByRole('button', { name: 'Browse channels' })
   return user
 }
@@ -99,7 +101,20 @@ describe('Slack-style channels', () => {
     expect(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Message #General')
   })
 
-  it('creates a channel with a Slack-style name and a description, then can delete it', async () => {
+  it('lets a member create a channel but not delete it', async () => {
+    const user = await openWorkspace()
+    await user.click(screen.getByRole('button', { name: 'Create a channel' }))
+    await user.type(within(screen.getByRole('dialog')).getByLabelText('Channel name'), 'notes')
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create channel' }))
+    await user.click(await screen.findByRole('button', { name: 'Channel details for notes' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('tab', { name: 'Settings' }))
+
+    expect(within(screen.getByRole('dialog')).queryByRole('button', { name: 'Delete channel' })).not.toBeInTheDocument()
+    expect(within(screen.getByRole('dialog')).getByText(/Only workspace admins can delete channels/)).toBeInTheDocument()
+  })
+
+  it('creates a channel with a Slack-style name and a description, then an admin deletes it', async () => {
+    myRole = 'admin'
     const user = await openWorkspace()
 
     await user.click(screen.getByRole('button', { name: 'Create a channel' }))

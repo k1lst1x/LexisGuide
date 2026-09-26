@@ -58,6 +58,7 @@ export type WorkspaceChannel = {
   member_count?: number
   is_member?: boolean
   can_manage?: boolean
+  can_delete?: boolean
 }
 export type WorkspaceMessage = { id: string; user: string; authorId?: string; authorEmail?: string; text: string; time: string; saved?: boolean; attachment?: string }
 export type WorkspaceTask = { id: string; title: string; detail: string; completed: boolean }
