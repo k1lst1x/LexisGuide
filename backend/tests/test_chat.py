@@ -112,7 +112,7 @@ def test_chat_releases_shared_capacity_when_the_remote_agent_fails(
     [
         {**CHAT, "conversation_id": "bad id!"},
         {**CHAT, "messages": [{"role": "assistant", "content": "hi"}]},
-        {**CHAT, "messages": [{"role": "user", "content": "x" * 4001}]},
+        {**CHAT, "messages": [{"role": "user", "content": "x" * 20_001}]},
     ],
 )
 def test_chat_validates_requests(authenticated_client: TestClient, body: dict) -> None:

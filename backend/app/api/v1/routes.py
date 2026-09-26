@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from lexisguide_assistant import ChatReply, ChatRequest
+from lexisguide_assistant.models import MAX_TURN_CHARS
 from pydantic import BaseModel, Field, field_validator
 from review_contract import ReviewResult
 
@@ -239,16 +240,25 @@ CONVERSATION_ID = r"^[A-Za-z0-9-]{8,64}$"
 MAX_STORED_TURNS = 60
 
 
+class StoredAttachment(BaseModel):
+    """A file shown on a message. Only its name and size are kept, not its text."""
+
+    name: str = Field(min_length=1, max_length=200)
+    kind: str = Field(default="", max_length=60)
+    chars: int = Field(default=0, ge=0)
+
+
 class StoredTurn(BaseModel):
     id: str = Field(min_length=1, max_length=80)
     role: str = Field(pattern="^(user|assistant)$")
-    content: str = Field(min_length=1, max_length=4_000)
+    content: str = Field(min_length=1, max_length=MAX_TURN_CHARS)
     local: bool = False
+    attachments: list[StoredAttachment] = Field(default_factory=list, max_length=5)
 
 
 class ConversationBody(BaseModel):
     """What the browser sends back to be kept. Bounded so one person cannot
-    fill the table: 60 turns of 4k is well inside a DynamoDB item."""
+    fill the table; storage compresses the turns into one DynamoDB item."""
 
     turns: list[StoredTurn] = Field(max_length=MAX_STORED_TURNS)
     title: str = Field(default="", max_length=160)

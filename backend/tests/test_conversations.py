@@ -177,3 +177,50 @@ def test_updating_an_existing_conversation_does_not_consume_another_slot(
 
     assert response.status_code == 200
     assert response.json()["title"] == "Updated"
+
+
+def test_a_long_message_is_kept_rather_than_failing_the_whole_save(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Long pasted questions and answers used to be refused, losing the conversation."""
+    FakeStore().install(monkeypatch)
+    long_question = "Clause 14. " * 1_500  # about 16,500 characters
+    turns = [
+        {"id": "t1", "role": "user", "content": long_question, "local": False},
+        {
+            "id": "t2",
+            "role": "assistant",
+            "content": "A long answer. " * 1_000,
+            "local": False,
+            "attachments": [],
+        },
+    ]
+
+    saved = authenticated_client.put(
+        f"/api/v1/me/conversations/{CONVERSATION}", json={"turns": turns}
+    )
+
+    assert saved.status_code == 200
+    read = authenticated_client.get(f"/api/v1/me/conversations/{CONVERSATION}").json()
+    assert read["turns"][0]["content"] == long_question
+
+
+def test_attached_files_are_remembered_by_name_on_the_message(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    FakeStore().install(monkeypatch)
+    turns = [
+        {
+            "id": "t1",
+            "role": "user",
+            "content": "What does this lease say about repairs?",
+            "attachments": [{"name": "lease.pdf", "kind": "PDF document", "chars": 12_000}],
+        }
+    ]
+
+    authenticated_client.put(f"/api/v1/me/conversations/{CONVERSATION}", json={"turns": turns})
+
+    read = authenticated_client.get(f"/api/v1/me/conversations/{CONVERSATION}").json()
+    assert read["turns"][0]["attachments"] == [
+        {"name": "lease.pdf", "kind": "PDF document", "chars": 12_000}
+    ]

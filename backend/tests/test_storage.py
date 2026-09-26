@@ -363,3 +363,35 @@ def test_remote_operation_releases_global_slot_when_user_slots_are_full(
     assert storage.acquire_remote_operation("user-123") is None
     assert len(fake_table.delete_requests) == 1
     assert fake_table.delete_requests[0]["Key"]["PK"] == "REMOTE#GLOBAL"
+
+
+def test_conversations_are_stored_compressed_and_read_back(table: FakeTable) -> None:
+    turns = [{"id": "t1", "role": "user", "content": "Repairs? " * 2_000}]
+
+    storage.save_conversation("user-123", "conv-12345678", turns, "Repairs")
+
+    item = table.put_requests[0]["Item"]
+    assert "turns" not in item and len(item["turns_gz"]) < 2_000
+    table.get_responses = [{"Item": item}]
+    assert storage.get_conversation("user-123", "conv-12345678")["turns"] == turns
+
+
+def test_conversations_saved_before_compression_still_load(table: FakeTable) -> None:
+    legacy = [{"id": "t1", "role": "user", "content": "Old question"}]
+    table.get_responses = [{"Item": {"turns": legacy, "title": "Old", "updated_at": "x"}}]
+
+    assert storage.get_conversation("user-123", "conv-12345678")["turns"] == legacy
+
+
+def test_an_oversized_conversation_drops_its_oldest_turns_instead_of_failing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import os as _os
+
+    monkeypatch.setattr(storage, "MAX_DOCUMENT_BYTES", 2_000)
+    turns = [{"id": f"t{i}", "role": "user", "content": _os.urandom(600).hex()} for i in range(10)]
+
+    kept, packed = storage._pack_turns(turns)
+
+    assert len(packed) <= 2_000
+    assert kept == turns[-len(kept) :] and len(kept) < len(turns)

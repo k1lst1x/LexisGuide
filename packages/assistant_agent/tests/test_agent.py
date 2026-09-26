@@ -145,3 +145,46 @@ def test_supervisor_routes_document_research_and_drafting_without_applying_chang
     specialist_notes = client.calls[0]["system"][-1]["text"]
     assert "not changed the document" in specialist_notes
     assert "no official source receipt" in specialist_notes
+
+
+def test_attached_files_reach_the_model_as_untrusted_reference() -> None:
+    from lexisguide_assistant.agent import _context_block
+    from lexisguide_assistant.models import ChatContext
+
+    context = ChatContext(
+        attachments=[{"name": "lease.pdf", "kind": "PDF document", "text": "Tenant repairs all."}]
+    )
+
+    block = _context_block(context)
+
+    assert "File attached by the person: lease.pdf (PDF document)" in block
+    assert "Tenant repairs all." in block
+
+
+def test_attached_text_is_bounded_across_all_files() -> None:
+    from lexisguide_assistant.models import MAX_ATTACHMENTS_TOTAL_CHARS, ChatContext
+
+    context = ChatContext(
+        attachments=[{"name": f"f{i}.txt", "text": "x" * 60_000} for i in range(5)]
+    )
+
+    assert sum(len(item.text) for item in context.attachments) == MAX_ATTACHMENTS_TOTAL_CHARS
+
+
+def test_an_answer_cut_off_by_the_length_limit_says_so() -> None:
+    from lexisguide_assistant.agent import ConversationAgent
+    from lexisguide_assistant.models import ChatRequest
+
+    class Truncating:
+        def converse(self, **_: object) -> dict:
+            return {
+                "stopReason": "max_tokens",
+                "output": {"message": {"role": "assistant", "content": [{"text": "Part one"}]}},
+            }
+
+    reply = ConversationAgent(client=Truncating()).chat(
+        ChatRequest(messages=[{"role": "user", "content": "Explain everything"}])
+    )
+
+    assert reply.reply.startswith("Part one")
+    assert "Ask me to continue" in reply.reply

@@ -211,6 +211,31 @@ def create_record_with_limit(
     return item
 
 
+def _pack_turns(turns: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bytes]:
+    """Compress a conversation to fit one DynamoDB item.
+
+    Long pasted questions and long answers made the raw turns overflow the
+    400 KB item limit, so the whole save failed and the conversation was lost.
+    Compressed, a long conversation fits easily; if one ever does not, its
+    oldest turns go first rather than the save failing.
+    """
+    kept = list(turns)
+    while True:
+        body = gzip.compress(json.dumps(kept, separators=(",", ":")).encode("utf-8"))
+        if len(body) <= MAX_DOCUMENT_BYTES or len(kept) <= 1:
+            return kept, body
+        kept = kept[1:]
+
+
+def _unpack_turns(item: dict[str, Any]) -> list[dict[str, Any]]:
+    packed = item.get("turns_gz")
+    if packed is not None:
+        raw = getattr(packed, "value", packed)  # boto3 returns a Binary wrapper.
+        return json.loads(gzip.decompress(bytes(raw)).decode("utf-8"))
+    # Conversations saved before compression kept their turns as a plain list.
+    return list(item.get("turns", []))
+
+
 def get_conversation(user_id: str, conversation_id: str) -> dict[str, Any] | None:
     """Read one of this user's saved conversations.
 
@@ -226,7 +251,7 @@ def get_conversation(user_id: str, conversation_id: str) -> dict[str, Any] | Non
         return None
     return {
         "conversation_id": conversation_id,
-        "turns": item.get("turns", []),
+        "turns": _unpack_turns(item),
         "updated_at": item.get("updated_at", ""),
         "title": item.get("title", ""),
     }
@@ -237,16 +262,17 @@ def save_conversation(
 ) -> dict[str, Any]:
     """Write a conversation back to the user's own partition."""
     now = datetime.now(UTC).isoformat()
+    kept, packed = _pack_turns(turns)
     _table().put_item(
         Item={
             "PK": f"USER#{user_id}",
             "SK": f"CHAT#{conversation_id}",
-            "turns": turns,
+            "turns_gz": packed,
             "title": title,
             "updated_at": now,
         }
     )
-    return {"conversation_id": conversation_id, "turns": turns, "updated_at": now, "title": title}
+    return {"conversation_id": conversation_id, "turns": kept, "updated_at": now, "title": title}
 
 
 def save_conversation_with_limit(
@@ -261,10 +287,11 @@ def save_conversation_with_limit(
         return "updated", save_conversation(user_id, conversation_id, turns, title)
 
     now = datetime.now(UTC).isoformat()
+    kept, packed = _pack_turns(turns)
     item = {
         "PK": f"USER#{user_id}",
         "SK": f"CHAT#{conversation_id}",
-        "turns": turns,
+        "turns_gz": packed,
         "title": title,
         "updated_at": now,
     }
@@ -278,7 +305,7 @@ def save_conversation_with_limit(
     if result == "created":
         return "created", {
             "conversation_id": conversation_id,
-            "turns": turns,
+            "turns": kept,
             "updated_at": now,
             "title": title,
         }

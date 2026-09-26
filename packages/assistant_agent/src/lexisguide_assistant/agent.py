@@ -64,6 +64,11 @@ def _context_block(context: ChatContext) -> str:
         lines.append("Open findings: " + "; ".join(context.open_findings))
     if context.document_excerpt:
         lines.append(f"Document excerpt:\n<<<\n{context.document_excerpt}\n>>>")
+    for attachment in context.attachments:
+        kind = f" ({attachment.kind})" if attachment.kind else ""
+        lines.append(
+            f"File attached by the person: {attachment.name}{kind}\n<<<\n{attachment.text}\n>>>"
+        )
     return "\n".join(lines)
 
 
@@ -78,6 +83,11 @@ def _to_converse(messages: list[Any]) -> list[dict[str, Any]]:
         else:
             turns.append({"role": message.role, "content": [{"text": message.content}]})
     return turns
+
+
+# About 2,200 words: room for a full clause-by-clause answer. Nine hundred
+# tokens cut long answers off mid-sentence.
+MAX_ANSWER_TOKENS = 3_000
 
 
 class ConversationAgent:
@@ -126,7 +136,7 @@ class ConversationAgent:
                 system=system,
                 messages=messages,
                 toolConfig={"tools": TOOL_SPECS},
-                inferenceConfig={"temperature": 0.3, "maxTokens": 900},
+                inferenceConfig={"temperature": 0.3, "maxTokens": MAX_ANSWER_TOKENS},
             )
             message = response["output"]["message"]
             tool_uses = [
@@ -136,6 +146,9 @@ class ConversationAgent:
                 text = "".join(
                     block.get("text", "") for block in message.get("content", [])
                 ).strip()
+                if text and response.get("stopReason") == "max_tokens":
+                    # Say so rather than let the answer stop mid-sentence unexplained.
+                    text += "\n\n(This answer reached its length limit. Ask me to continue.)"
                 return ChatReply(
                     reply=text or "Sorry, I could not produce an answer. Please try again.",
                     tools_used=tools_used,
