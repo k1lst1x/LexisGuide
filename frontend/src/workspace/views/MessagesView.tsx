@@ -1,15 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { AtSign, Bookmark, Check, ChevronDown, Copy, FileText, Hash, Info, KeyRound, LockKeyhole, Paperclip, Plus, Reply, Search, Send, Smile, Trash2, UsersRound, X } from 'lucide-react'
+import { BrowseChannelsDialog, ChannelDetailsDialog, ChannelList, CreateChannelDialog, JoinBar, type DetailsTab } from './Channels'
+import { useChannels } from '../channels'
 import { useWorkspace } from '../store'
-import { documentDisplayName, documentKind, openFindings, type SampleDoc, type WorkspaceChannel } from '../data'
-import { workspaceRequest } from '../api'
+import { documentDisplayName, documentKind, openFindings, type SampleDoc } from '../data'
 import { Empty } from '../ui'
 
 const EMOJI = ['👍', '✅', '👀', '🙏', '⚠️', '🎉']
-const PEOPLE = [
-  { name: 'Elena Moritz', role: 'Legal Aid Director', initial: 'E' },
-  { name: 'Agency Reviewer', role: 'Compliance Officer', initial: 'A' },
-]
 
 const PANE_LIMITS = {
   rail: { min: 208, max: 360 },
@@ -122,9 +119,7 @@ export function MessagesView() {
   const [railWidth, setRailWidth] = useState(240)
   const [detailsWidth, setDetailsWidth] = useState(300)
   const [newTask, setNewTask] = useState('')
-  const [channels, setChannels] = useState<WorkspaceChannel[]>([{ id: 'general', name: 'General', created_at: '' }])
-  const [channelsOpen, setChannelsOpen] = useState(false)
-  const [channelName, setChannelName] = useState('')
+  const [dialog, setDialog] = useState<null | { kind: 'create' } | { kind: 'browse' } | { kind: 'details'; tab: DetailsTab }>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -144,22 +139,6 @@ export function MessagesView() {
   }, [refreshWorkspaces])
   useEffect(() => { endRef.current?.scrollIntoView?.({ block: 'end' }) }, [ws.comments.length])
   useEffect(() => { if (ws.composerFocus) inputRef.current?.focus() }, [ws.composerFocus])
-  useEffect(() => {
-    const workspace = ws.activeWorkspace
-    if (!workspace || workspace.id.startsWith('local-')) {
-      return
-    }
-    let cancelled = false
-    const refresh = async () => {
-      try {
-        const next = await workspaceRequest<WorkspaceChannel[]>(`/workspaces/${workspace.id}/channels`)
-        if (!cancelled) setChannels(next)
-      } catch { /* The known General channel remains usable offline. */ }
-    }
-    void refresh()
-    return () => { cancelled = true }
-  }, [ws.activeWorkspace])
-
   const shown = ws.comments.filter((m) => filter === 'all' || (filter === 'mentions' ? m.text.includes('@') : m.saved))
   const results = query.trim()
     ? [
@@ -171,43 +150,18 @@ export function MessagesView() {
   const linked = ws.linkedDocument ?? ws.selected
   const linkedTitle = ws.activeWorkspace?.linked_document_title || documentDisplayName(linked)
   const workspaceName = ws.activeWorkspace?.name ?? 'Personal workspace'
-  const displayedChannels = !ws.activeWorkspace || ws.activeWorkspace.id.startsWith('local-')
-    ? [{ id: 'general', name: 'General', created_at: '' }]
-    : channels
-  const activeChannel = displayedChannels.find((channel) => channel.id === ws.activeChannelId) ?? displayedChannels[0]
-  const canManageChannels = !ws.activeWorkspace || ws.activeWorkspace.role === 'owner' || ws.activeWorkspace.role === 'admin' || ws.activeWorkspace.role === 'local'
-  const addChannel = async (event: FormEvent) => {
-    event.preventDefault()
-    const name = channelName.trim()
-    if (!name) return
-    const workspace = ws.activeWorkspace
-    if (!workspace || workspace.id.startsWith('local-')) {
-      const channel = { id: `local-${Date.now()}`, name, created_at: '' }
-      setChannels((current) => [...current, channel])
-      ws.setActiveChannelId(channel.id)
-      setChannelName('')
-      return
-    }
-    try {
-      const channel = await workspaceRequest<WorkspaceChannel>(`/workspaces/${workspace.id}/channels`, { method: 'POST', body: JSON.stringify({ name }) })
-      setChannels((current) => [...current, channel])
-      ws.setActiveChannelId(channel.id)
-      setChannelName('')
-    } catch (error) { ws.setNotice(error instanceof Error ? error.message : 'Could not add channel.') }
-  }
-  const deleteChannel = async (channel: WorkspaceChannel) => {
-    if (channel.id === 'general' || !window.confirm(`Delete #${channel.name}?`)) return
-    const workspace = ws.activeWorkspace
-    try {
-      if (!workspace || workspace.id.startsWith('local-')) {
-        setChannels((current) => current.filter((item) => item.id !== channel.id))
-      } else {
-        await workspaceRequest<void>(`/workspaces/${workspace.id}/channels/${channel.id}`, { method: 'DELETE' })
-        setChannels((current) => current.filter((item) => item.id !== channel.id))
-      }
-      if (ws.activeChannelId === channel.id) ws.setActiveChannelId('general')
-    } catch (error) { ws.setNotice(error instanceof Error ? error.message : 'Could not delete channel.') }
-  }
+  const channels = useChannels({
+    workspace: ws.activeWorkspace,
+    activeChannelId: ws.activeChannelId,
+    setActiveChannelId: ws.setActiveChannelId,
+    notify: ws.setNotice,
+  })
+  const activeChannel = channels.active
+  const isWorkspaceAdmin = !ws.activeWorkspace || ['owner', 'admin', 'local'].includes(ws.activeWorkspace.role ?? '')
+  const canManageChannel = !channels.shared || Boolean(activeChannel?.can_manage)
+  const channelMembers = channels.activeMembers
+  const memberCount = channels.shared ? activeChannel?.member_count ?? channelMembers?.length ?? 0 : 1
+  const canPost = !channels.shared || Boolean(activeChannel?.is_member)
 
   const beginResize = (pane: 'rail' | 'details', event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !gridRef.current) return
@@ -270,8 +224,7 @@ export function MessagesView() {
               })}
             </div>
           </>}
-          <div className="ws-channel-label"><span className="ws-rail-label">Channels</span><div className="ws-menu-anchor"><button type="button" className="ws-icon-btn" aria-label="Manage channels" aria-expanded={channelsOpen} onClick={() => setChannelsOpen((open) => !open)}><ChevronDown size={15} /></button>{channelsOpen && <div className="ws-popover ws-menu" role="menu"><form className="ws-channel-create" onSubmit={addChannel}><input value={channelName} onChange={(event) => setChannelName(event.target.value)} placeholder="New channel" aria-label="New channel name" maxLength={60} /><button type="submit" className="ws-btn ws-btn-sm" disabled={!channelName.trim() || !canManageChannels}><Plus size={13} /> Add</button></form>{channels.filter((channel) => channel.id !== 'general').map((channel) => <button key={channel.id} type="button" role="menuitem" disabled={!canManageChannels} onClick={() => void deleteChannel(channel)}><Trash2 size={13} /> Delete #{channel.name}</button>)}</div>}</div></div>
-          {displayedChannels.map((channel) => <button key={channel.id} type="button" className={`ws-channel ${channel.id === ws.activeChannelId ? 'is-active' : ''}`} onClick={() => ws.setActiveChannelId(channel.id)}><Hash size={15} /><span>{channel.name}</span>{channel.id === ws.activeChannelId && <em>{ws.comments.length}</em>}</button>)}
+          <ChannelList channels={channels} onCreate={() => setDialog({ kind: 'create' })} onBrowse={() => setDialog({ kind: 'browse' })} />
         </aside>
 
         <div
@@ -289,8 +242,18 @@ export function MessagesView() {
 
         <section className="ws-thread" aria-label={`${activeChannel?.name ?? 'General'} chat`}>
           <header className="ws-thread-head">
-            <div><h2><Hash size={17} /> {activeChannel?.name ?? 'General'}</h2><p>{workspaceName} · {ws.userEmail ? '3 people' : '2 people'} · about {documentDisplayName(linked)}</p></div>
+            <div className="ws-thread-title">
+              <button type="button" className="ws-channel-name" onClick={() => setDialog({ kind: 'details', tab: 'about' })} aria-label={`Channel details for ${activeChannel?.name ?? 'General'}`}>
+                <Hash size={17} aria-hidden="true" /> {activeChannel?.name ?? 'General'} <ChevronDown size={15} aria-hidden="true" />
+              </button>
+              <p>{activeChannel?.description || `${workspaceName} · about ${documentDisplayName(linked)}`}</p>
+            </div>
             <div className="ws-thread-tools">
+              <button type="button" className="ws-member-stack" onClick={() => setDialog({ kind: 'details', tab: 'members' })} aria-label={`${memberCount} member${memberCount === 1 ? '' : 's'}. View members`} title="View members">
+                {(channelMembers ?? []).slice(0, 3).map((person) => <i key={person.user_id} className="ws-avatar ws-avatar-sm">{(person.name || person.email || '?')[0].toUpperCase()}</i>)}
+                {!channels.shared && <i className="ws-avatar ws-avatar-sm">{(ws.userEmail?.[0] || 'Y').toUpperCase()}</i>}
+                <span>{memberCount}</span>
+              </button>
               <button type="button" className="ws-icon-btn" aria-label="Search this conversation" onClick={() => setSearchOpen(true)}><Search size={16} /></button>
               <button type="button" className="ws-icon-btn" aria-label={detailsOpen ? 'Close details' : 'Open details'} title={detailsOpen ? 'Close details' : 'Open details'} aria-pressed={detailsOpen} onClick={() => setDetailsOpen((v) => !v)}><Info size={16} /></button>
             </div>
@@ -327,15 +290,16 @@ export function MessagesView() {
                         ))}
                         <button type="button" onClick={() => ws.toggleSaved(message.id)} aria-pressed={!!message.saved}><Bookmark size={12} /> {message.saved ? 'Saved' : 'Save'}</button>
                         <button type="button" onClick={() => { ws.setDraft(`@${message.user.replace(/\s*\(.+\)$/, '').split(' ')[0]} `); ws.focusComposer() }}><Reply size={12} /> Reply</button>
+                        {(mine || isWorkspaceAdmin) && <button type="button" className="ws-msg-delete" onClick={() => { if (window.confirm('Delete this message for everyone?')) void ws.deleteMessage(message.id) }}><Trash2 size={12} /> Delete</button>}
                       </div>
                     </div>
                   </article>
                 )
               })}
-              {!shown.length && <Empty title={filter === 'all' ? `No messages in ${workspaceName}` : filter === 'mentions' ? 'No mentions yet' : 'Nothing saved yet'}>{filter === 'all' ? 'Start this group conversation by sending the first message.' : filter === 'mentions' ? 'When a teammate uses @, it will appear here.' : 'Save a message to find it here later.'}</Empty>}
+              {!shown.length && <Empty title={filter === 'all' ? `No messages in #${activeChannel?.name ?? 'General'} yet` : filter === 'mentions' ? 'No mentions yet' : 'Nothing saved yet'}>{filter === 'all' ? (canPost ? 'Start the conversation by sending the first message.' : 'Join the channel to start the conversation.') : filter === 'mentions' ? 'When a teammate uses @, it will appear here.' : 'Save a message to find it here later.'}</Empty>}
               <div ref={endRef} />
             </div>
-            <form className="ws-composer" onSubmit={(event) => { event.preventDefault(); send() }}>
+            {!canPost ? <JoinBar channels={channels} /> : <form className="ws-composer" onSubmit={(event) => { event.preventDefault(); send() }}>
               {attachment && <span className="ws-attachment is-draft"><FileText size={13} /> {documentDisplayName(ws.documents.find((d) => d.id === attachment) ?? ws.selected)}<button type="button" aria-label="Remove attached document" onClick={() => setAttachment(null)}><X size={12} /></button></span>}
               <div className="ws-composer-row">
                 <div className="ws-menu-anchor">
@@ -346,7 +310,7 @@ export function MessagesView() {
                   ref={inputRef}
                   value={ws.draft}
                   onChange={(event) => ws.setDraft(event.target.value)}
-                  placeholder="Type a message..."
+                  placeholder={`Message #${activeChannel?.name ?? 'General'}`}
                   aria-label="Message"
                 />
                 <div className="ws-menu-anchor">
@@ -356,7 +320,7 @@ export function MessagesView() {
                 <button type="submit" className="ws-btn ws-btn-dark ws-btn-sm" disabled={!ws.draft.trim()}>Send <Send size={13} /></button>
               </div>
               <small className="ws-muted">Enter to send · use @ to mention a teammate</small>
-            </form>
+            </form>}
           </>}
 
           {ws.messageTab === 'files' && (
@@ -428,12 +392,28 @@ export function MessagesView() {
             </label> : ws.activeWorkspace ? <p className="ws-linked-readonly"><LockKeyhole size={12} /> The host chooses the linked document for this group.</p> : null}
           </section>
           <section className="ws-msg-section">
-            <h3>People</h3>
-            {PEOPLE.map((p) => <div key={p.name} className="ws-person"><i className="ws-avatar ws-avatar-sm">{p.initial}</i><span><strong>{p.name}</strong><small>{p.role} · Online</small></span></div>)}
+            <header className="ws-space-head"><h3>In #{activeChannel?.name ?? 'General'}</h3><span className="ws-muted">{memberCount}</span></header>
+            {channels.shared ? (channelMembers ?? []).slice(0, 6).map((person) => (
+              <div key={person.user_id} className="ws-person">
+                <i className="ws-avatar ws-avatar-sm">{(person.name || person.email || '?')[0].toUpperCase()}</i>
+                <span><strong>{person.name || person.email}</strong><small>{person.role === 'owner' ? 'Workspace owner' : person.role === 'admin' ? 'Admin' : 'Member'}</small></span>
+              </div>
+            )) : <div className="ws-person"><i className="ws-avatar ws-avatar-sm">{(ws.userEmail?.[0] || 'Y').toUpperCase()}</i><span><strong>You</strong><small>Only on this device</small></span></div>}
+            {channels.shared && memberCount > 0 && <button type="button" className="ws-link" onClick={() => setDialog({ kind: 'details', tab: 'members' })}>View all members</button>}
           </section>
           <SpaceAccess />
         </aside>
       </div>
+
+      {dialog?.kind === 'create' && (
+        <CreateChannelDialog channels={channels} onClose={() => setDialog(null)} onCreated={(channel) => { setDialog(null); channels.select(channel.id); ws.setNotice(`#${channel.name} is ready.`) }} />
+      )}
+      {dialog?.kind === 'browse' && (
+        <BrowseChannelsDialog channels={channels} onClose={() => setDialog(null)} onOpen={(channel) => { setDialog(null); channels.select(channel.id) }} onCreate={() => setDialog({ kind: 'create' })} />
+      )}
+      {dialog?.kind === 'details' && (
+        <ChannelDetailsDialog key={`${activeChannel?.id}-${dialog.tab}`} channels={channels} tab={dialog.tab} canManage={canManageChannel} onClose={() => setDialog(null)} />
+      )}
 
       {searchOpen && (
         <div className="ws-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) setSearchOpen(false) }}>

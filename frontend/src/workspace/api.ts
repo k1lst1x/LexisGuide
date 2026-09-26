@@ -170,12 +170,15 @@ export async function workspaceRequest<T>(path: string, init: RequestInit = {}):
     response = await request()
   }
   if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || 'Workspace request failed.')
+  // A delete answers 204 with no body; there is nothing to parse.
+  if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
 
 export type SharedWorkspaceMessage = {
   id: string
   user: string
+  author_id?: string
   author_email: string
   text: string
   created_at: string

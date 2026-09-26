@@ -47,8 +47,19 @@ export type WorkspaceSummary = {
   linked_document_title?: string | null
 }
 export type WorkspaceMember = { user_id: string; email: string; name: string; role: string; joined_at: string }
-export type WorkspaceChannel = { id: string; name: string; created_at: string }
-export type WorkspaceMessage = { id: string; user: string; authorEmail?: string; text: string; time: string; saved?: boolean; attachment?: string }
+export type WorkspaceChannel = {
+  id: string
+  name: string
+  created_at: string
+  description?: string
+  created_by?: string
+  created_by_name?: string
+  last_message_at?: string
+  member_count?: number
+  is_member?: boolean
+  can_manage?: boolean
+}
+export type WorkspaceMessage = { id: string; user: string; authorId?: string; authorEmail?: string; text: string; time: string; saved?: boolean; attachment?: string }
 export type WorkspaceTask = { id: string; title: string; detail: string; completed: boolean }
 export type AssistantAction = 'evidence' | 'revision' | 'task' | 'message' | 'assign' | 'due-date' | 'policy'
 export type AssistantApprovalAction = Exclude<AssistantAction, 'evidence' | 'policy'>

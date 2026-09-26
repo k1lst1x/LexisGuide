@@ -57,6 +57,7 @@ function sharedMessage(message: SharedWorkspaceMessage): WorkspaceMessage {
   return {
     id: message.id,
     user: message.user,
+    authorId: message.author_id,
     authorEmail: message.author_email,
     text: message.text,
     time: displayMessageTime(message.created_at),
@@ -420,6 +421,27 @@ function useWorkspaceState(userEmail?: string) {
     })
   }, [activeMessageWorkspace])
 
+  /** Delete a message: the author's own, or any message for a workspace admin. */
+  const deleteMessage = useCallback(async (messageId: string) => {
+    const workspace = activeWorkspaceRef.current
+    if (workspace && !workspace.id.startsWith('local-') && !messageId.startsWith('local-message-')) {
+      try {
+        await workspaceRequest<void>(
+          `/workspaces/${workspace.id}/messages/${encodeURIComponent(messageId)}?channel_id=${encodeURIComponent(activeChannelId)}`,
+          { method: 'DELETE' },
+        )
+      } catch (error) {
+        setWorkspaceNotice(error instanceof Error ? error.message : 'The message could not be deleted.')
+        return
+      }
+    }
+    messagesChanged.current = true
+    setMessagesByWorkspace((current) => ({
+      ...current,
+      [activeMessageWorkspace]: (current[activeMessageWorkspace] ?? []).filter((message) => message.id !== messageId),
+    }))
+  }, [activeChannelId, activeMessageWorkspace])
+
   const toggleSaved = useCallback((messageId: string) => {
     messagesChanged.current = true
     setMessagesByWorkspace((current) => ({
@@ -567,7 +589,7 @@ function useWorkspaceState(userEmail?: string) {
     restoring, saveStatus,
     resolved, toggleResolved, resolveAndNext, jurisdiction, setJurisdiction, busyAction, runAction, applyRewrite, editText, renameDocument, removeDocuments,
     notice, setNotice, addOpen, setAddOpen, addStage, setAddStage, addMessage, addDocument, isDemo, stats,
-    comments, reactions, toggleReaction, toggleSaved, sendMessage, draft, setDraft, composerFocus, focusComposer, tasks, addTask, toggleTask,
+    comments, reactions, toggleReaction, toggleSaved, deleteMessage, sendMessage, draft, setDraft, composerFocus, focusComposer, tasks, addTask, toggleTask,
     messageTab, setMessageTab, discuss,
     workspaces, activeWorkspace, activeChannelId, setActiveChannelId, members, workspaceNotice, refreshWorkspaces, createWorkspace, createInvite, joinWorkspace, selectWorkspace,
     assistantOpen, setAssistantOpen, assistantQuestion, askAssistant,

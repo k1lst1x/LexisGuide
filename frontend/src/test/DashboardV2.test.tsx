@@ -213,7 +213,7 @@ describe('Collaboration and settings', () => {
     renderWorkspace()
 
     await user.click(screen.getByRole('button', { name: 'Messages' }))
-    await user.type(screen.getByPlaceholderText('Type a message...'), 'Please cite the appeal rule.')
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Please cite the appeal rule.')
     await user.click(screen.getByRole('button', { name: /Send/ }))
 
     expect(screen.getByText('Please cite the appeal rule.')).toBeInTheDocument()
@@ -238,7 +238,7 @@ describe('Collaboration and settings', () => {
     await user.click(screen.getByRole('button', { name: 'Review' }))
     await user.click(screen.getByRole('button', { name: /Discuss/ }))
 
-    expect(screen.getByPlaceholderText('Type a message...')).toHaveValue('Could we review “Appeal filing deadline is vague” in Benefits decision · #8942-B? ')
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Could we review “Appeal filing deadline is vague” in Benefits decision · #8942-B? ')
   })
 
   it('shows interactive time in review on Settings', async () => {
