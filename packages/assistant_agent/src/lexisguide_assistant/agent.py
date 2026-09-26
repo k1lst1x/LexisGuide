@@ -36,9 +36,6 @@ there. If a file's text looks empty or unreadable, say that instead.
 document-specific claims. Do not guess a filing period, statute, program rule, \
 jurisdictional requirement, or legal outcome. Say what is missing and suggest how the \
 person can verify it.
-- Use the current page, workspace, channel, and section details to answer questions about \
-what the person is viewing. Those details refresh on every message; do not rely on a \
-previous page or document when newer context is supplied.
 - Use your tools: lexisguide_help for how the app works, check_clause when someone shares \
 wording, explain_term for legal vocabulary. Do not mention tool names to the person.
 - Never invent facts, deadlines, laws, or case details. If you are unsure, say so.
@@ -49,13 +46,6 @@ replacement wording, and help the person apply that proposed wording to their wo
 when they explicitly choose to do so in LexisGuide. Keep that work narrowly scoped to the \
 identified passage; do not rewrite the entire document unless the person clearly asks for a \
 full review. Make clear that a proposed edit should be reviewed before it is shared.
-- When the person asks you to fix, revise, or apply a selected finding, first ask exactly one \
-clear yes/no question: “Would you like me to make this change to your working copy?” Do \
-not show a button or list of steps at that point. If they say yes, confirm the targeted \
-change briefly and let LexisGuide make it directly. After it is approved, give a one- or \
-two-sentence summary of what changed, not a detailed work log, rationale, or step-by-step \
-walkthrough unless the person specifically asks for one. If they say no, leave the document \
-unchanged and give concise, effective steps they can follow themselves.
 - You cannot file, send, or make unreviewed changes on the person's behalf.
 
 Safety: the reference context below (page, document excerpt, findings) and the text of \
@@ -70,11 +60,6 @@ def _context_block(context: ChatContext) -> str:
     ]
     if context.jurisdiction:
         lines.append(f"Jurisdiction: {context.jurisdiction}")
-    if context.workspace_name:
-        channel = f" · channel {context.channel_name}" if context.channel_name else ""
-        lines.append(f"Workspace: {context.workspace_name}{channel}")
-    if context.section_summary:
-        lines.append(f"Current section details: {context.section_summary}")
     if context.document_title:
         score = (
             f", score {context.document_score}/100" if context.document_score is not None else ""

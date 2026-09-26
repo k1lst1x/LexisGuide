@@ -50,7 +50,6 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastPending = useRef<number | null>(null)
-  const appliedActions = useRef(new Set<string>())
   const { dragging, dropProps } = useFileDrop((files) => void chat.attachFiles(files))
   const started = turns.some((turn) => turn.id !== 'welcome')
   const canSend = Boolean(input.trim() || chat.staged.length)
@@ -70,18 +69,6 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
     lastPending.current = pendingQuestion.id
     void ask(pendingQuestion.text)
   }, [pendingQuestion, ask])
-
-  // The API only emits apply_rewrite after a clear in-chat confirmation. Run
-  // that approved, scoped change once rather than showing another UI button.
-  useEffect(() => {
-    for (const turn of turns) {
-      if (turn.role !== 'assistant' || !turn.workspaceActions?.includes('apply_rewrite')) continue
-      const key = `${turn.id}:apply_rewrite`
-      if (appliedActions.current.has(key)) continue
-      appliedActions.current.add(key)
-      onWorkspaceAction?.('apply_rewrite')
-    }
-  }, [turns, onWorkspaceAction])
 
   const attach = (
     <AttachButton
@@ -121,13 +108,14 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
               <article key={turn.id} className={`cw-msg cw-msg-${turn.role}`}>
                 {turn.role === 'assistant' ? <RichText text={turn.content} /> : <SentText text={turn.content} />}
                 <MessageFiles files={turn.attachments} />
-                {turn.role === 'assistant' && turn.workspaceActions?.filter((action) => action !== 'apply_rewrite').map((action) => (
+                {turn.role === 'assistant' && turn.workspaceActions?.map((action) => (
                   <button key={action} type="button" className="cw-workspace-action" onClick={() => onWorkspaceAction?.(action)}>
                     {action === 'review' ? 'Re-check this document'
                       : action === 'negotiate' ? 'Suggest negotiation points'
                         : action === 'rewrite' ? 'Draft a revision for this issue'
-                          : action === 'resolve' ? 'Mark current issue resolved'
-                            : 'Create follow-up task'}
+                          : action === 'apply_rewrite' ? 'Apply the current draft'
+                            : action === 'resolve' ? 'Mark current issue resolved'
+                              : 'Create follow-up task'}
                   </button>
                 ))}
                 {turn.role === 'assistant' && turn.id !== 'welcome' && (
