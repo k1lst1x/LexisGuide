@@ -42,7 +42,15 @@ class AssistantClient:
             parsed = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
             if isinstance(parsed, dict) and parsed.get("error"):
                 raise AssistantUnavailableError(str(parsed["error"]))
-            return parse_chat_reply(parsed)
+            reply = parse_chat_reply(parsed)
+            # AgentCore can return an older reply contract during a runtime rollout.
+            # The API owns the permissioned workspace boundary, so it adds only the
+            # same deterministic, confirmation-based actions the local supervisor uses.
+            if not reply.workspace_actions:
+                reply = reply.model_copy(
+                    update={"workspace_actions": SupervisorAgent.proposed_workspace_actions(request)}
+                )
+            return reply
         return self.agent.chat(request)
 
 
