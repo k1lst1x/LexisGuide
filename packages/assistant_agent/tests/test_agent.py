@@ -162,6 +162,21 @@ def test_targeted_document_revision_is_allowed_but_limited_to_the_finding():
     assert "that passage only" in system
 
 
+def test_affirmative_applies_only_after_the_assistant_asks_for_consent():
+    request_with_consent = request(
+        ("user", "Fix this clause."),
+        ("assistant", "Would you like me to make this change to your working copy?"),
+        ("user", "Yes"),
+        document_excerpt="Either party may terminate.",
+    )
+    request_without_consent = request(
+        ("user", "Yes"), document_excerpt="Either party may terminate."
+    )
+
+    assert SupervisorAgent.proposed_workspace_actions(request_with_consent) == ["apply_rewrite"]
+    assert SupervisorAgent.proposed_workspace_actions(request_without_consent) == []
+
+
 class Recording:
     """A Bedrock stand-in that keeps what it was sent."""
 

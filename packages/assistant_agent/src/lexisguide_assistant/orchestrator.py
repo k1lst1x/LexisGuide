@@ -144,6 +144,20 @@ class SupervisorAgent:
         if not request.context.document_excerpt:
             return []
         question = request.messages[-1].content.lower()
+        # A bare affirmative applies a revision only after the assistant has
+        # just asked for consent. This prevents an unrelated “yes” from
+        # changing a document.
+        prior = (
+            request.messages[-2].content.lower()
+            if len(request.messages) > 1 and request.messages[-2].role == "assistant"
+            else ""
+        )
+        affirmative = re.fullmatch(
+            r"(?:yes|yeah|yep|please do|go ahead|do it|make the change)[!. ]*", question
+        )
+        confirmation_prompt = "would you like me to make this change" in prior
+        if affirmative and confirmation_prompt:
+            return ["apply_rewrite"]
         if re.search(r"\b(apply|accept|use) (?:the )?(?:rewrite|draft|wording|change)\b", question):
             return ["apply_rewrite"]
         if re.search(
@@ -157,8 +171,6 @@ class SupervisorAgent:
             return ["review"]
         if re.search(r"\b(negotiate|negotiation|ask for)\b", question):
             return ["negotiate"]
-        if re.search(r"\b(fix|rewrite|reword|clearer wording|change)\b", question):
-            return ["rewrite"]
         return []
 
     def chat(self, request: ChatRequest) -> ChatReply:

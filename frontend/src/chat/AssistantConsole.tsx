@@ -43,7 +43,7 @@ function Message({ turn, onRegenerate, onWorkspaceAction }: { turn: Turn; onRege
       <div className="ac-bubble">
         {isAssistant ? <RichText text={turn.content} /> : <SentText text={turn.content} />}
         <MessageFiles files={turn.attachments} />
-        {isAssistant && turn.workspaceActions?.map((action) => (
+        {isAssistant && turn.workspaceActions?.filter((action) => action !== 'apply_rewrite').map((action) => (
           <button key={action} type="button" className="ac-workspace-action" onClick={() => onWorkspaceAction?.(action)}>{actionLabel(action)}</button>
         ))}
         {isAssistant && turn.id !== 'welcome' && (
@@ -72,6 +72,7 @@ export function AssistantConsole({
   const lastAnswer = [...chat.turns].reverse().find((turn) => turn.role === 'assistant' && turn.id !== 'welcome')
   const threadRef = useRef<HTMLDivElement>(null)
   const lastPending = useRef<number | null>(null)
+  const appliedActions = useRef(new Set<string>())
 
   // Only the welcome line means nothing has been asked yet, so the box sits in
   // the middle of the page rather than under an empty transcript.
@@ -87,6 +88,18 @@ export function AssistantConsole({
     lastPending.current = pendingQuestion.id
     void chat.ask(pendingQuestion.text)
   }, [pendingQuestion, chat])
+
+  // Consent is collected conversationally. Once the agent returns an approved
+  // apply action, change the selected working-copy passage exactly once.
+  useEffect(() => {
+    for (const turn of chat.turns) {
+      if (turn.role !== 'assistant' || !turn.workspaceActions?.includes('apply_rewrite')) continue
+      const key = `${turn.id}:apply_rewrite`
+      if (appliedActions.current.has(key)) continue
+      appliedActions.current.add(key)
+      onWorkspaceAction?.('apply_rewrite')
+    }
+  }, [chat.turns, onWorkspaceAction])
 
   return (
     <section className={`ac ${started ? 'is-started' : ''}`} aria-label="Ask LexisGuide" {...dropProps}>
