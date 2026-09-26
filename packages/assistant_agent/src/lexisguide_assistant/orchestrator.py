@@ -113,13 +113,26 @@ class SupervisorAgent:
             question,
         ):
             roles.append("research")
-        if re.search(r"\b(draft|rewrite|clearer wording|reword|negotiate|negotiation)\b", question):
+        if re.search(r"\b(draft|rewrite|clearer wording|reword|negotiate|negotiation|fix|change)\b", question):
             roles.append("drafting")
         return roles
+
+    @staticmethod
+    def proposed_workspace_actions(request: ChatRequest) -> list[str]:
+        if not request.context.document_excerpt:
+            return []
+        question = request.messages[-1].content.lower()
+        if re.search(r"\b(re-?check|review again|scan again|analyse again)\b", question):
+            return ["review"]
+        if re.search(r"\b(negotiate|negotiation|ask for)\b", question):
+            return ["negotiate"]
+        if re.search(r"\b(fix|rewrite|reword|clearer wording|change)\b", question):
+            return ["rewrite"]
+        return []
 
     def chat(self, request: ChatRequest) -> ChatReply:
         roles = self.plan(request)
         notes = [self.specialists[role](request) for role in roles]
         specialist_context = "\n\n".join(f"[{note.name}]\n{note.text}" for note in notes)
         reply = self.agent.chat(request, specialist_context=specialist_context)
-        return reply.model_copy(update={"agents_used": roles})
+        return reply.model_copy(update={"agents_used": roles, "workspace_actions": self.proposed_workspace_actions(request)})

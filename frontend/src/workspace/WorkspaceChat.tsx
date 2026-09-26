@@ -48,6 +48,7 @@ export function WorkspaceChat({ userEmail }: { userEmail?: string }) {
         current_finding: current ? `${current.title}: ${current.explanation} Evidence: “${current.evidence}”` : undefined,
         jurisdiction: ws.jurisdiction || undefined,
       }}
+      onWorkspaceAction={(action) => { void ws.runAction(action) }}
     />
   )
 }

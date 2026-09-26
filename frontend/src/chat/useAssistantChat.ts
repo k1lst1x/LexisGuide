@@ -24,7 +24,8 @@ export type AttachmentMeta = { name: string; kind: string; chars: number }
 /** A file attached in this conversation, with the text read from it. */
 export type ChatFile = AttachmentMeta & { id: string; text: string; truncated?: boolean }
 
-export type Turn = { id: string; role: 'user' | 'assistant'; content: string; local?: boolean; attachments?: AttachmentMeta[] }
+export type WorkspaceAction = 'review' | 'negotiate' | 'rewrite'
+export type Turn = { id: string; role: 'user' | 'assistant'; content: string; local?: boolean; attachments?: AttachmentMeta[]; workspaceActions?: WorkspaceAction[] }
 export type Mode = 'live' | 'guide' | 'unknown'
 
 const MAX_HISTORY = 12
@@ -149,7 +150,7 @@ export function useAssistantChat({ storageKey, context, greeting, fallback, pers
   const fallbackRef = useRef(fallback)
   useEffect(() => { contextRef.current = context; fallbackRef.current = fallback })
 
-  const callAgent = useCallback(async (history: Turn[], files: ChatFile[], signal: AbortSignal): Promise<string | null> => {
+  const callAgent = useCallback(async (history: Turn[], files: ChatFile[], signal: AbortSignal): Promise<{ reply: string; actions: WorkspaceAction[] } | null> => {
     let token = await cognitoGetIdToken().catch(() => null)
     if (!token) { setMode('guide'); setNotice('signed-out'); return null }
     const current = contextRef.current
@@ -176,10 +177,11 @@ export function useAssistantChat({ storageKey, context, greeting, fallback, pers
     }
     if (response.status === 429) { setNotice('You’re sending messages quickly. Please wait a minute and try again.'); return null }
     if (!response.ok) throw new Error(`chat ${response.status}`)
-    const data = await response.json() as { reply?: string }
+    const data = await response.json() as { reply?: string; workspace_actions?: WorkspaceAction[] }
     setMode('live')
     setNotice('')
-    return data.reply?.trim() || null
+    const reply = data.reply?.trim()
+    return reply ? { reply, actions: data.workspace_actions ?? [] } : null
   }, [conversationId])
 
   /** Answer the last question in `history`, with the files it can see. */
@@ -191,10 +193,10 @@ export function useAssistantChat({ storageKey, context, greeting, fallback, pers
     const controller = new AbortController()
     abortRef.current = controller
 
-    let reply: string | null = null
+    let response: { reply: string; actions: WorkspaceAction[] } | null = null
     let stopped = false
     try {
-      reply = await callAgent(history, files, controller.signal)
+      response = await callAgent(history, files, controller.signal)
     } catch (error) {
       if ((error as Error)?.name === 'AbortError') {
         stopped = true
@@ -209,8 +211,9 @@ export function useAssistantChat({ storageKey, context, greeting, fallback, pers
       const answered = [...turnsRef.current, {
         id: newId(),
         role: 'assistant' as const,
-        content: reply ?? fallbackRef.current(question),
-        local: !reply,
+        content: response?.reply ?? fallbackRef.current(question),
+        local: !response,
+        workspaceActions: response?.actions,
       }]
       turnsRef.current = answered
       setTurns(answered)
