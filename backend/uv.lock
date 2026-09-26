@@ -692,7 +692,7 @@ dev = [
 requires-dist = [
     { name = "awscrt", specifier = ">=0.29,<1.0" },
     { name = "boto3", specifier = ">=1.42,<2.0" },
-    { name = "eth-tester", extras = ["py-evm"], marker = "extra == 'dev'", specifier = ">=0.12,<0.14" },
+    { name = "eth-tester", extras = ["py-evm"], marker = "extra == 'dev'", specifier = ">=0.12.0b1,<0.14" },
     { name = "fastapi", specifier = ">=0.141,<0.142" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28,<0.29" },
     { name = "lexisguide-assistant", editable = "../packages/assistant_agent" },

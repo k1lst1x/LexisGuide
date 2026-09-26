@@ -63,10 +63,13 @@ export function MessageComposer({ draft, setDraft, mentions, setMentions, people
   const active = Math.min(highlight, Math.max(suggestions.length - 1, 0))
 
   const placeCaret = (position: number) => {
+    // Keep suggestion state in sync immediately. Waiting only for the next
+    // animation frame leaves the old #/@ trigger active for a fast Enter,
+    // which selects the same suggestion again instead of sending the message.
+    setCaret(position)
     window.requestAnimationFrame(() => {
       inputRef.current?.focus()
       inputRef.current?.setSelectionRange(position, position)
-      setCaret(position)
     })
   }
   const choose = (suggestion: Suggestion) => {
