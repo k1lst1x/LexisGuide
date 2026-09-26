@@ -132,6 +132,7 @@ export function Notifications() {
     {
       id: 'review-ready',
       category: 'Review',
+      tone: 'review',
       title: 'Review ready',
       detail: `${documentDisplayName(ws.selected)} has ${open_} item${open_ === 1 ? '' : 's'} to review.`,
       time: 'Just now',
@@ -140,6 +141,7 @@ export function Notifications() {
     {
       id: 'scan-updated',
       category: 'Document',
+      tone: 'document',
       title: 'AI scan updated',
       detail: `${ws.selected.findings.length} checks were evaluated on the current document.`,
       time: 'Today',
@@ -148,6 +150,7 @@ export function Notifications() {
     ...(latestDocument.id !== ws.selected.id ? [{
       id: `document-${latestDocument.id}`,
       category: 'Document',
+      tone: 'document',
       title: 'Recent document activity',
       detail: `${documentDisplayName(latestDocument)} is ready to review.`,
       time: 'Recently added',
@@ -156,6 +159,7 @@ export function Notifications() {
     ...(teammateMessage ? [{
       id: `message-${teammateMessage.id}`,
       category: 'Workspace',
+      tone: 'workspace',
       title: `${teammateMessage.user} posted in ${ws.activeWorkspace?.name ?? 'your workspace'}`,
       detail: teammateMessage.text.length > 120 ? `${teammateMessage.text.slice(0, 117)}…` : teammateMessage.text,
       time: teammateMessage.time,
@@ -164,6 +168,7 @@ export function Notifications() {
     {
       id: 'product-update',
       category: 'Product update',
+      tone: 'product',
       title: 'What’s new in LexisGuide',
       detail: 'Use AI to re-check a document, draft revisions, apply approved wording, and create follow-up tasks.',
       time: 'Latest product update',
@@ -179,7 +184,7 @@ export function Notifications() {
         <section className="ws-popover ws-notify" role="dialog" aria-label="Latest announcements">
           <header className="ws-notify-head"><div><h3>Notifications</h3><p>Latest activity in your workspace</p></div><button type="button" onClick={() => dismissAnd(() => ws.go('chain'))}>View activity</button></header>
           {items.map((item) => (
-            <button key={item.id} type="button" className="ws-notify-item" onClick={item.onClick}>
+            <button key={item.id} type="button" className={`ws-notify-item is-${item.tone}`} onClick={item.onClick}>
               <span className="ws-notify-meta">{item.category}<small>{item.time}</small></span>
               <strong>{item.title}</strong>
               <p>{item.detail}</p>

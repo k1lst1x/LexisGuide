@@ -260,10 +260,15 @@
 .ws-notify-head p { margin: 3px 0 0; font-size: 12px; color: var(--ink-45); }
 .ws-notify-head button { flex: none; margin-top: 2px; padding: 4px 0; border: 0; background: transparent; color: var(--green); font: inherit; font-size: 12px; font-weight: 600; }
 .ws-notify-head button:hover { text-decoration: underline; }
-.ws-notify-item { display: block; width: 100%; padding: 11px 7px; border: 0; border-top: 1px solid var(--line); border-radius: 10px; background: transparent; color: inherit; text-align: left; transition: background-color .16s var(--ease), transform .16s var(--ease); }
-.ws-notify-item:hover, .ws-notify-item:focus-visible { background: var(--sand); outline: 0; }
+.ws-notify-item { --notify-tone: var(--green); --notify-tint: rgba(0, 103, 79, .07); position: relative; display: block; width: 100%; padding: 11px 7px 11px 13px; border: 0; border-top: 1px solid var(--line); border-radius: 10px; background: transparent; color: inherit; text-align: left; transition: background-color .16s var(--ease), transform .16s var(--ease); }
+.ws-notify-item::before { position: absolute; top: 14px; bottom: 14px; left: 3px; width: 3px; border-radius: 99px; background: var(--notify-tone); content: ''; }
+.ws-notify-item.is-review { --notify-tone: #007b61; --notify-tint: rgba(0, 123, 97, .08); }
+.ws-notify-item.is-document { --notify-tone: #2f6f9f; --notify-tint: rgba(47, 111, 159, .09); }
+.ws-notify-item.is-workspace { --notify-tone: #7558a2; --notify-tint: rgba(117, 88, 162, .09); }
+.ws-notify-item.is-product { --notify-tone: #a36a11; --notify-tint: rgba(163, 106, 17, .1); }
+.ws-notify-item:hover, .ws-notify-item:focus-visible { background: var(--notify-tint); outline: 0; }
 .ws-notify-item:active { transform: scale(.99); }
-.ws-notify-meta { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 3px; color: var(--green); font-size: 10.5px; font-weight: 700; letter-spacing: .055em; text-transform: uppercase; }
+.ws-notify-meta { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 3px; color: var(--notify-tone); font-size: 10.5px; font-weight: 700; letter-spacing: .055em; text-transform: uppercase; }
 .ws-notify-meta small { color: var(--ink-45); font-size: 10.5px; font-weight: 500; letter-spacing: 0; text-transform: none; }
 .ws-notify-item strong { display: block; font-size: 13.5px; font-weight: 600; }
 .ws-notify-item p { margin: 3px 0 0; font-size: 13px; line-height: 1.4; color: var(--ink-60); }
