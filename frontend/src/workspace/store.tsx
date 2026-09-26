@@ -115,6 +115,7 @@ function useWorkspaceState(userEmail?: string) {
 
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>(localWorkspaces)
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceSummary | null>(null)
+  const [activeChannelId, setActiveChannelId] = useState('general')
   const activeWorkspaceRef = useRef<WorkspaceSummary | null>(null)
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [workspaceNotice, setWorkspaceNotice] = useState('')
@@ -129,7 +130,9 @@ function useWorkspaceState(userEmail?: string) {
   const focusComposer = useCallback(() => setComposerFocus((n) => n + 1), [])
 
   const selected = documents.find((doc) => doc.id === selectedId) ?? documents[0]
-  const activeMessageWorkspace = activeWorkspace?.id ?? PERSONAL_WORKSPACE_ID
+  const activeMessageWorkspace = activeWorkspace
+    ? `${activeWorkspace.id}:${activeChannelId}`
+    : PERSONAL_WORKSPACE_ID
   const comments = messagesByWorkspace[activeMessageWorkspace] ?? []
   const reactions = reactionsByWorkspace[activeMessageWorkspace] ?? {}
   const activeFinding = selected.findings.find((finding) => finding.id === activeFindingId) ?? null
@@ -149,12 +152,14 @@ function useWorkspaceState(userEmail?: string) {
     let cancelled = false
     const refresh = async () => {
       try {
-        const remote = await workspaceRequest<SharedWorkspaceMessage[]>(`/workspaces/${workspace.id}/messages`)
+        const remote = await workspaceRequest<SharedWorkspaceMessage[]>(
+          `/workspaces/${workspace.id}/messages?channel_id=${encodeURIComponent(activeChannelId)}`
+        )
         if (cancelled) return
         const received = remote.map(sharedMessage)
         setMessagesByWorkspace((current) => {
-          const optimistic = (current[workspace.id] ?? []).filter((message) => message.id.startsWith('local-message-'))
-          return { ...current, [workspace.id]: [...received, ...optimistic] }
+          const optimistic = (current[activeMessageWorkspace] ?? []).filter((message) => message.id.startsWith('local-message-'))
+          return { ...current, [activeMessageWorkspace]: [...received, ...optimistic] }
         })
       } catch {
         // The local copy remains visible while a connection is unavailable.
@@ -163,7 +168,7 @@ function useWorkspaceState(userEmail?: string) {
     void refresh()
     const interval = window.setInterval(() => void refresh(), 4_000)
     return () => { cancelled = true; window.clearInterval(interval) }
-  }, [activeWorkspace, userEmail])
+  }, [activeWorkspace, activeChannelId, activeMessageWorkspace, userEmail])
   useEffect(() => {
     if (!notice) return
     const timer = window.setTimeout(() => setNotice(''), 5200)
@@ -385,21 +390,21 @@ function useWorkspaceState(userEmail?: string) {
     try {
       const created = await workspaceRequest<SharedWorkspaceMessage>(`/workspaces/${workspace.id}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ text: trimmed, attachment: attachment || undefined }),
+        body: JSON.stringify({ text: trimmed, attachment: attachment || undefined, channel_id: activeChannelId }),
       })
       const persisted = sharedMessage(created)
       setMessagesByWorkspace((current) => ({
         ...current,
-        [workspace.id]: (current[workspace.id] ?? []).map((message) => message.id === localMessage.id ? persisted : message),
+        [activeMessageWorkspace]: (current[activeMessageWorkspace] ?? []).map((message) => message.id === localMessage.id ? persisted : message),
       }))
     } catch (error) {
       setMessagesByWorkspace((current) => ({
         ...current,
-        [workspace.id]: (current[workspace.id] ?? []).filter((message) => message.id !== localMessage.id),
+        [activeMessageWorkspace]: (current[activeMessageWorkspace] ?? []).filter((message) => message.id !== localMessage.id),
       }))
       setWorkspaceNotice(error instanceof Error ? error.message : 'Message could not be sent.')
     }
-  }, [activeMessageWorkspace, userEmail])
+  }, [activeChannelId, activeMessageWorkspace, userEmail])
 
   const toggleReaction = useCallback((messageId: string, emoji: string) => {
     setReactionsByWorkspace((current) => {
@@ -475,6 +480,7 @@ function useWorkspaceState(userEmail?: string) {
       })
       activeWorkspaceRef.current = workspace
       setActiveWorkspace(workspace)
+      setActiveChannelId('general')
       setMembers([])
       setWorkspaceNotice(`Workspace “${workspace.name}” created.`)
       return workspace
@@ -493,6 +499,7 @@ function useWorkspaceState(userEmail?: string) {
       })
       activeWorkspaceRef.current = workspace
       setActiveWorkspace(workspace)
+      setActiveChannelId('general')
       setMembers([])
       setWorkspaceNotice(`Workspace “${workspace.name}” was created on this device. Sign in to invite teammates.`)
       return workspace
@@ -524,6 +531,7 @@ function useWorkspaceState(userEmail?: string) {
       })
       activeWorkspaceRef.current = workspace
       setActiveWorkspace(workspace)
+      setActiveChannelId('general')
       setMembers([])
       setWorkspaceNotice(`Joined “${workspace.name}”.`)
     } catch (error) { setWorkspaceNotice(error instanceof Error ? error.message : 'Could not join workspace.') }
@@ -533,6 +541,7 @@ function useWorkspaceState(userEmail?: string) {
     const workspace = workspaces.find((item) => item.id === id) ?? null
     activeWorkspaceRef.current = workspace
     setActiveWorkspace(workspace)
+    setActiveChannelId('general')
     if (!workspace) { setMembers([]); return }
     try { setMembers(await workspaceRequest<WorkspaceMember[]>(`/workspaces/${workspace.id}/members`)) } catch { setMembers([]) }
   }, [workspaces])
@@ -554,7 +563,7 @@ function useWorkspaceState(userEmail?: string) {
     notice, setNotice, addOpen, setAddOpen, addStage, setAddStage, addMessage, addDocument, isDemo, stats,
     comments, reactions, toggleReaction, toggleSaved, sendMessage, draft, setDraft, composerFocus, focusComposer, tasks, addTask, toggleTask,
     messageTab, setMessageTab, discuss,
-    workspaces, activeWorkspace, members, workspaceNotice, refreshWorkspaces, createWorkspace, createInvite, joinWorkspace, selectWorkspace,
+    workspaces, activeWorkspace, activeChannelId, setActiveChannelId, members, workspaceNotice, refreshWorkspaces, createWorkspace, createInvite, joinWorkspace, selectWorkspace,
     assistantOpen, setAssistantOpen, assistantQuestion, askAssistant,
   }
 }
