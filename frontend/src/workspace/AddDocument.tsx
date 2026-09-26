@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Check, ClipboardPaste, Loader2, UploadCloud, X } from 'lucide-react'
 import { useWorkspace, type AddStage } from './store'
+import { isStaleBuildMessage } from '../staleBuild'
 
 const STAGES: Array<{ key: AddStage; label: string }> = [
   { key: 'reading', label: 'Reading the text' },
@@ -73,7 +74,12 @@ export function AddDocument() {
               )}
 
               <label className="ws-field ws-field-inline"><span>Jurisdiction <em>(optional)</em></span><input value={ws.jurisdiction} onChange={(event) => ws.setJurisdiction(event.target.value)} placeholder="e.g. Illinois, USA" aria-label="Jurisdiction" /></label>
-              {ws.addStage === 'error' && <p className="ws-error" role="alert">{ws.addMessage}</p>}
+              {ws.addStage === 'error' && (
+                <p className="ws-error" role="alert">
+                  {ws.addMessage}
+                  {isStaleBuildMessage(ws.addMessage) && <> <button type="button" className="ws-link" onClick={() => window.location.reload()}>Refresh page</button></>}
+                </p>
+              )}
             </> : (
               <div className="ws-stages" role="status" aria-live="polite">
                 <p className="ws-stages-msg">{ws.addMessage}</p>

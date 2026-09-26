@@ -1,11 +1,11 @@
 """Amazon Bedrock AgentCore entrypoint for the LexisGuide conversational assistant."""
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
-from lexisguide_assistant import ConversationAgent, parse_chat_request
+from lexisguide_assistant import SupervisorAgent, parse_chat_request
 from pydantic import ValidationError
 
 app = BedrockAgentCoreApp()
-agent = ConversationAgent()
+agent = SupervisorAgent()
 
 
 @app.entrypoint

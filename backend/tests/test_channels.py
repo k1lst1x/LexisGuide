@@ -1,0 +1,458 @@
+"""Slack-style channels: create, browse, join, leave, members, and delete.
+
+Runs the real routes and storage code against moto's in-memory DynamoDB.
+Ada owns the workspace; Bob is an ordinary member; Cy is not in it at all.
+"""
+
+from collections.abc import Iterator
+
+import boto3
+import pytest
+from fastapi.testclient import TestClient
+from moto import mock_aws
+
+from app import storage
+from app.auth import current_user
+from app.main import app
+
+ADA = {"sub": "ada-0001", "email": "ada@example.com", "name": "Ada"}
+BOB = {"sub": "bob-0002", "email": "bob@example.com", "name": "Bob"}
+CY = {"sub": "cy-00003", "email": "cy@example.com", "name": "Cy"}
+
+
+def as_user(user: dict[str, str]) -> None:
+    app.dependency_overrides[current_user] = lambda: user
+
+
+@pytest.fixture
+def api(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    with mock_aws():
+        table = boto3.resource("dynamodb", region_name="us-east-1").create_table(
+            TableName="user-data",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        monkeypatch.setattr(storage, "_table", lambda: table)
+        yield client
+
+
+@pytest.fixture
+def workspace(api: TestClient) -> str:
+    """Ada's workspace, which Bob has joined with an invite."""
+    as_user(ADA)
+    workspace_id = api.post("/api/v1/workspaces", json={"name": "Lease review"}).json()["id"]
+    code = api.post(f"/api/v1/workspaces/{workspace_id}/invites").json()["invite_code"]
+    as_user(BOB)
+    assert api.post("/api/v1/workspaces/join", json={"invite_code": code}).status_code == 200
+    return workspace_id
+
+
+def channels(api: TestClient, workspace_id: str) -> dict[str, dict]:
+    listed = api.get(f"/api/v1/workspaces/{workspace_id}/channels").json()
+    return {channel["name"]: channel for channel in listed}
+
+
+def create(api: TestClient, workspace_id: str, name: str, description: str = "") -> dict:
+    response = api.post(
+        f"/api/v1/workspaces/{workspace_id}/channels",
+        json={"name": name, "description": description},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_general_includes_everyone_and_cannot_be_left_or_deleted(
+    api: TestClient, workspace: str
+) -> None:
+    general = channels(api, workspace)["General"]
+    assert general["is_member"] and general["member_count"] == 2
+    assert api.post(f"/api/v1/workspaces/{workspace}/channels/general/leave").status_code == 400
+    as_user(ADA)
+    assert api.delete(f"/api/v1/workspaces/{workspace}/channels/general").status_code == 400
+
+
+def test_any_member_can_create_a_channel_with_a_description(
+    api: TestClient, workspace: str
+) -> None:
+    as_user(BOB)
+    channel = create(api, workspace, "#deadlines", "Every date we must not miss.")
+
+    assert channel["name"] == "deadlines"
+    assert channel["description"] == "Every date we must not miss."
+    assert channel["created_by_name"] == "Bob"
+    assert channel["is_member"] and channel["member_count"] == 1
+
+
+def test_channel_names_are_unique_whatever_the_case(api: TestClient, workspace: str) -> None:
+    create(api, workspace, "Deadlines")
+    response = api.post(f"/api/v1/workspaces/{workspace}/channels", json={"name": "deadlines"})
+    assert response.status_code == 409
+
+
+def test_others_can_browse_preview_and_join(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    channel = create(api, workspace, "deadlines")
+    api.post(
+        f"/api/v1/workspaces/{workspace}/messages",
+        json={"text": "Filing is due Friday.", "channel_id": channel["id"]},
+    )
+
+    as_user(ADA)
+    browsed = channels(api, workspace)["deadlines"]
+    assert not browsed["is_member"] and browsed["member_count"] == 1
+    # Reading before joining is allowed, as in Slack.
+    preview = api.get(f"/api/v1/workspaces/{workspace}/messages?channel_id={channel['id']}")
+    assert [message["text"] for message in preview.json()] == ["Filing is due Friday."]
+    # Posting is not.
+    blocked = api.post(
+        f"/api/v1/workspaces/{workspace}/messages",
+        json={"text": "Hello", "channel_id": channel["id"]},
+    )
+    assert blocked.status_code == 403
+    assert "Join #deadlines" in blocked.json()["detail"]
+
+    joined = api.post(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}/join").json()
+    assert joined["is_member"] and joined["member_count"] == 2
+    members = api.get(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}/members").json()
+    assert [member["name"] for member in members] == ["Bob", "Ada"]
+    assert {member["name"]: member["role"] for member in members} == {
+        "Bob": "member",
+        "Ada": "owner",
+    }
+
+
+def test_leaving_removes_you_from_the_channel(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    channel = create(api, workspace, "deadlines")
+
+    left = api.post(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}/leave").json()
+
+    assert not left["is_member"] and left["member_count"] == 0
+
+
+def test_only_the_creator_or_an_admin_can_edit_or_delete(api: TestClient, workspace: str) -> None:
+    as_user(ADA)
+    channel = create(api, workspace, "strategy")
+    path = f"/api/v1/workspaces/{workspace}/channels/{channel['id']}"
+
+    as_user(BOB)
+    assert channels(api, workspace)["strategy"]["can_manage"] is False
+    assert api.patch(path, json={"description": "Mine now"}).status_code == 403
+    assert api.delete(path).status_code == 403
+
+    as_user(ADA)
+    assert channels(api, workspace)["strategy"]["can_manage"] is True
+    edited = api.patch(path, json={"name": "case-strategy", "description": "How we argue it."})
+    assert edited.json()["name"] == "case-strategy"
+    assert edited.json()["description"] == "How we argue it."
+
+
+def test_a_workspace_owner_can_delete_a_members_channel_and_its_messages(
+    api: TestClient, workspace: str
+) -> None:
+    as_user(BOB)
+    channel = create(api, workspace, "offtopic")
+    api.post(
+        f"/api/v1/workspaces/{workspace}/messages",
+        json={"text": "Lunch?", "channel_id": channel["id"]},
+    )
+
+    as_user(ADA)
+    assert api.delete(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}").status_code == 204
+
+    assert "offtopic" not in channels(api, workspace)
+    gone = api.get(f"/api/v1/workspaces/{workspace}/messages?channel_id={channel['id']}")
+    assert gone.status_code == 404
+
+
+def test_a_quiet_channel_still_shows_its_messages_in_a_busy_workspace(
+    api: TestClient, workspace: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each channel is read on its own, not filtered from the busiest one."""
+    as_user(BOB)
+    quiet = create(api, workspace, "quiet")
+    api.post(
+        f"/api/v1/workspaces/{workspace}/messages",
+        json={"text": "The only message here", "channel_id": quiet["id"]},
+    )
+    for index in range(5):
+        api.post(f"/api/v1/workspaces/{workspace}/messages", json={"text": f"busy {index}"})
+
+    shown = storage.list_workspace_messages(workspace, quiet["id"], limit=3)
+
+    assert [message["text"] for message in shown] == ["The only message here"]
+
+
+def test_a_channel_records_when_it_last_had_a_message(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    api.post(f"/api/v1/workspaces/{workspace}/messages", json={"text": "Hi all"})
+    assert channels(api, workspace)["General"]["last_message_at"]
+
+
+def test_people_can_delete_their_own_messages_and_admins_any(
+    api: TestClient, workspace: str
+) -> None:
+    as_user(BOB)
+    mine = api.post(f"/api/v1/workspaces/{workspace}/messages", json={"text": "typo"}).json()
+    as_user(ADA)
+    theirs = api.post(f"/api/v1/workspaces/{workspace}/messages", json={"text": "notice"}).json()
+
+    as_user(BOB)
+    assert api.delete(f"/api/v1/workspaces/{workspace}/messages/{theirs['id']}").status_code == 403
+    assert api.delete(f"/api/v1/workspaces/{workspace}/messages/{mine['id']}").status_code == 204
+    as_user(ADA)
+    assert api.delete(f"/api/v1/workspaces/{workspace}/messages/{theirs['id']}").status_code == 204
+
+    assert api.get(f"/api/v1/workspaces/{workspace}/messages").json() == []
+
+
+def test_channels_made_before_membership_stay_open_to_everyone(
+    api: TestClient, workspace: str
+) -> None:
+    """An older channel has no member rows; everyone keeps access to it."""
+    storage._table().put_item(
+        Item={
+            "PK": f"WORKSPACE#{workspace}",
+            "SK": "CHANNEL#legacy-channel",
+            "id": "legacy-channel",
+            "workspace_id": workspace,
+            "name": "Old channel",
+            "created_at": "2026-09-25T10:00:00+00:00",
+        }
+    )
+
+    old = channels(api, workspace)["Old channel"]
+
+    assert old["is_member"] and old["member_count"] == 2
+
+
+def test_outsiders_see_nothing(api: TestClient, workspace: str) -> None:
+    as_user(CY)
+    assert api.get(f"/api/v1/workspaces/{workspace}/channels").status_code == 403
+    assert (
+        api.post(f"/api/v1/workspaces/{workspace}/channels", json={"name": "x"}).status_code == 403
+    )
+    assert api.get(f"/api/v1/workspaces/{workspace}/channels/general/members").status_code == 403
+
+
+# ── Admin rights and the workspace itself ───────────────────────────────────
+
+
+def roster(api: TestClient, workspace_id: str) -> dict[str, str]:
+    members = api.get(f"/api/v1/workspaces/{workspace_id}/members").json()
+    return {member["name"]: member["role"] for member in members}
+
+
+def test_only_admins_can_delete_a_channel_even_its_creator(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    channel = create(api, workspace, "bobs-channel")
+    assert channel["can_manage"] is True and channel["can_delete"] is False
+
+    assert api.delete(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}").status_code == 403
+
+    as_user(ADA)
+    assert channels(api, workspace)["bobs-channel"]["can_delete"] is True
+    assert api.delete(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}").status_code == 204
+
+
+def test_the_owner_grants_and_removes_admin_rights(api: TestClient, workspace: str) -> None:
+    as_user(ADA)
+    granted = api.put(
+        f"/api/v1/workspaces/{workspace}/members/{BOB['sub']}/role", json={"role": "admin"}
+    )
+    assert granted.status_code == 200
+    assert roster(api, workspace) == {"Ada": "owner", "Bob": "admin"}
+
+    # Bob, now an admin, can delete channels and sees himself as an admin.
+    as_user(BOB)
+    assert api.get("/api/v1/workspaces").json()[0]["role"] == "admin"
+    channel = create(api, workspace, "temporary")
+    assert api.delete(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}").status_code == 204
+
+    as_user(ADA)
+    api.put(f"/api/v1/workspaces/{workspace}/members/{BOB['sub']}/role", json={"role": "member"})
+    assert roster(api, workspace) == {"Ada": "owner", "Bob": "member"}
+
+
+def test_only_the_owner_hands_out_admin_rights(api: TestClient, workspace: str) -> None:
+    as_user(ADA)
+    api.put(f"/api/v1/workspaces/{workspace}/members/{BOB['sub']}/role", json={"role": "admin"})
+
+    as_user(BOB)
+    # An admin cannot promote others or demote the owner.
+    demote = api.put(
+        f"/api/v1/workspaces/{workspace}/members/{ADA['sub']}/role", json={"role": "member"}
+    )
+    assert demote.status_code == 403
+    assert roster(api, workspace)["Ada"] == "owner"
+
+
+def test_members_can_leave_and_admins_can_remove_them(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    channel = create(api, workspace, "bobs-notes")
+    assert api.delete(f"/api/v1/workspaces/{workspace}/members/{BOB['sub']}").status_code == 204
+
+    as_user(ADA)
+    assert roster(api, workspace) == {"Ada": "owner"}
+    # Leaving also took Bob out of every channel he had joined.
+    assert channels(api, workspace)["bobs-notes"]["member_count"] == 0
+    assert channel["id"]
+
+
+def test_a_member_cannot_remove_others_and_nobody_removes_the_owner(
+    api: TestClient, workspace: str
+) -> None:
+    as_user(BOB)
+    assert api.delete(f"/api/v1/workspaces/{workspace}/members/{ADA['sub']}").status_code == 400
+    as_user(ADA)
+    assert api.delete(f"/api/v1/workspaces/{workspace}/members/{ADA['sub']}").status_code == 400
+
+
+def test_only_admins_can_delete_the_workspace(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    assert api.delete(f"/api/v1/workspaces/{workspace}").status_code == 403
+
+    as_user(ADA)
+    assert api.delete(f"/api/v1/workspaces/{workspace}").status_code == 204
+
+    assert api.get("/api/v1/workspaces").json() == []
+    as_user(BOB)
+    assert api.get("/api/v1/workspaces").json() == []
+    assert api.get(f"/api/v1/workspaces/{workspace}/channels").status_code == 403
+
+
+# ── Reactions, mentions, saved messages, and shared files ───────────────────
+
+
+def post(api: TestClient, workspace_id: str, text: str, **extra: object) -> dict:
+    response = api.post(f"/api/v1/workspaces/{workspace_id}/messages", json={"text": text, **extra})
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def messages(api: TestClient, workspace_id: str) -> list[dict]:
+    return api.get(f"/api/v1/workspaces/{workspace_id}/messages").json()
+
+
+def react(api: TestClient, workspace_id: str, message_id: str, emoji: str) -> dict:
+    response = api.post(
+        f"/api/v1/workspaces/{workspace_id}/messages/{message_id}/reactions", json={"emoji": emoji}
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_emoji_reactions_are_saved_and_seen_by_everyone(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    message = post(api, workspace, "Filed today.")
+    react(api, workspace, message["id"], "🎉")
+    as_user(ADA)
+    react(api, workspace, message["id"], "🎉")
+    react(api, workspace, message["id"], "👍🏽")
+
+    [seen] = messages(api, workspace)
+    by_emoji = {item["emoji"]: item for item in seen["reactions"]}
+
+    assert by_emoji["🎉"]["count"] == 2 and by_emoji["🎉"]["names"] == ["Bob", "Ada"]
+    assert by_emoji["🎉"]["mine"] is True
+    assert by_emoji["👍🏽"]["count"] == 1
+
+
+def test_reacting_again_takes_the_reaction_back(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    message = post(api, workspace, "Filed today.")
+    react(api, workspace, message["id"], "👍")
+
+    after = react(api, workspace, message["id"], "👍")
+
+    assert after["reactions"] == []
+
+
+def test_mentions_are_stored_with_the_message(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    mentions = [
+        {"type": "user", "id": ADA["sub"], "label": "Ada"},
+        {"type": "channel", "id": "general", "label": "General"},
+    ]
+    post(api, workspace, "@Ada see #General", mentions=mentions)
+
+    assert messages(api, workspace)[0]["mentions"] == mentions
+
+
+def test_saved_messages_are_kept_per_person(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    message = post(api, workspace, "Remember this.")
+    path = f"/api/v1/workspaces/{workspace}/messages/{message['id']}/saved"
+    assert api.put(path).status_code == 204
+
+    assert messages(api, workspace)[0]["saved"] is True
+    as_user(ADA)
+    assert messages(api, workspace)[0]["saved"] is False
+    as_user(BOB)
+    api.delete(path)
+    assert messages(api, workspace)[0]["saved"] is False
+
+
+def test_a_shared_document_can_be_opened_by_every_member(api: TestClient, workspace: str) -> None:
+    from hashlib import sha256
+
+    as_user(BOB)
+    document = {
+        "id": "upload-lease.pdf-1-2",
+        "title": "Oak Street lease",
+        "type": "Lease",
+        "text": "Rent is due on the first.",
+        "score": 62,
+        "findings": [{"title": "Late fee", "severity": "warning", "evidence": "fee"}],
+    }
+    sent = post(api, workspace, "Please look", attachment=document["id"], documents=[document])
+    assert sent["attachment_title"] == "Oak Street lease"
+    key = sha256(document["id"].encode()).hexdigest()
+
+    as_user(ADA)
+    [listed] = api.get(f"/api/v1/workspaces/{workspace}/files").json()
+    assert listed["title"] == "Oak Street lease" and listed["shared_by_name"] == "Bob"
+    opened = api.get(f"/api/v1/workspaces/{workspace}/files/{key}").json()
+    assert opened["document"]["text"] == "Rent is due on the first."
+
+    # Ada edits it in Review and shares the new version.
+    updated = api.put(
+        f"/api/v1/workspaces/{workspace}/files/{key}",
+        json={**document, "text": "Rent is due on the fifth."},
+    )
+    assert updated.status_code == 200
+    as_user(BOB)
+    latest = api.get(f"/api/v1/workspaces/{workspace}/files/{key}").json()
+    assert latest["document"]["text"] == "Rent is due on the fifth."
+    assert latest["shared_by_name"] == "Ada"
+
+
+def test_deleting_a_message_removes_its_reactions(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    message = post(api, workspace, "Oops")
+    react(api, workspace, message["id"], "😅")
+
+    api.delete(f"/api/v1/workspaces/{workspace}/messages/{message['id']}")
+
+    assert storage.channel_reactions(workspace, "general") == {}
+
+
+def test_outsiders_cannot_react_or_read_shared_files(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    message = post(api, workspace, "Private")
+    as_user(CY)
+    assert (
+        api.post(
+            f"/api/v1/workspaces/{workspace}/messages/{message['id']}/reactions",
+            json={"emoji": "👍"},
+        ).status_code
+        == 403
+    )
+    assert api.get(f"/api/v1/workspaces/{workspace}/files").status_code == 403

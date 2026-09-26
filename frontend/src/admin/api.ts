@@ -51,7 +51,7 @@ export type AuditEntry = {
 
 export type Overview = {
   users: { total: number; enabled: number; disabled: number; federated: number; admins: number }
-  data: { workspaces: number; documents: number; conversations: number; lawyers_verified: number; lawyers_locked: number }
+  data: { workspaces: number; documents: number; conversations: number }
   recent_actions: AuditEntry[]
 }
 
@@ -68,25 +68,11 @@ export type AdminUser = {
   provider: string
 }
 
-export type LawyerStatus = {
-  verified: boolean
-  attempts_used: number
-  attempts_remaining: number
-  max_attempts: number
-  bar_number: string
-  jurisdiction: string
-  name: string
-  status: string
-  admitted_on: string
-  verified_at: string
-}
-
 export type UserDetail = AdminUser & {
   display_name: string
   documents: number
   conversations: number
   workspaces: Array<{ id: string; name: string; role: string }>
-  lawyer_verification: LawyerStatus
 }
 
 export type AdminWorkspace = {
@@ -98,6 +84,9 @@ export type AdminWorkspace = {
   member_count: number
   linked_document_title: string | null
 }
+
+export type IntegrationStatus = { configured: boolean; ready: boolean; detail: string }
+export type Integrations = { statute_lookup: IntegrationStatus; document_ledger: IntegrationStatus }
 
 export type AdminWorkspaceMember = { user_id: string; email: string; name: string; role: string; joined_at: string }
 
@@ -115,14 +104,12 @@ export const adminApi = {
   signOut: (username: string) => adminRequest(`${user(username)}/sign-out`, { method: 'POST' }),
   setAdmin: (username: string, admin: boolean) => adminRequest(`${user(username)}/admin`, { method: 'PUT', body: json({ admin }) }),
   deleteUser: (username: string) => adminRequest(user(username), { method: 'DELETE' }),
-  resetLawyer: (username: string) => adminRequest<LawyerStatus>(`${user(username)}/lawyer-verification`, { method: 'DELETE' }),
-  verifyLawyer: (username: string, body: { bar_number: string; jurisdiction: string; name: string; note: string }) =>
-    adminRequest<LawyerStatus>(`${user(username)}/lawyer-verification`, { method: 'POST', body: json(body) }),
   workspaces: () => adminRequest<AdminWorkspace[]>('/workspaces'),
   workspaceMembers: (id: string) => adminRequest<AdminWorkspaceMember[]>(`/workspaces/${encodeURIComponent(id)}/members`),
   deleteWorkspace: (id: string) => adminRequest(`/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   removeMember: (id: string, userId: string) =>
     adminRequest(`/workspaces/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+  integrations: () => adminRequest<Integrations>('/integrations'),
   audit: (limit = 200) => adminRequest<AuditEntry[]>(`/audit?limit=${limit}`),
 }
 
@@ -133,8 +120,6 @@ const ACTION_LABELS: Record<string, string> = {
   'user.grant_admin': 'Granted admin access',
   'user.revoke_admin': 'Removed admin access',
   'user.delete': 'Deleted account',
-  'lawyer.reset': 'Reset bar verification',
-  'lawyer.verify': 'Verified bar record',
   'workspace.delete': 'Deleted workspace',
   'workspace.remove_member': 'Removed workspace member',
 }

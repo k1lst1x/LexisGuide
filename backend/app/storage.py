@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import gzip
+import json
 import os
 import secrets
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from functools import lru_cache
 from hashlib import sha256
 from typing import Any
@@ -12,11 +15,9 @@ from uuid import uuid4
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
-from boto3.dynamodb.types import TypeSerializer
 from botocore.exceptions import ClientError
 
 INVITE_TTL_SECONDS = 24 * 60 * 60
-LAWYER_VERIFICATION_MAX_ATTEMPTS = 3
 REVIEW_RATE_LIMIT_WINDOW_SECONDS = 60
 REVIEW_RATE_LIMIT_PER_WINDOW = 10
 CHAT_RATE_LIMIT_WINDOW_SECONDS = 60
@@ -34,6 +35,10 @@ REMOTE_OPERATION_LEASE_SECONDS = 60
 # user-controlled data, even when an authenticated client writes continuously.
 MAX_RECORDS_PER_USER = 500
 MAX_CONVERSATIONS_PER_USER = 100
+MAX_DOCUMENTS_PER_USER = 200
+# DynamoDB items stop at 400 KB. Compressed bodies stay well under it, leaving
+# room for the other attributes.
+MAX_DOCUMENT_BYTES = 350_000
 RESOURCE_WRITE_RETRIES = 5
 
 
@@ -97,8 +102,7 @@ def save_record(user_id: str, record_id: str, record: dict[str, Any]) -> dict[st
 def _count_user_resources(user_id: str, prefix: str) -> int:
     """Count all matching rows, including legacy rows created before quotas existed."""
     query_args: dict[str, Any] = {
-        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with(prefix),
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with(prefix),
         "Select": "COUNT",
     }
     total = 0
@@ -112,16 +116,10 @@ def _count_user_resources(user_id: str, prefix: str) -> int:
 
 
 def _quota_count(user_id: str, kind: str) -> int:
-    item = _table().get_item(
-        Key={"PK": f"USER#{user_id}", "SK": f"QUOTA#{kind}"}
-    ).get("Item", {})
+    item = _table().get_item(Key={"PK": f"USER#{user_id}", "SK": f"QUOTA#{kind}"}).get("Item", {})
+    # DynamoDB hands numbers back as Decimal, never int.
     value = item.get("count", 0)
-    return value if isinstance(value, int) and value >= 0 else 0
-
-
-def _serialize(values: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    serializer = TypeSerializer()
-    return {key: serializer.serialize(value) for key, value in values.items()}
+    return int(value) if isinstance(value, int | Decimal) and value >= 0 else 0
 
 
 def _cancellation_reason(error: ClientError, index: int) -> str | None:
@@ -141,6 +139,10 @@ def _create_resource_with_limit(
 ) -> str:
     """Atomically write one new row and its exact user quota.
 
+    Values go to ``table.meta.client`` as plain Python: a DynamoDB resource's
+    client serializes them itself, so pre-serialized values would be encoded
+    twice and every transaction rejected.
+
     The initial count is reconciled from existing rows, so accounts created
     before this guardrail cannot receive a second allocation. A conditional
     transaction keeps the item and quota inseparable under concurrent writes.
@@ -159,24 +161,23 @@ def _create_resource_with_limit(
                     {
                         "Put": {
                             "TableName": table.name,
-                            "Item": _serialize(item),
+                            "Item": item,
                             "ConditionExpression": "attribute_not_exists(PK)",
                         }
                     },
                     {
                         "Update": {
                             "TableName": table.name,
-                            "Key": _serialize(
-                                {"PK": f"USER#{user_id}", "SK": f"QUOTA#{kind}"}
-                            ),
+                            "Key": {"PK": f"USER#{user_id}", "SK": f"QUOTA#{kind}"},
                             "UpdateExpression": "SET #count = :new_count",
                             "ConditionExpression": (
                                 "attribute_not_exists(#count) OR #count = :observed_count"
                             ),
                             "ExpressionAttributeNames": {"#count": "count"},
-                            "ExpressionAttributeValues": _serialize(
-                                {":new_count": count + 1, ":observed_count": observed_quota}
-                            ),
+                            "ExpressionAttributeValues": {
+                                ":new_count": count + 1,
+                                ":observed_count": observed_quota,
+                            },
                         }
                     },
                 ]
@@ -209,6 +210,31 @@ def create_record_with_limit(
     return item
 
 
+def _pack_turns(turns: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bytes]:
+    """Compress a conversation to fit one DynamoDB item.
+
+    Long pasted questions and long answers made the raw turns overflow the
+    400 KB item limit, so the whole save failed and the conversation was lost.
+    Compressed, a long conversation fits easily; if one ever does not, its
+    oldest turns go first rather than the save failing.
+    """
+    kept = list(turns)
+    while True:
+        body = gzip.compress(json.dumps(kept, separators=(",", ":")).encode("utf-8"))
+        if len(body) <= MAX_DOCUMENT_BYTES or len(kept) <= 1:
+            return kept, body
+        kept = kept[1:]
+
+
+def _unpack_turns(item: dict[str, Any]) -> list[dict[str, Any]]:
+    packed = item.get("turns_gz")
+    if packed is not None:
+        raw = getattr(packed, "value", packed)  # boto3 returns a Binary wrapper.
+        return json.loads(gzip.decompress(bytes(raw)).decode("utf-8"))
+    # Conversations saved before compression kept their turns as a plain list.
+    return list(item.get("turns", []))
+
+
 def get_conversation(user_id: str, conversation_id: str) -> dict[str, Any] | None:
     """Read one of this user's saved conversations.
 
@@ -224,7 +250,7 @@ def get_conversation(user_id: str, conversation_id: str) -> dict[str, Any] | Non
         return None
     return {
         "conversation_id": conversation_id,
-        "turns": item.get("turns", []),
+        "turns": _unpack_turns(item),
         "updated_at": item.get("updated_at", ""),
         "title": item.get("title", ""),
     }
@@ -235,16 +261,17 @@ def save_conversation(
 ) -> dict[str, Any]:
     """Write a conversation back to the user's own partition."""
     now = datetime.now(UTC).isoformat()
+    kept, packed = _pack_turns(turns)
     _table().put_item(
         Item={
             "PK": f"USER#{user_id}",
             "SK": f"CHAT#{conversation_id}",
-            "turns": turns,
+            "turns_gz": packed,
             "title": title,
             "updated_at": now,
         }
     )
-    return {"conversation_id": conversation_id, "turns": turns, "updated_at": now, "title": title}
+    return {"conversation_id": conversation_id, "turns": kept, "updated_at": now, "title": title}
 
 
 def save_conversation_with_limit(
@@ -259,10 +286,11 @@ def save_conversation_with_limit(
         return "updated", save_conversation(user_id, conversation_id, turns, title)
 
     now = datetime.now(UTC).isoformat()
+    kept, packed = _pack_turns(turns)
     item = {
         "PK": f"USER#{user_id}",
         "SK": f"CHAT#{conversation_id}",
-        "turns": turns,
+        "turns_gz": packed,
         "title": title,
         "updated_at": now,
     }
@@ -276,7 +304,7 @@ def save_conversation_with_limit(
     if result == "created":
         return "created", {
             "conversation_id": conversation_id,
-            "turns": turns,
+            "turns": kept,
             "updated_at": now,
             "title": title,
         }
@@ -346,6 +374,16 @@ def create_workspace(owner: dict[str, str], name: str) -> dict[str, Any]:
             "joined_at": now,
         }
     )
+    table.put_item(
+        Item={
+            "PK": f"WORKSPACE#{workspace_id}",
+            "SK": "CHANNEL#general",
+            "id": "general",
+            "workspace_id": workspace_id,
+            "name": "General",
+            "created_at": now,
+        }
+    )
     return workspace
 
 
@@ -388,12 +426,406 @@ def get_workspace_membership(workspace_id: str, user_id: str) -> dict[str, Any] 
     )
 
 
+def set_workspace_member_role(workspace_id: str, user_id: str, role: str) -> None:
+    """Change a member's role, on both the roster row and their own pointer."""
+    for key in (
+        {"PK": f"WORKSPACE#{workspace_id}", "SK": f"MEMBER#{user_id}"},
+        {"PK": f"USER#{user_id}", "SK": f"WORKSPACE#{workspace_id}"},
+    ):
+        _table().update_item(
+            Key=key,
+            UpdateExpression="SET #role = :role",
+            ConditionExpression=Attr("PK").exists(),
+            ExpressionAttributeNames={"#role": "role"},
+            ExpressionAttributeValues={":role": role},
+        )
+
+
+def remove_workspace_member(workspace_id: str, user_id: str) -> None:
+    """Take someone out of a workspace, including every channel they joined."""
+    keys = [
+        {"PK": f"WORKSPACE#{workspace_id}", "SK": f"MEMBER#{user_id}"},
+        {"PK": f"USER#{user_id}", "SK": f"WORKSPACE#{workspace_id}"},
+    ]
+    keys += [
+        {"PK": item["PK"], "SK": item["SK"]}
+        for item in _query_prefix(workspace_id, "CHANMEM#")
+        if item.get("user_id") == user_id
+    ]
+    with _table().batch_writer() as batch:
+        for key in keys:
+            batch.delete_item(Key=key)
+
+
+def delete_workspace(workspace_id: str) -> None:
+    """Delete a workspace with its channels, messages, and every membership."""
+    admin_delete_workspace(workspace_id)
+
+
 def list_workspace_members(workspace_id: str) -> list[dict[str, Any]]:
     response = _table().query(
         KeyConditionExpression=Key("PK").eq(f"WORKSPACE#{workspace_id}")
         & Key("SK").begins_with("MEMBER#")
     )
     return response.get("Items", [])
+
+
+GENERAL = "general"
+
+
+def _channel_key(workspace_id: str, channel_id: str) -> dict[str, str]:
+    return {"PK": f"WORKSPACE#{workspace_id}", "SK": f"CHANNEL#{channel_id}"}
+
+
+def _channel_member_sk(channel_id: str, user_id: str) -> str:
+    return f"CHANMEM#{channel_id}#{user_id}"
+
+
+def _query_prefix(workspace_id: str, prefix: str, **extra: Any) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    args: dict[str, Any] = {
+        "KeyConditionExpression": Key("PK").eq(f"WORKSPACE#{workspace_id}")
+        & Key("SK").begins_with(prefix),
+        **extra,
+    }
+    while True:
+        response = _table().query(**args)
+        items.extend(response.get("Items", []))
+        last = response.get("LastEvaluatedKey")
+        if last is None or "Limit" in extra:
+            return items
+        args["ExclusiveStartKey"] = last
+
+
+def _general(workspace_id: str) -> dict[str, Any]:
+    return {
+        **_channel_key(workspace_id, GENERAL),
+        "id": GENERAL,
+        "workspace_id": workspace_id,
+        "name": "General",
+        "description": (
+            "Everyone in the workspace. Announcements and anything that fits no other channel."
+        ),
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _seed_channel_members(workspace_id: str, channel: dict[str, Any]) -> None:
+    """Channels made before membership existed were open to everyone; keep
+    that by making every current workspace member a member, once."""
+    with _table().batch_writer() as batch:
+        for member in list_workspace_members(workspace_id):
+            batch.put_item(
+                Item={
+                    "PK": f"WORKSPACE#{workspace_id}",
+                    "SK": _channel_member_sk(channel["id"], member["user_id"]),
+                    "channel_id": channel["id"],
+                    "user_id": member["user_id"],
+                    "email": member.get("email", ""),
+                    "name": member.get("name", ""),
+                    "joined_at": channel.get("created_at", ""),
+                }
+            )
+    _table().update_item(
+        Key=_channel_key(workspace_id, channel["id"]),
+        UpdateExpression="SET members_seeded = :true",
+        ExpressionAttributeValues={":true": True},
+    )
+
+
+def list_workspace_channels(workspace_id: str, user_id: str | None = None) -> list[dict[str, Any]]:
+    """Every channel in a workspace, with its member count and whether
+    ``user_id`` belongs to it. General comes first, then by name."""
+    channels = _query_prefix(workspace_id, "CHANNEL#")
+    # Workspaces created before channels shipped get General lazily, without
+    # losing any of their existing messages.
+    if not any(channel["id"] == GENERAL for channel in channels):
+        general = _general(workspace_id)
+        _table().put_item(Item=general)
+        channels.append(general)
+    for channel in channels:
+        if channel["id"] != GENERAL and not channel.get("members_seeded"):
+            _seed_channel_members(workspace_id, channel)
+    memberships = _query_prefix(workspace_id, "CHANMEM#")
+    workspace_members = list_workspace_members(workspace_id)
+    counts: dict[str, int] = {}
+    mine: set[str] = set()
+    for membership in memberships:
+        counts[membership["channel_id"]] = counts.get(membership["channel_id"], 0) + 1
+        if membership.get("user_id") == user_id:
+            mine.add(membership["channel_id"])
+    listed = []
+    for channel in channels:
+        is_general = channel["id"] == GENERAL
+        listed.append(
+            {
+                **channel,
+                "member_count": len(workspace_members)
+                if is_general
+                else counts.get(channel["id"], 0),
+                "is_member": is_general or channel["id"] in mine,
+            }
+        )
+    return sorted(listed, key=lambda channel: (channel["id"] != GENERAL, channel["name"].lower()))
+
+
+def get_workspace_channel(workspace_id: str, channel_id: str) -> dict[str, Any] | None:
+    channel = _table().get_item(Key=_channel_key(workspace_id, channel_id)).get("Item")
+    if channel is None and channel_id == GENERAL:
+        # Backfill General for a pre-channel workspace before its first read or
+        # write, even when the client has not opened the channel list yet.
+        channel = _general(workspace_id)
+        _table().put_item(Item=channel)
+    return channel
+
+
+def channel_name_taken(workspace_id: str, name: str, except_id: str | None = None) -> bool:
+    wanted = name.casefold()
+    return any(
+        channel["name"].casefold() == wanted and channel["id"] != except_id
+        for channel in _query_prefix(workspace_id, "CHANNEL#")
+    )
+
+
+def create_workspace_channel(
+    workspace_id: str, name: str, description: str = "", creator: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """Create a channel; whoever creates it is its first member."""
+    channel_id = str(uuid4())
+    now = datetime.now(UTC).isoformat()
+    creator = creator or {}
+    channel = {
+        **_channel_key(workspace_id, channel_id),
+        "id": channel_id,
+        "workspace_id": workspace_id,
+        "name": name,
+        "description": description,
+        "created_by": creator.get("sub", ""),
+        "created_by_name": creator.get("name") or creator.get("email", ""),
+        "created_at": now,
+        "members_seeded": True,
+    }
+    _table().put_item(Item=channel)
+    if creator.get("sub"):
+        add_channel_member(workspace_id, channel_id, creator)
+    return channel
+
+
+def update_workspace_channel(
+    workspace_id: str, channel_id: str, name: str | None = None, description: str | None = None
+) -> dict[str, Any]:
+    fields = {
+        key: value
+        for key, value in (("name", name), ("description", description))
+        if value is not None
+    }
+    if not fields:
+        return get_workspace_channel(workspace_id, channel_id) or {}
+    names = {f"#f{index}": key for index, key in enumerate(fields)}
+    values = {f":v{index}": value for index, value in enumerate(fields.values())}
+    response = _table().update_item(
+        Key=_channel_key(workspace_id, channel_id),
+        UpdateExpression="SET " + ", ".join(f"#f{i} = :v{i}" for i in range(len(fields))),
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=values,
+        ReturnValues="ALL_NEW",
+    )
+    return response["Attributes"]
+
+
+def delete_workspace_channel(workspace_id: str, channel_id: str) -> bool:
+    """Remove a channel with its memberships and messages. General stays."""
+    if channel_id == GENERAL or not get_workspace_channel(workspace_id, channel_id):
+        return False
+    keys = [
+        {"PK": item["PK"], "SK": item["SK"]}
+        for item in _query_prefix(workspace_id, f"CHANMEM#{channel_id}#")
+    ]
+    keys += [
+        {"PK": item["PK"], "SK": item["SK"]}
+        for item in _query_prefix(workspace_id, f"MESSAGE#{channel_id}#")
+    ]
+    keys += [
+        {"PK": item["PK"], "SK": item["SK"]}
+        for item in _legacy_messages(workspace_id)
+        if item.get("channel_id") == channel_id
+    ]
+    keys += [
+        {"PK": item["PK"], "SK": item["SK"]}
+        for item in _query_prefix(workspace_id, f"REACT#{channel_id}#")
+    ]
+    keys.append(_channel_key(workspace_id, channel_id))
+    with _table().batch_writer() as batch:
+        for key in keys:
+            batch.delete_item(Key=key)
+    return True
+
+
+def is_channel_member(workspace_id: str, channel_id: str, user_id: str) -> bool:
+    if channel_id == GENERAL:
+        return get_workspace_membership(workspace_id, user_id) is not None
+    return bool(
+        _table()
+        .get_item(
+            Key={"PK": f"WORKSPACE#{workspace_id}", "SK": _channel_member_sk(channel_id, user_id)}
+        )
+        .get("Item")
+    )
+
+
+def add_channel_member(workspace_id: str, channel_id: str, user: dict[str, str]) -> None:
+    _table().put_item(
+        Item={
+            "PK": f"WORKSPACE#{workspace_id}",
+            "SK": _channel_member_sk(channel_id, user["sub"]),
+            "channel_id": channel_id,
+            "user_id": user["sub"],
+            "email": user.get("email", ""),
+            "name": user.get("name", ""),
+            "joined_at": datetime.now(UTC).isoformat(),
+        }
+    )
+
+
+def remove_channel_member(workspace_id: str, channel_id: str, user_id: str) -> None:
+    _table().delete_item(
+        Key={"PK": f"WORKSPACE#{workspace_id}", "SK": _channel_member_sk(channel_id, user_id)}
+    )
+
+
+def list_channel_members(workspace_id: str, channel_id: str) -> list[dict[str, Any]]:
+    """Channel members with their workspace role, earliest joiner first."""
+    workspace_members = {
+        member["user_id"]: member for member in list_workspace_members(workspace_id)
+    }
+    if channel_id == GENERAL:
+        people = list(workspace_members.values())
+    else:
+        people = [
+            {**workspace_members.get(item["user_id"], {}), **item}
+            for item in _query_prefix(workspace_id, f"CHANMEM#{channel_id}#")
+        ]
+    return sorted(
+        [
+            {
+                "user_id": person["user_id"],
+                "email": person.get("email", ""),
+                "name": person.get("name", ""),
+                "role": workspace_members.get(person["user_id"], {}).get("role", "member"),
+                "joined_at": person.get("joined_at", ""),
+            }
+            for person in people
+        ],
+        key=lambda person: person["joined_at"],
+    )
+
+
+def create_workspace_message(
+    workspace_id: str,
+    user: dict[str, str],
+    text: str,
+    attachment: str | None = None,
+    channel_id: str = GENERAL,
+    mentions: list[dict[str, str]] | None = None,
+    attachment_title: str = "",
+) -> dict[str, Any]:
+    """Store a message inside one shared workspace's partition.
+
+    Messages never live under a browser or a user partition, so every member
+    who passes the membership check reads the same ordered thread. Each
+    channel's messages share a key prefix, so reading one channel never reads
+    another's.
+    """
+    now = datetime.now(UTC).isoformat()
+    message_id = str(uuid4())
+    message = {
+        "id": message_id,
+        "workspace_id": workspace_id,
+        "channel_id": channel_id,
+        "author_id": user.get("sub", ""),
+        "user": user.get("name") or user.get("email") or "Workspace member",
+        "author_email": user.get("email", ""),
+        "text": text,
+        "created_at": now,
+        "attachment": attachment or "",
+        "attachment_title": attachment_title,
+        "mentions": mentions or [],
+    }
+    _table().put_item(
+        Item={
+            "PK": f"WORKSPACE#{workspace_id}",
+            # ISO-8601 is lexicographically ordered, keeping DynamoDB reads in
+            # conversation order without a table-wide scan.
+            "SK": f"MESSAGE#{channel_id}#{now}#{message_id}",
+            **message,
+        }
+    )
+    try:
+        _table().update_item(
+            Key=_channel_key(workspace_id, channel_id),
+            UpdateExpression="SET last_message_at = :at",
+            ConditionExpression=Attr("PK").exists(),
+            ExpressionAttributeValues={":at": now},
+        )
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            raise
+    return message
+
+
+def _legacy_messages(workspace_id: str, limit: int | None = None) -> list[dict[str, Any]]:
+    """Messages stored before each channel had its own key prefix. Their key
+    is MESSAGE#<timestamp>#<id>, and all were written in 2026 or later."""
+    extra: dict[str, Any] = {"ScanIndexForward": False}
+    if limit:
+        extra["Limit"] = limit
+    return [
+        item
+        for item in _query_prefix(workspace_id, "MESSAGE#20", **extra)
+        if len(item["SK"].split("#")) == 3
+    ]
+
+
+def list_workspace_messages(
+    workspace_id: str, channel_id: str = GENERAL, limit: int = 200
+) -> list[dict[str, Any]]:
+    """A channel's newest messages, oldest first."""
+    current = _query_prefix(
+        workspace_id, f"MESSAGE#{channel_id}#", ScanIndexForward=False, Limit=limit
+    )
+    legacy = [
+        item
+        for item in _legacy_messages(workspace_id, limit)
+        # Messages written before channels belong to General.
+        if item.get("channel_id", GENERAL) == channel_id
+    ]
+    merged = sorted(current + legacy, key=lambda item: item["created_at"])
+    return merged[-limit:]
+
+
+def get_workspace_message(
+    workspace_id: str, channel_id: str, message_id: str
+) -> dict[str, Any] | None:
+    return next(
+        (
+            item
+            for item in list_workspace_messages(workspace_id, channel_id, limit=1_000)
+            if item["id"] == message_id
+        ),
+        None,
+    )
+
+
+def delete_workspace_message(workspace_id: str, message: dict[str, Any]) -> None:
+    channel_id = message.get("channel_id", GENERAL)
+    keys = [{"PK": message["PK"], "SK": message["SK"]}]
+    keys += [
+        {"PK": item["PK"], "SK": item["SK"]}
+        for item in _query_prefix(workspace_id, f"REACT#{channel_id}#{message['id']}#")
+    ]
+    with _table().batch_writer() as batch:
+        for key in keys:
+            batch.delete_item(Key=key)
 
 
 def consume_review_quota(user_id: str) -> bool:
@@ -528,95 +960,6 @@ def _consume_quota(kind: str, user_id: str, window_seconds: int, request_limit: 
     return True
 
 
-def get_lawyer_verification(user_id: str) -> dict[str, Any]:
-    """Return this user's bar-verification record, defaulted for a first-time caller."""
-    item = _table().get_item(Key={"PK": f"USER#{user_id}", "SK": "LAWYER"}).get("Item") or {}
-    attempts = int(item.get("attempts", 0))
-    return {
-        "verified": bool(item.get("verified", False)),
-        "attempts_used": attempts,
-        "attempts_remaining": max(LAWYER_VERIFICATION_MAX_ATTEMPTS - attempts, 0),
-        "max_attempts": LAWYER_VERIFICATION_MAX_ATTEMPTS,
-        "bar_number": item.get("bar_number", ""),
-        "jurisdiction": item.get("jurisdiction", ""),
-        "name": item.get("name", ""),
-        "status": item.get("status", ""),
-        "admitted_on": item.get("admitted_on", ""),
-        "verified_at": item.get("verified_at", ""),
-    }
-
-
-def reserve_lawyer_attempt(user_id: str) -> bool:
-    """Claim one of the attempts before calling the provider.
-
-    Reserving first is what actually enforces the cap: two requests in flight
-    together cannot both pass a read-then-write check. The provider is metered
-    and the allowance is shared by every user, so an over-run costs everyone.
-    A reservation that never reaches a verdict is returned by
-    ``release_lawyer_attempt``.
-    """
-    try:
-        _table().update_item(
-            Key={"PK": f"USER#{user_id}", "SK": "LAWYER"},
-            UpdateExpression="ADD attempts :increment",
-            ConditionExpression=(
-                "(attribute_not_exists(attempts) OR attempts < :limit) "
-                "AND (attribute_not_exists(verified) OR verified = :false)"
-            ),
-            ExpressionAttributeValues={
-                ":increment": 1,
-                ":limit": LAWYER_VERIFICATION_MAX_ATTEMPTS,
-                ":false": False,
-            },
-        )
-    except ClientError as error:
-        if error.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
-            return False
-        raise
-    return True
-
-
-def release_lawyer_attempt(user_id: str) -> None:
-    """Give back a reserved attempt when the provider never returned a verdict.
-
-    Only an answer about the person spends an attempt. A spent allowance, a
-    timeout, or an outage must not count against them.
-    """
-    try:
-        _table().update_item(
-            Key={"PK": f"USER#{user_id}", "SK": "LAWYER"},
-            UpdateExpression="ADD attempts :decrement",
-            ConditionExpression="attempts > :zero AND (attribute_not_exists(verified) "
-            "OR verified = :false)",
-            ExpressionAttributeValues={":decrement": -1, ":zero": 0, ":false": False},
-        )
-    except ClientError as error:
-        if error.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
-            raise
-
-
-def save_lawyer_verification(user_id: str, record: dict[str, Any]) -> dict[str, Any]:
-    """Record a successful verification. Attempts are left as they stand."""
-    _table().update_item(
-        Key={"PK": f"USER#{user_id}", "SK": "LAWYER"},
-        UpdateExpression=(
-            "SET verified = :true, bar_number = :bar, jurisdiction = :jurisdiction, "
-            "#name = :name, #status = :status, admitted_on = :admitted, verified_at = :at"
-        ),
-        ExpressionAttributeNames={"#name": "name", "#status": "status"},
-        ExpressionAttributeValues={
-            ":true": True,
-            ":bar": record.get("bar_number", ""),
-            ":jurisdiction": record.get("jurisdiction", ""),
-            ":name": record.get("name", ""),
-            ":status": record.get("status", ""),
-            ":admitted": record.get("admitted_on", ""),
-            ":at": datetime.now(UTC).isoformat(),
-        },
-    )
-    return get_lawyer_verification(user_id)
-
-
 def create_workspace_invite(workspace_id: str, inviter_id: str) -> dict[str, Any]:
     token = secrets.token_urlsafe(18)
     now = datetime.now(UTC)
@@ -643,7 +986,16 @@ def consume_workspace_invite(token: str, user: dict[str, str]) -> dict[str, Any]
 
     now_timestamp = int(time.time())
     expires_at = invite.get("expires_at")
-    if not isinstance(expires_at, int) or expires_at <= now_timestamp:
+    # DynamoDB deserializes Number attributes as Decimal, not int. Reject only
+    # values that cannot represent an epoch timestamp; otherwise real invites
+    # would always appear invalid while in-memory tests still passed.
+    if isinstance(expires_at, bool):
+        return None
+    try:
+        expires_timestamp = int(expires_at)
+    except (TypeError, ValueError):
+        return None
+    if expires_timestamp <= now_timestamp:
         return None
 
     try:
@@ -729,29 +1081,22 @@ def _delete_keys(keys: list[dict[str, str]]) -> None:
 def admin_data_totals() -> dict[str, int]:
     """Count what the table holds, in one pass over the user and workspace rows."""
     items = _scan(
-        ProjectionExpression="PK, SK, verified, attempts",
+        ProjectionExpression="PK, SK",
         FilterExpression=Attr("PK").begins_with("USER#") | Attr("PK").begins_with("WORKSPACE#"),
     )
     totals = {
         "workspaces": 0,
         "documents": 0,
         "conversations": 0,
-        "lawyers_verified": 0,
-        "lawyers_locked": 0,
     }
     for item in items:
         pk, sk = item["PK"], item["SK"]
         if pk.startswith("WORKSPACE#") and sk == "META":
             totals["workspaces"] += 1
-        elif sk.startswith("RECORD#"):
+        elif sk.startswith(("RECORD#", "DOC#")):
             totals["documents"] += 1
         elif sk.startswith("CHAT#"):
             totals["conversations"] += 1
-        elif sk == "LAWYER":
-            if item.get("verified"):
-                totals["lawyers_verified"] += 1
-            elif int(item.get("attempts", 0)) >= LAWYER_VERIFICATION_MAX_ATTEMPTS:
-                totals["lawyers_locked"] += 1
     return totals
 
 
@@ -828,10 +1173,9 @@ def admin_user_data(user_id: str) -> dict[str, Any]:
     profile = next((item for item in items if item["SK"] == "PROFILE"), {})
     return {
         "display_name": profile.get("display_name", ""),
-        "documents": sum(item["SK"].startswith("RECORD#") for item in items),
+        "documents": sum(item["SK"].startswith(("RECORD#", "DOC#")) for item in items),
         "conversations": sum(item["SK"].startswith("CHAT#") for item in items),
         "workspaces": workspaces,
-        "lawyer_verification": get_lawyer_verification(user_id),
     }
 
 
@@ -849,12 +1193,6 @@ def admin_delete_user_data(user_id: str) -> None:
         else:
             admin_remove_workspace_member(workspace_id, user_id)
     _delete_keys([{"PK": item["PK"], "SK": item["SK"]} for item in items])
-
-
-def admin_reset_lawyer_verification(user_id: str) -> dict[str, Any]:
-    """Clear a bar verification and its spent attempts, so the person can try again."""
-    _table().delete_item(Key={"PK": f"USER#{user_id}", "SK": "LAWYER"})
-    return get_lawyer_verification(user_id)
 
 
 def record_admin_action(
@@ -997,3 +1335,308 @@ def update_ledger_change(user_id: str, sort_key: str, fields: dict[str, Any]) ->
         ExpressionAttributeNames=names,
         ExpressionAttributeValues=values,
     )
+
+
+# ── Saved workspace ──────────────────────────────────────────────────────────
+# The documents a person works on, and where they left off, so a refresh or a
+# new device opens the workspace exactly as it was. Each document is one item
+# in the owner's partition, its body gzip-compressed JSON.
+
+
+class DocumentTooLargeError(ValueError):
+    pass
+
+
+def consume_document_save_quota(user_id: str) -> bool:
+    """Saves are debounced in the browser; this only stops a runaway client."""
+    return _consume_quota(
+        "DOCSAVE",
+        user_id,
+        60,
+        _bounded_positive_int("DOCUMENT_SAVE_RATE_LIMIT_PER_WINDOW", 120, 1_000),
+    )
+
+
+def document_sort_key(document_key: str) -> str:
+    return f"DOC#{document_key}"
+
+
+def _pack(document: dict[str, Any]) -> bytes:
+    body = gzip.compress(json.dumps(document, separators=(",", ":")).encode("utf-8"))
+    if len(body) > MAX_DOCUMENT_BYTES:
+        raise DocumentTooLargeError("This document is too large to save.")
+    return body
+
+
+def _unpack(item: dict[str, Any]) -> dict[str, Any]:
+    body = item.get("body")
+    raw = getattr(body, "value", body)  # boto3 returns a Binary wrapper.
+    return {
+        "document_id": item.get("document_id", ""),
+        "document": json.loads(gzip.decompress(bytes(raw)).decode("utf-8")) if raw else {},
+        "resolved": list(item.get("resolved") or []),
+        "updated_at": item.get("updated_at", ""),
+    }
+
+
+def save_document(
+    user_id: str,
+    document_key: str,
+    document_id: str,
+    document: dict[str, Any],
+    resolved: list[str],
+) -> str:
+    """Create or replace one saved document. Returns "saved", or "limit" when
+    this would be a new document beyond the per-person allowance."""
+    now = datetime.now(UTC).isoformat()
+    fields = {
+        "document_id": document_id,
+        "body": _pack(document),
+        "resolved": resolved,
+        "updated_at": now,
+    }
+    key = {"PK": f"USER#{user_id}", "SK": document_sort_key(document_key)}
+    try:
+        # Replacing an existing document never touches the quota.
+        _table().update_item(
+            Key=key,
+            UpdateExpression="SET #id = :id, #body = :body, #resolved = :resolved, #at = :at",
+            ConditionExpression=Attr("PK").exists(),
+            ExpressionAttributeNames={
+                "#id": "document_id",
+                "#body": "body",
+                "#resolved": "resolved",
+                "#at": "updated_at",
+            },
+            ExpressionAttributeValues={
+                ":id": document_id,
+                ":body": fields["body"],
+                ":resolved": resolved,
+                ":at": now,
+            },
+        )
+        return "saved"
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            raise
+    result = _create_resource_with_limit(
+        user_id,
+        kind="DOCUMENTS",
+        prefix="DOC#",
+        limit=MAX_DOCUMENTS_PER_USER,
+        item={**key, **fields, "created_at": now},
+    )
+    if result == "exists":
+        # Created by a concurrent save between our two writes; replace it.
+        _table().put_item(Item={**key, **fields, "created_at": now})
+        return "saved"
+    return "limit" if result == "limit" else "saved"
+
+
+def list_documents(user_id: str) -> list[dict[str, Any]]:
+    """Every saved document, most recently changed first."""
+    items: list[dict[str, Any]] = []
+    query_args: dict[str, Any] = {
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("DOC#")
+    }
+    while True:
+        response = _table().query(**query_args)
+        items.extend(response.get("Items", []))
+        last_evaluated_key = response.get("LastEvaluatedKey")
+        if last_evaluated_key is None:
+            break
+        query_args["ExclusiveStartKey"] = last_evaluated_key
+    documents = [_unpack(item) for item in items]
+    documents.sort(key=lambda entry: entry["updated_at"], reverse=True)
+    return documents
+
+
+def get_document(user_id: str, document_key: str) -> dict[str, Any] | None:
+    item = (
+        _table()
+        .get_item(Key={"PK": f"USER#{user_id}", "SK": document_sort_key(document_key)})
+        .get("Item")
+    )
+    return _unpack(item) if item else None
+
+
+def delete_document(user_id: str, document_key: str) -> None:
+    """Remove a saved document and give its allowance back."""
+    table = _table()
+    key = {"PK": f"USER#{user_id}", "SK": document_sort_key(document_key)}
+    try:
+        table.meta.client.transact_write_items(
+            TransactItems=[
+                {
+                    "Delete": {
+                        "TableName": table.name,
+                        "Key": key,
+                        "ConditionExpression": "attribute_exists(PK)",
+                    }
+                },
+                {
+                    "Update": {
+                        "TableName": table.name,
+                        "Key": {"PK": f"USER#{user_id}", "SK": "QUOTA#DOCUMENTS"},
+                        "UpdateExpression": "SET #count = #count - :one",
+                        "ConditionExpression": "#count > :zero",
+                        "ExpressionAttributeNames": {"#count": "count"},
+                        "ExpressionAttributeValues": {":one": 1, ":zero": 0},
+                    }
+                },
+            ]
+        )
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") != "TransactionCanceledException":
+            raise
+        # Already gone, or no quota row to decrement: make sure the item is gone.
+        table.delete_item(Key=key)
+
+
+def get_workspace_state(user_id: str) -> dict[str, Any]:
+    item = _table().get_item(Key={"PK": f"USER#{user_id}", "SK": "WORKSPACE_STATE"}).get("Item")
+    if not item:
+        return {}
+    return json.loads(item.get("state", "{}"))
+
+
+def put_workspace_state(user_id: str, state: dict[str, Any]) -> dict[str, Any]:
+    _table().put_item(
+        Item={
+            "PK": f"USER#{user_id}",
+            "SK": "WORKSPACE_STATE",
+            "state": json.dumps(state, separators=(",", ":")),
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    return state
+
+
+# ── Messaging: reactions, saved messages, and shared files ──────────────────
+# Reactions are one row per person, per emoji, per message, so two people
+# reacting at once can never overwrite each other. Saved messages live in the
+# person's own partition. A shared file is a document snapshot any workspace
+# member can open, compressed like saved documents.
+
+
+def _reaction_key(
+    workspace_id: str, channel_id: str, message_id: str, emoji: str, user_id: str
+) -> dict[str, str]:
+    return {
+        "PK": f"WORKSPACE#{workspace_id}",
+        "SK": f"REACT#{channel_id}#{message_id}#{emoji}#{user_id}",
+    }
+
+
+def toggle_message_reaction(
+    workspace_id: str, channel_id: str, message_id: str, emoji: str, user: dict[str, str]
+) -> bool:
+    """Add this person's reaction, or take it back. Returns True when added."""
+    key = _reaction_key(workspace_id, channel_id, message_id, emoji, user["sub"])
+    if _table().get_item(Key=key).get("Item"):
+        _table().delete_item(Key=key)
+        return False
+    _table().put_item(
+        Item={
+            **key,
+            "message_id": message_id,
+            "channel_id": channel_id,
+            "emoji": emoji,
+            "user_id": user["sub"],
+            "name": user.get("name") or user.get("email") or "Workspace member",
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    return True
+
+
+def channel_reactions(workspace_id: str, channel_id: str) -> dict[str, list[dict[str, Any]]]:
+    """Every reaction in a channel, grouped by message, oldest first."""
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for item in _query_prefix(workspace_id, f"REACT#{channel_id}#"):
+        grouped.setdefault(item["message_id"], []).append(item)
+    for rows in grouped.values():
+        rows.sort(key=lambda row: row.get("created_at", ""))
+    return grouped
+
+
+def set_message_saved(
+    user_id: str, workspace_id: str, channel_id: str, message_id: str, saved: bool
+) -> None:
+    key = {"PK": f"USER#{user_id}", "SK": f"SAVED#{workspace_id}#{message_id}"}
+    if saved:
+        _table().put_item(
+            Item={
+                **key,
+                "workspace_id": workspace_id,
+                "channel_id": channel_id,
+                "message_id": message_id,
+                "saved_at": datetime.now(UTC).isoformat(),
+            }
+        )
+    else:
+        _table().delete_item(Key=key)
+
+
+def saved_message_ids(user_id: str, workspace_id: str) -> set[str]:
+    response = _table().query(
+        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
+        & Key("SK").begins_with(f"SAVED#{workspace_id}#")
+    )
+    return {item["message_id"] for item in response.get("Items", [])}
+
+
+def _file_key(workspace_id: str, document_key: str) -> dict[str, str]:
+    return {"PK": f"WORKSPACE#{workspace_id}", "SK": f"FILE#{document_key}"}
+
+
+def share_workspace_file(
+    workspace_id: str, document_key: str, document: dict[str, Any], user: dict[str, str]
+) -> dict[str, Any]:
+    """Store (or replace) a document snapshot every member of the workspace can open."""
+    now = datetime.now(UTC).isoformat()
+    meta = {
+        "document_key": document_key,
+        "document_id": document["id"],
+        "title": document.get("title", ""),
+        "type": document.get("type", ""),
+        "shared_by_id": user["sub"],
+        "shared_by_name": user.get("name") or user.get("email") or "Workspace member",
+        "updated_at": now,
+    }
+    _table().put_item(
+        Item={**_file_key(workspace_id, document_key), **meta, "body": _pack(document)}
+    )
+    return meta
+
+
+def get_workspace_file(workspace_id: str, document_key: str) -> dict[str, Any] | None:
+    item = _table().get_item(Key=_file_key(workspace_id, document_key)).get("Item")
+    if not item:
+        return None
+    body = _unpack(item)["document"]
+    return {
+        key: item.get(key, "")
+        for key in (
+            "document_key",
+            "document_id",
+            "title",
+            "type",
+            "shared_by_id",
+            "shared_by_name",
+            "updated_at",
+        )
+    } | {"document": body}
+
+
+def list_workspace_files(workspace_id: str) -> list[dict[str, Any]]:
+    """Shared files without their bodies, most recently updated first."""
+    items = _query_prefix(
+        workspace_id,
+        "FILE#",
+        ProjectionExpression="document_key, document_id, title, #type, shared_by_id, "
+        "shared_by_name, updated_at",
+        ExpressionAttributeNames={"#type": "type"},
+    )
+    items.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    return items

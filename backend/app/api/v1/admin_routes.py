@@ -6,11 +6,14 @@ refused at once rather than when their token expires. Each change is written to
 the audit log with the admin who made it.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from pydantic import BaseModel, Field
+import os
 
-from app import admin
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from pydantic import BaseModel
+
+from app import admin, lawfirm
 from app.auth import current_admin
+from app.ledger import configured_ledger
 from app.storage import (
     admin_data_totals,
     admin_delete_user_data,
@@ -18,12 +21,10 @@ from app.storage import (
     admin_get_workspace,
     admin_list_workspaces,
     admin_remove_workspace_member,
-    admin_reset_lawyer_verification,
     admin_user_data,
     list_admin_actions,
     list_workspace_members,
     record_admin_action,
-    save_lawyer_verification,
 )
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
@@ -63,8 +64,6 @@ class DataTotals(BaseModel):
     workspaces: int
     documents: int
     conversations: int
-    lawyers_verified: int
-    lawyers_locked: int
 
 
 class AuditEntry(BaseModel):
@@ -106,36 +105,15 @@ class UserWorkspace(BaseModel):
     role: str
 
 
-class LawyerStatus(BaseModel):
-    verified: bool
-    attempts_used: int
-    attempts_remaining: int
-    max_attempts: int
-    bar_number: str = ""
-    jurisdiction: str = ""
-    name: str = ""
-    status: str = ""
-    admitted_on: str = ""
-    verified_at: str = ""
-
-
 class UserDetail(AdminUser):
     display_name: str = ""
     documents: int
     conversations: int
     workspaces: list[UserWorkspace]
-    lawyer_verification: LawyerStatus
 
 
 class AdminFlag(BaseModel):
     admin: bool
-
-
-class ManualLawyerVerification(BaseModel):
-    bar_number: str = Field(min_length=1, max_length=40, pattern=r"^[A-Za-z0-9-]+$")
-    jurisdiction: str = Field(min_length=2, max_length=2, pattern=r"^[A-Za-z]{2}$")
-    name: str = Field(default="", max_length=200)
-    note: str = Field(default="", max_length=500)
 
 
 class AdminWorkspace(BaseModel):
@@ -216,8 +194,6 @@ def read_user(
         documents=data.get("documents", 0),
         conversations=data.get("conversations", 0),
         workspaces=data.get("workspaces", []),
-        lawyer_verification=data.get("lawyer_verification")
-        or {"verified": False, "attempts_used": 0, "attempts_remaining": 0, "max_attempts": 0},
     )
 
 
@@ -284,44 +260,6 @@ def delete_user(
     return Done()
 
 
-@router.delete("/users/{username}/lawyer-verification", response_model=LawyerStatus)
-def reset_lawyer_verification(
-    username: str = Path(pattern=USERNAME), actor: dict[str, str] = Depends(admin_actor)
-) -> LawyerStatus:
-    """Clear a verification and its spent attempts so the person can check again."""
-    user = _target_user(username)
-    result = admin_reset_lawyer_verification(user["sub"])
-    record_admin_action(actor, "lawyer.reset", _label(user))
-    return LawyerStatus(**result)
-
-
-@router.post("/users/{username}/lawyer-verification", response_model=LawyerStatus)
-def verify_lawyer_manually(
-    payload: ManualLawyerVerification,
-    username: str = Path(pattern=USERNAME),
-    actor: dict[str, str] = Depends(admin_actor),
-) -> LawyerStatus:
-    """Record a bar membership that support has checked by hand."""
-    user = _target_user(username)
-    result = save_lawyer_verification(
-        user["sub"],
-        {
-            "bar_number": payload.bar_number,
-            "jurisdiction": payload.jurisdiction.upper(),
-            "name": payload.name.strip(),
-            "status": "Verified by support",
-        },
-    )
-    record_admin_action(
-        actor,
-        "lawyer.verify",
-        _label(user),
-        f"{payload.jurisdiction.upper()} {payload.bar_number}"
-        + (f" — {payload.note.strip()}" if payload.note.strip() else ""),
-    )
-    return LawyerStatus(**result)
-
-
 @router.get("/workspaces", response_model=list[AdminWorkspace])
 def read_workspaces(_actor: dict[str, str] = Depends(admin_actor)) -> list[AdminWorkspace]:
     return [AdminWorkspace(**workspace) for workspace in admin_list_workspaces()]
@@ -377,3 +315,66 @@ def read_audit_log(
     _actor: dict[str, str] = Depends(admin_actor),
 ) -> list[AuditEntry]:
     return [AuditEntry(**entry) for entry in list_admin_actions(limit=limit)]
+
+
+class IntegrationStatus(BaseModel):
+    configured: bool
+    ready: bool
+    detail: str = ""
+
+
+class Integrations(BaseModel):
+    statute_lookup: IntegrationStatus
+    document_ledger: IntegrationStatus
+
+
+def _statute_lookup_status() -> IntegrationStatus:
+    """Whether the lawfirm.dev key is set up and readable.
+
+    Loads the key from Secrets Manager but never calls lawfirm.dev, so the
+    check spends none of the plan's daily lookups.
+    """
+    if not (os.getenv("LAWFIRM_API_KEY") or os.getenv("LAWFIRM_API_KEY_SECRET_ARN")):
+        return IntegrationStatus(
+            configured=False,
+            ready=False,
+            detail="No key is configured. Set LAWFIRM_API_KEY_SECRET_ARN and redeploy.",
+        )
+    try:
+        loaded = bool(lawfirm.configured_api_key())
+    except lawfirm.LawFirmUnavailableError:
+        return IntegrationStatus(
+            configured=True,
+            ready=False,
+            detail="The key's secret could not be read. Check the ARN and the API's access to it.",
+        )
+    return IntegrationStatus(
+        configured=True,
+        ready=loaded,
+        detail="Key loaded. Statutes are looked up live on lawfirm.dev."
+        if loaded
+        else "The secret is empty or has no api_key field.",
+    )
+
+
+def _ledger_status() -> IntegrationStatus:
+    if not os.getenv("LEDGER_CONTRACT_ADDRESS"):
+        return IntegrationStatus(configured=False, ready=False, detail="No contract address set.")
+    try:
+        ledger = configured_ledger()
+    except Exception:  # noqa: BLE001 - reported to the admin, not raised
+        return IntegrationStatus(
+            configured=True, ready=False, detail="The recorder key could not be loaded."
+        )
+    network = ledger.network if ledger else {}
+    return IntegrationStatus(
+        configured=True,
+        ready=ledger is not None,
+        detail=f"{network.get('network', '')} · {network.get('contract_address', '')}",
+    )
+
+
+@router.get("/integrations", response_model=Integrations)
+def read_integrations(_actor: dict[str, str] = Depends(admin_actor)) -> Integrations:
+    """Configuration health for the outside services, without using their quotas."""
+    return Integrations(statute_lookup=_statute_lookup_status(), document_ledger=_ledger_status())

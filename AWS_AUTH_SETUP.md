@@ -126,7 +126,7 @@ Federated sign-in continues to use the identity provider's verified-email claim.
 
 ## Admin portal
 
-Admins manage accounts, shared workspaces, and bar verifications at `/admin`
+Admins manage accounts and shared workspaces at `/admin`
 (https://k1lst1x.github.io/LexisGuide/admin in production). It has its own
 sign-in screen and uses the same Cognito accounts as the app.
 
@@ -179,10 +179,7 @@ again always works.
 
 - **Accounts:** search by email; enable or disable; sign out everywhere; grant or
   remove admin access; delete an account together with its documents,
-  conversations, bar verification, and any workspace it hosts.
-- **Bar verification:** reset a locked verification so the person gets their
-  attempts back, or record a bar membership checked by hand, with a note for the
-  audit log.
+  conversations, and any workspace it hosts.
 - **Workspaces:** list every workspace with its host and members, remove a
   member, or delete the workspace.
 - **Overview and audit log:** account and data totals, and every admin action.

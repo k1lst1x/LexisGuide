@@ -56,7 +56,7 @@ without cloud credentials.
 
 See [AWS_AUTH_SETUP.md](AWS_AUTH_SETUP.md) for the one-time AWS and GitHub setup.
 
-Admins manage accounts, workspaces, and bar verifications in the admin portal at
+Admins manage accounts and workspaces in the admin portal at
 `/admin`. See [Admin portal](AWS_AUTH_SETUP.md#admin-portal) for how to add the first
 admin.
 

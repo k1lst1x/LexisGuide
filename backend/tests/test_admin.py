@@ -132,9 +132,11 @@ def _claims(monkeypatch: pytest.MonkeyPatch, claims: dict[str, Any]) -> None:
             "Jwk", (), {"get_signing_key_from_jwt": lambda self, t: type("K", (), {"key": "k"})()}
         )(),
     )
-    monkeypatch.setattr(auth, "_cognito_user_pool", lambda: type("Pool", (), {
-        "admin_get_user": lambda self, **_: {"Enabled": True}
-    })())
+    monkeypatch.setattr(
+        auth,
+        "_cognito_user_pool",
+        lambda: type("Pool", (), {"admin_get_user": lambda self, **_: {"Enabled": True}})(),
+    )
     monkeypatch.setattr(auth, "user_sessions_valid_after", lambda _username: 0)
     monkeypatch.setattr(auth.jwt, "decode", lambda *_, **__: claims)
 
@@ -289,28 +291,6 @@ def test_a_malformed_username_never_reaches_cognito(
     assert directory.calls == []
 
 
-def test_manual_bar_verification_records_the_admin_and_note(
-    admin_client: TestClient, directory: FakeDirectory, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    saved: dict[str, Any] = {}
-
-    def save(sub: str, record: dict[str, Any]) -> dict[str, Any]:
-        saved.update(record, sub=sub)
-        return {"verified": True, "attempts_used": 3, "attempts_remaining": 0, "max_attempts": 3}
-
-    monkeypatch.setattr(admin_routes, "save_lawyer_verification", save)
-
-    response = admin_client.post(
-        "/api/v1/admin/users/person-user/lawyer-verification",
-        json={"bar_number": "12345", "jurisdiction": "fl", "note": "Checked by phone"},
-    )
-
-    assert response.status_code == 200
-    assert saved["sub"] == "person-sub-0002"
-    assert saved["jurisdiction"] == "FL"
-    assert directory.audit[0]["detail"] == "FL 12345 — Checked by phone"
-
-
 # ── Managing workspaces ──────────────────────────────────────────────────────
 
 
@@ -336,3 +316,69 @@ def test_the_audit_log_is_readable(admin_client: TestClient, directory: FakeDire
     entries = admin_client.get("/api/v1/admin/audit").json()
 
     assert [entry["action"] for entry in entries] == ["user.sign_out"]
+
+
+# ── Integrations health, without spending provider quota ────────────────────
+
+
+def test_statute_lookup_health_loads_the_key_without_calling_lawfirm(
+    admin_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app import lawfirm
+
+    monkeypatch.setenv("LAWFIRM_API_KEY_SECRET_ARN", "arn:aws:secretsmanager:us-east-1:1:secret:x")
+    monkeypatch.setattr(lawfirm, "configured_api_key", lambda: "lf_live_key")
+
+    def no_lookups(*_: Any, **__: Any) -> None:
+        raise AssertionError("The health check must not spend a lawfirm.dev lookup.")
+
+    monkeypatch.setattr(lawfirm.LawFirmClient, "_get", no_lookups)
+
+    body = admin_client.get("/api/v1/admin/integrations").json()
+
+    assert body["statute_lookup"]["configured"] is True
+    assert body["statute_lookup"]["ready"] is True
+
+
+def test_statute_lookup_health_says_when_no_key_is_set(
+    admin_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("LAWFIRM_API_KEY", raising=False)
+    monkeypatch.delenv("LAWFIRM_API_KEY_SECRET_ARN", raising=False)
+
+    body = admin_client.get("/api/v1/admin/integrations").json()
+
+    assert body["statute_lookup"] == {
+        "configured": False,
+        "ready": False,
+        "detail": "No key is configured. Set LAWFIRM_API_KEY_SECRET_ARN and redeploy.",
+    }
+
+
+def test_the_lawfirm_key_is_read_from_the_region_in_its_arn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import lawfirm
+
+    regions: list[str] = []
+
+    class FakeSecrets:
+        def get_secret_value(self, SecretId: str) -> dict:  # noqa: N803 - boto3's name
+            return {"SecretString": '{"api_key": "lf_key"}'}
+
+    monkeypatch.setattr(
+        lawfirm.boto3,
+        "client",
+        lambda _service, region_name: regions.append(region_name) or FakeSecrets(),
+    )
+    monkeypatch.delenv("LAWFIRM_API_KEY", raising=False)
+    monkeypatch.setenv("AWS_REGION", "us-west-2")
+    monkeypatch.setenv(
+        "LAWFIRM_API_KEY_SECRET_ARN", "arn:aws:secretsmanager:us-east-1:1:secret:lexisguide/lawfirm"
+    )
+    lawfirm.configured_api_key.cache_clear()
+    try:
+        assert lawfirm.configured_api_key() == "lf_key"
+    finally:
+        lawfirm.configured_api_key.cache_clear()
+    assert regions == ["us-east-1"]

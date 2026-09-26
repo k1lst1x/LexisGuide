@@ -55,7 +55,6 @@ def table(monkeypatch: pytest.MonkeyPatch) -> MemoryTable:
             {"PK": "USER#ada", "SK": "PROFILE", "display_name": "Ada"},
             {"PK": "USER#ada", "SK": "RECORD#r1", "type": "document", "title": "Lease"},
             {"PK": "USER#ada", "SK": "CHAT#c1", "turns": []},
-            {"PK": "USER#ada", "SK": "LAWYER", "attempts": 3, "verified": False},
             # Ada hosts "hosted" (Bob is a member) and is a member of Bob's "joined".
             {"PK": "WORKSPACE#hosted", "SK": "META", "name": "Hosted", "owner_id": "ada"},
             *_membership("hosted", "ada", "owner"),
@@ -93,14 +92,6 @@ def test_user_data_summarises_one_partition(table: MemoryTable) -> None:
         ("Hosted", "owner"),
         ("Joined", "member"),
     ]
-    assert summary["lawyer_verification"]["attempts_remaining"] == 0
-
-
-def test_resetting_a_bar_verification_gives_the_attempts_back(table: MemoryTable) -> None:
-    result = storage.admin_reset_lawyer_verification("ada")
-
-    assert result["attempts_remaining"] == result["max_attempts"]
-    assert ("USER#ada", "LAWYER") not in table.keys()
 
 
 def test_an_invite_to_a_deleted_workspace_cannot_be_redeemed(table: MemoryTable) -> None:

@@ -30,6 +30,13 @@ export type AnalyzeResult = {
   sources?: Array<{ title?: string; citation?: string; url?: string | null; support?: string }>
 }
 
+export type TargetedRewrite = {
+  finding_id: string
+  source_text: string
+  replacement_text: string
+  summary: string
+}
+
 type AnalyzeBody = {
   document_text: string
   action?: 'review' | 'negotiate' | 'rewrite'
@@ -66,6 +73,28 @@ export async function analyze(body: AnalyzeBody, options: { requireAuth?: boolea
   } finally {
     if (timer) window.clearTimeout(timer)
   }
+}
+
+/** Create a server-validated replacement for one consented finding. */
+export async function createTargetedRewrite(input: { documentText: string; findingId: string; evidence: string; jurisdiction?: string }): Promise<TargetedRewrite> {
+  let token = await cognitoGetIdToken()
+  if (!token) throw new Error('Sign in to apply an AI document change.')
+  const send = () => fetch(`${apiBase()}/api/v1/agent/targeted-rewrite`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ document_text: input.documentText, finding_id: input.findingId, evidence: input.evidence, jurisdiction: input.jurisdiction?.trim() || undefined }),
+  })
+  let response = await send()
+  if (response.status === 401) {
+    token = await cognitoGetIdToken(true)
+    if (!token) throw new Error('Your AWS session expired. Please sign in again.')
+    response = await send()
+  }
+  if (!response.ok) {
+    const detail = (await response.json().catch(() => null))?.detail
+    throw new Error(typeof detail === 'string' ? detail : 'The AI could not create this document change.')
+  }
+  return response.json() as Promise<TargetedRewrite>
 }
 
 export function mapFindings(findings: AnalyzeFinding[], category: string, prefix: string): Finding[] {
@@ -170,7 +199,23 @@ export async function workspaceRequest<T>(path: string, init: RequestInit = {}):
     response = await request()
   }
   if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || 'Workspace request failed.')
+  // A delete answers 204 with no body; there is nothing to parse.
+  if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
+}
+
+export type SharedWorkspaceMessage = {
+  id: string
+  user: string
+  author_id?: string
+  attachment_title?: string
+  mentions?: Array<{ type: 'user' | 'channel' | 'document'; id: string; label: string }>
+  reactions?: Array<{ emoji: string; count: number; names: string[]; mine: boolean }>
+  saved?: boolean
+  author_email: string
+  text: string
+  created_at: string
+  attachment?: string | null
 }
 
 export type StoredTurn = { id: string; role: 'user' | 'assistant'; content: string; local?: boolean }
@@ -205,62 +250,6 @@ export async function saveConversation(conversationId: string, turns: StoredTurn
   } catch {
     // Keeping history is best-effort; the local copy still holds.
   }
-}
-
-export type LawyerVerification = {
-  verified: boolean
-  attempts_used: number
-  attempts_remaining: number
-  max_attempts: number
-  bar_number: string
-  jurisdiction: string
-  name: string
-  status: string
-  admitted_on: string
-  verified_at: string
-}
-
-/** Thrown when the bar check returns an answer we must show the person verbatim. */
-export class VerificationError extends Error {
-  /** True once the attempts are gone and only support can help. */
-  readonly locked: boolean
-  /** True when the provider, not the person, was the problem: no attempt was spent. */
-  readonly providerFault: boolean
-
-  constructor(message: string, status: number) {
-    super(message)
-    this.name = 'VerificationError'
-    this.locked = status === 429
-    this.providerFault = status === 503 || status === 502
-  }
-}
-
-/** GET the caller's bar-verification state. */
-export function getLawyerVerification(): Promise<LawyerVerification> {
-  return workspaceRequest<LawyerVerification>('/me/lawyer-verification')
-}
-
-/** POST one bar number for checking. Throws VerificationError with the API's wording. */
-export async function verifyLawyer(barNumber: string, jurisdiction: string): Promise<LawyerVerification> {
-  let token = await cognitoGetIdToken()
-  if (!token) throw new VerificationError('Sign in to verify your bar record.', 401)
-  const send = () => fetch(`${apiBase()}/api/v1/me/lawyer-verification`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ bar_number: barNumber.trim(), jurisdiction: jurisdiction.trim().toUpperCase() }),
-  })
-  let response = await send()
-  if (response.status === 401) {
-    token = await cognitoGetIdToken(true)
-    if (!token) throw new VerificationError('Your session expired. Please sign in again.', 401)
-    response = await send()
-  }
-  const body = await response.json().catch(() => null)
-  if (response.ok) return body as LawyerVerification
-  const detail = typeof body?.detail === 'string'
-    ? body.detail
-    : 'That bar record could not be checked right now.'
-  throw new VerificationError(detail, response.status)
 }
 
 export type AiSearchResult = {

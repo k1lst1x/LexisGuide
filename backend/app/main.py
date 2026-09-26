@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.admin_routes import router as admin_router
 from app.api.v1.ledger_routes import router as ledger_router
 from app.api.v1.routes import router as v1_router
+from app.api.v1.workspace_routes import router as workspace_router
 
 load_dotenv()
 
@@ -46,3 +47,4 @@ app.add_middleware(
 app.include_router(v1_router)
 app.include_router(admin_router)
 app.include_router(ledger_router)
+app.include_router(workspace_router)

@@ -1,4 +1,4 @@
-import { Activity, FileText, Home, Layers, LogOut, MessageSquare, PanelLeft, Plus, Settings, Sparkles } from 'lucide-react'
+import { Activity, FileText, Home, Layers, LogOut, MessageSquare, PanelLeft, LoaderCircle, Plus, Settings, Sparkles } from 'lucide-react'
 import { WorkspaceProvider, useWorkspace } from './store'
 import { documentDisplayName, openFindings, type NavItem } from './data'
 import { HomeView } from './views/HomeView'
@@ -10,7 +10,7 @@ import { SettingsView } from './views/SettingsView'
 import { AssistantView } from './views/AssistantView'
 import { WorkspaceChat } from './WorkspaceChat'
 import { AddDocument } from './AddDocument'
-import { AccountMenu, Notifications, SearchBox } from './TopBar'
+import { AccountMenu, Notifications, SaveStatus, SearchBox } from './TopBar'
 import { ScoreDot } from './ui'
 import { useState } from 'react'
 import './workspace.css'
@@ -88,11 +88,13 @@ function Shell({ onClose, onSignOut, userEmail }: { onClose: () => void; onSignO
           <span className="ws-crumb"><current.icon size={15} /> {current.label}</span>
           <SearchBox />
           <div className="ws-top-right">
+            <SaveStatus />
             <Notifications />
             <AccountMenu onSignOut={onSignOut} onClose={onClose} />
           </div>
         </header>
         <main className="ws-content" key={ws.nav}>
+          {ws.restoring && <p className="ws-restoring" role="status"><LoaderCircle size={15} className="ws-spin" aria-hidden="true" /> Restoring your workspace…</p>}
           {ws.nav === 'overview' && <HomeView />}
           {ws.nav === 'assistant' && <AssistantView />}
           {ws.nav === 'documents' && <DocumentsView />}

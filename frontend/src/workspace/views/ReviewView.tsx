@@ -40,29 +40,116 @@ function DocumentSwitcher() {
   )
 }
 
+type Highlight = { start: number; end: number; findings: Finding[] }
+
+/** Normalise only presentation differences, while retaining a map back to the
+ * source text. AI evidence often differs from a PDF extraction by line breaks,
+ * curly quotes, or repeated spaces; exact string splitting silently lost those
+ * otherwise valid highlights. */
+function normalisedText(value: string) {
+  let text = ''
+  const sourceIndex: number[] = []
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]
+    if (/\s/.test(char)) {
+      if (text.endsWith(' ')) continue
+      text += ' '
+      sourceIndex.push(index)
+      continue
+    }
+    const replacement = char
+      .replace(/[‘’]/g, "'")
+      .replace(/[“”]/g, '"')
+      .replace(/[–—]/g, '-')
+      .toLowerCase()
+    text += replacement
+    sourceIndex.push(index)
+  }
+  return { text, sourceIndex }
+}
+
+function documentHighlights(doc: SampleDoc): Highlight[] {
+  const source = normalisedText(doc.text)
+  const candidates: Array<{ start: number; end: number; finding: Finding }> = []
+  for (const finding of doc.findings) {
+    if (finding.severity === 'pass' || !finding.evidence) continue
+    const evidence = normalisedText(finding.evidence).text.trim()
+    if (evidence.length < 3) continue
+    let offset = source.text.indexOf(evidence)
+    while (offset !== -1) {
+      const last = offset + evidence.length - 1
+      candidates.push({ start: source.sourceIndex[offset], end: source.sourceIndex[last] + 1, finding })
+      offset = source.text.indexOf(evidence, offset + evidence.length)
+    }
+  }
+  candidates.sort((left, right) => left.start - right.start || right.end - left.end)
+
+  // One excerpt can support more than one finding. Merge overlapping ranges so
+  // no later match erases an earlier one; its accessible label still names all
+  // supported findings.
+  return candidates.reduce<Highlight[]>((highlights, candidate) => {
+    const previous = highlights.at(-1)
+    if (previous && candidate.start < previous.end) {
+      previous.end = Math.max(previous.end, candidate.end)
+      if (!previous.findings.some((finding) => finding.id === candidate.finding.id)) {
+        previous.findings.push(candidate.finding)
+      }
+      return highlights
+    }
+    highlights.push({ start: candidate.start, end: candidate.end, findings: [candidate.finding] })
+    return highlights
+  }, [])
+}
+
 function DocumentText({ doc, activeId, resolved, onSelect }: { doc: SampleDoc; activeId: string | null; resolved: string[]; onSelect: (id: string) => void }) {
-  const flagged = doc.findings.filter((f) => f.severity !== 'pass' && f.evidence && doc.text.toLowerCase().includes(f.evidence.toLowerCase()))
-  const escaped = flagged.map((f) => f.evidence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const matcher = escaped.length ? new RegExp(`(${escaped.join('|')})`, 'gi') : null
+  const highlights = documentHighlights(doc)
+  const highlightRefs = useRef(new Map<string, HTMLElement>())
+
+  useEffect(() => {
+    if (!activeId) return
+    const target = highlightRefs.current.get(activeId)
+    if (!target) return
+
+    // Selecting an item in the finding queue should take the person to the
+    // supporting clause, not merely change the detail pane.
+    // Guarded: scrollIntoView is missing in some embedded browsers and in jsdom.
+    target.scrollIntoView?.({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+    target.focus({ preventScroll: true })
+  }, [activeId, doc.id])
+
+  const parts: Array<{ text: string; highlight?: Highlight }> = []
+  let cursor = 0
+  for (const highlight of highlights) {
+    if (cursor < highlight.start) parts.push({ text: doc.text.slice(cursor, highlight.start) })
+    parts.push({ text: doc.text.slice(highlight.start, highlight.end), highlight })
+    cursor = highlight.end
+  }
+  if (cursor < doc.text.length) parts.push({ text: doc.text.slice(cursor) })
   return (
-    <div className="ws-paper-text">
-      {doc.text.split('\n').map((line, index) => (
-        <p key={`${index}-${line.slice(0, 12)}`} className={line.trim() ? '' : 'is-blank'}>
-          {matcher ? line.split(matcher).map((part, partIndex) => {
-            const finding = flagged.find((f) => f.evidence.toLowerCase() === part.toLowerCase())
-            if (!finding) return part
-            const done = resolved.includes(finding.id)
-            return (
-              // A <mark> with a button role wraps across lines like a highlighter; a real <button> cannot.
-              <mark key={partIndex} role="button" tabIndex={0} onClick={() => onSelect(finding.id)}
-                onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(finding.id) } }}
-                className={`ws-mark ws-mark-${done ? 'resolved' : finding.severity} ${activeId === finding.id ? 'is-active' : ''}`}>
-                {part}
-              </mark>
-            )
-          }) : line}
-        </p>
-      ))}
+    <div className="ws-paper-text ws-paper-text-highlighted">
+      {parts.map((part, index) => {
+        if (!part.highlight) return <span key={index}>{part.text}</span>
+        const [finding] = part.highlight.findings
+        const done = part.highlight.findings.every((item) => resolved.includes(item.id))
+        const active = part.highlight.findings.some((item) => item.id === activeId)
+        const label = part.highlight.findings.map((item) => item.title).join('; ')
+        const findingIds = part.highlight.findings.map((item) => item.id)
+        return (
+          // A <mark> wraps across lines like a physical highlighter; a button cannot.
+          <mark key={index} role="button" tabIndex={0} title={label} aria-label={`Finding: ${label}`} data-finding-ids={findingIds.join(' ')}
+            ref={(element) => {
+              for (const id of findingIds) {
+                if (element) highlightRefs.current.set(id, element)
+                else highlightRefs.current.delete(id)
+              }
+            }}
+            onClick={() => onSelect(finding.id)}
+            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(finding.id) } }}
+            className={`ws-mark ws-mark-${done ? 'resolved' : finding.severity} ${active ? 'is-active' : ''}`}>
+            {part.text}
+          </mark>
+        )
+      })}
     </div>
   )
 }
@@ -171,7 +258,8 @@ export function ReviewView() {
           <div className="ws-menu-anchor" ref={actionsRef}>
             <button type="button" className={`ws-btn ws-btn-dark ${ws.busyAction ? 'is-working' : ''}`} aria-haspopup="menu" aria-expanded={actionsOpen} onClick={() => setActionsOpen((v) => !v)} disabled={!!ws.busyAction}>
               {ws.busyAction ? <MessageLoading className="ws-ai-loading" /> : <Wand2 size={15} />}
-              <span aria-live="polite">{ws.busyAction ? 'Working…' : 'AI actions'}</span>
+              {!ws.busyAction && <span>AI actions</span>}
+              {ws.busyAction && <span className="ws-sr-only" aria-live="polite">AI action in progress</span>}
               <ChevronDown size={14} aria-hidden="true" />
             </button>
             {actionsOpen && (

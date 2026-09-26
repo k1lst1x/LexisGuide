@@ -1,6 +1,7 @@
 /* Workspace data: document model, sample documents, and text extraction.
    Extracted from the original DashboardV2 so views can share it. */
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+import { loadModule } from '../staleBuild'
 
 export type SampleDoc = {
   id: string
@@ -46,7 +47,62 @@ export type WorkspaceSummary = {
   linked_document_title?: string | null
 }
 export type WorkspaceMember = { user_id: string; email: string; name: string; role: string; joined_at: string }
-export type WorkspaceMessage = { id: string; user: string; text: string; time: string; saved?: boolean; attachment?: string }
+export type WorkspaceChannel = {
+  id: string
+  name: string
+  created_at: string
+  description?: string
+  created_by?: string
+  created_by_name?: string
+  last_message_at?: string
+  member_count?: number
+  is_member?: boolean
+  can_manage?: boolean
+  can_delete?: boolean
+}
+export type MessageMention = { type: 'user' | 'channel' | 'document'; id: string; label: string }
+export type MessageReaction = { emoji: string; count: number; names: string[]; mine: boolean }
+export type WorkspaceMessage = {
+  id: string
+  user: string
+  authorId?: string
+  authorEmail?: string
+  text: string
+  time: string
+  createdAt?: string
+  saved?: boolean
+  attachment?: string
+  attachmentTitle?: string
+  mentions?: MessageMention[]
+  reactions?: MessageReaction[]
+}
+/** A document as shared into a workspace, so every member can open it. */
+export type SharedDocumentSnapshot = {
+  id: string
+  title: string
+  type: string
+  text: string
+  score?: number | null
+  findings: Array<{ title: string; severity: string; category: string; explanation: string; evidence: string }>
+}
+
+/** A document's shareable snapshot: its text and review, not the person's private state. */
+export function documentSnapshot(doc: SampleDoc): SharedDocumentSnapshot {
+  return {
+    id: doc.id,
+    title: doc.title,
+    type: doc.type,
+    text: doc.text,
+    score: doc.score,
+    findings: doc.findings.slice(0, 60).map((finding) => ({
+      title: finding.title,
+      severity: finding.severity,
+      category: finding.category,
+      explanation: finding.explanation.slice(0, 3000),
+      evidence: finding.evidence.slice(0, 3000),
+    })),
+  }
+}
 export type WorkspaceTask = { id: string; title: string; detail: string; completed: boolean }
 export type AssistantAction = 'evidence' | 'revision' | 'task' | 'message' | 'assign' | 'due-date' | 'policy'
 export type AssistantApprovalAction = Exclude<AssistantAction, 'evidence' | 'policy'>
@@ -318,7 +374,7 @@ export async function extractDocumentText(file: File): Promise<ExtractedDocument
   const extension = fileExtension(file)
 
   if (file.type === 'application/pdf' || extension === 'pdf') {
-    const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const { getDocument, GlobalWorkerOptions } = await loadModule(() => import('pdfjs-dist/legacy/build/pdf.mjs'))
     GlobalWorkerOptions.workerSrc = pdfWorkerUrl
     const pdf = await getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
     const pages: string[] = []
@@ -335,7 +391,7 @@ export async function extractDocumentText(file: File): Promise<ExtractedDocument
   }
 
   if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || extension === 'docx') {
-    const mammoth = await import('mammoth')
+    const mammoth = await loadModule(() => import('mammoth'))
     const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
     const text = cleanExtractedText(result.value)
     if (!text) throw new Error('No readable text was found in this Word document. Try pasting the document text instead.')

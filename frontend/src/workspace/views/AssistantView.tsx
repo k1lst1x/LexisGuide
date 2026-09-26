@@ -32,6 +32,7 @@ export function AssistantView() {
         storageKey="lexisguide:chat-assistant-page"
         suggestions={assistantQuickPrompts.assistant}
         fallback={fallback}
+        documents={ws.documents.map((item) => ({ id: item.id, title: item.title, type: item.type, text: item.text }))}
         greeting={`Hi, I’m LexisGuide. I have ${documentDisplayName(document)} in context. What would you like to understand?`}
         context={{
           page: 'AI Assistant',
@@ -42,6 +43,25 @@ export function AssistantView() {
           open_findings: findings.map((finding) => `${finding.title} (${finding.category})`),
           current_finding: current ? `${current.title}: ${current.explanation} Evidence: “${current.evidence}”` : undefined,
           jurisdiction: ws.jurisdiction || undefined,
+          section_summary: `${ws.documents.length} documents, ${findings.length} open findings in ${documentDisplayName(document)}, and ${ws.tasks.filter((task) => !task.completed).length} open follow-up tasks.`,
+          workspace_name: ws.activeWorkspace?.name,
+          channel_name: ws.activeWorkspace ? ws.activeChannelId : undefined,
+          workspace_id: ws.activeWorkspace && !ws.activeWorkspace.id.startsWith('local-') ? ws.activeWorkspace.id : undefined,
+        }}
+        onWorkspaceAction={(action) => {
+          if (action === 'apply_rewrite') {
+            if (current) void ws.runAction('rewrite', true)
+            else ws.setNotice('Select a finding before applying an approved change.')
+          } else if (action === 'resolve') {
+            if (current) ws.resolveAndNext(current.id)
+            else ws.setNotice('Select a finding before marking it resolved.')
+          } else if (action === 'create_task') {
+            if (current) ws.addTask(`Review: ${current.title}`, `${documentDisplayName(document)} · ${current.category}`)
+            else ws.addTask(`Review ${documentDisplayName(document)}`, 'Follow up on this document.')
+            ws.setNotice('Follow-up task created in Messages → Tasks.')
+          } else {
+            void ws.runAction(action)
+          }
         }}
       />
     </div>

@@ -10,6 +10,21 @@ export function WorkspaceChat({ userEmail }: { userEmail?: string }) {
   const doc = ws.selected
   const open = openFindings(doc, ws.resolved[doc.id])
   const current = ws.activeFinding
+  const recentChannelActivity = ws.comments.slice(-3).map((message) => `${message.user}: ${message.text.slice(0, 180)}`).join(' · ')
+  const resolvedCount = ws.resolved[doc.id]?.length ?? 0
+  const sectionSummary = ws.nav === 'overview'
+    ? `${ws.documents.length} documents, ${ws.stats.open.length} open findings, and ${ws.stats.deadlines.length} detected deadlines.`
+    : ws.nav === 'documents'
+      ? `${ws.documents.length} documents are available. ${documentDisplayName(doc)} is selected.`
+      : ws.nav === 'linter'
+        ? `${open.length} open findings in ${documentDisplayName(doc)}. ${current ? `The selected finding is ${current.title}.` : 'No finding is selected.'}`
+        : ws.nav === 'team'
+          ? `${ws.activeWorkspace ? `${ws.activeWorkspace.name} · ` : ''}${ws.comments.length} messages in the ${ws.activeChannelId} channel and ${ws.members.length} members.${recentChannelActivity ? ` Recent messages: ${recentChannelActivity}` : ''}`
+          : ws.nav === 'chain'
+            ? `Activity history for ${documentDisplayName(doc)} is in view. Version: ${doc.version}. ${resolvedCount} finding${resolvedCount === 1 ? '' : 's'} resolved; ${open.length} still open.`
+            : ws.nav === 'settings'
+              ? `Workspace settings are in view. Jurisdiction: ${ws.jurisdiction || 'not set'}.`
+              : `AI assistant for ${documentDisplayName(doc)}.`
 
   // Answers grounded in the workspace when the live agent is unavailable.
   const fallback = (question: string) => {
@@ -29,11 +44,15 @@ export function WorkspaceChat({ userEmail }: { userEmail?: string }) {
 
   return (
     <ChatWidget
-      className="cw-in-workspace"
+      // In Messages the launcher shrinks to an icon beside the conversation, so it never covers Send.
+      className={`cw-in-workspace ${ws.nav === 'team' ? 'cw-compact' : ''}`}
       storageKey={userEmail ? `lexisguide:chat-workspace:${userEmail.toLowerCase()}` : 'lexisguide:chat-guest'}
       open={ws.assistantOpen}
       onOpenChange={ws.setAssistantOpen}
       pendingQuestion={ws.assistantQuestion}
+      documents={ws.documents.map((item) => ({ id: item.id, title: item.title, type: item.type, text: item.text }))}
+      activeDocumentId={doc.id}
+      onDocumentContextChange={(documentId) => ws.selectDocument(documentId)}
       suggestions={assistantQuickPrompts[ws.nav]}
       fallback={fallback}
       greeting={`Hi! I can explain ${documentDisplayName(doc)}, a legal term, or how to use LexisGuide. What would you like to know?`}
@@ -46,6 +65,25 @@ export function WorkspaceChat({ userEmail }: { userEmail?: string }) {
         open_findings: open.map((f) => `${f.title} (${f.category})`),
         current_finding: current ? `${current.title}: ${current.explanation} Evidence: “${current.evidence}”` : undefined,
         jurisdiction: ws.jurisdiction || undefined,
+        section_summary: sectionSummary,
+        workspace_name: ws.activeWorkspace?.name,
+        channel_name: ws.activeWorkspace ? ws.activeChannelId : undefined,
+        workspace_id: ws.activeWorkspace && !ws.activeWorkspace.id.startsWith('local-') ? ws.activeWorkspace.id : undefined,
+      }}
+      onWorkspaceAction={(action) => {
+        if (action === 'apply_rewrite') {
+          if (current) void ws.runAction('rewrite', true)
+          else ws.setNotice('Select a finding before applying an approved change.')
+        } else if (action === 'resolve') {
+          if (current) ws.resolveAndNext(current.id)
+          else ws.setNotice('Select a finding before marking it resolved.')
+        } else if (action === 'create_task') {
+          if (current) ws.addTask(`Review: ${current.title}`, `${documentDisplayName(doc)} · ${current.category}`)
+          else ws.addTask(`Review ${documentDisplayName(doc)}`, 'Follow up on this document.')
+          ws.setNotice('Follow-up task created in Messages → Tasks.')
+        } else {
+          void ws.runAction(action)
+        }
       }}
     />
   )

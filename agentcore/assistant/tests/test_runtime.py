@@ -14,9 +14,12 @@ class FakeBedrock:
 
 class AssistantRuntimeTests(unittest.TestCase):
     def test_returns_a_chat_reply(self) -> None:
-        with patch.object(main.agent, "_client", FakeBedrock()):
+        # The supervisor routes to specialists; Bedrock sits on its conversation agent.
+        with patch.object(main.agent.agent, "_client", FakeBedrock()):
             result = main.invoke({"messages": [{"role": "user", "content": "What is a lien?"}]})
-        self.assertEqual(result, {"reply": "A lien is a claim.", "tools_used": []})
+        self.assertEqual(
+            result, {"reply": "A lien is a claim.", "tools_used": [], "agents_used": [], "workspace_actions": []}
+        )
 
     def test_rejects_an_invalid_request(self) -> None:
         result = main.invoke({"messages": []})

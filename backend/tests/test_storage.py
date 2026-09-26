@@ -1,3 +1,4 @@
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
 
@@ -222,6 +223,19 @@ def test_workspace_invites_use_a_direct_key_and_are_consumed_once(
     ]
 
 
+def test_workspace_messages_share_a_workspace_partition(table: FakeTable) -> None:
+    message = storage.create_workspace_message(
+        "workspace-123",
+        {"sub": "member-123", "email": "member@example.com", "name": "Member"},
+        "Please review this.",
+        "doc-1",
+    )
+
+    assert table.put_requests[0]["Item"]["PK"] == "WORKSPACE#workspace-123"
+    assert table.put_requests[0]["Item"]["SK"].startswith("MESSAGE#")
+    assert message["author_email"] == "member@example.com"
+
+
 def test_expired_workspace_invites_cannot_be_redeemed(table: FakeTable) -> None:
     table.get_responses = [
         {
@@ -237,6 +251,32 @@ def test_expired_workspace_invites_cannot_be_redeemed(table: FakeTable) -> None:
     assert storage.consume_workspace_invite("expired-token", {"sub": "member-123"}) is None
     assert table.delete_requests == []
     assert table.put_requests == []
+
+
+def test_workspace_invites_accept_dynamodb_decimal_timestamps(table: FakeTable) -> None:
+    table.get_responses = [
+        {
+            "Item": {
+                "PK": "INVITE#valid-token",
+                "SK": "META",
+                "workspace_id": "workspace-123",
+                "expires_at": Decimal(str(int(storage.time.time()) + 600)),
+            }
+        },
+        {
+            "Item": {
+                "id": "workspace-123",
+                "name": "Shared review",
+                "owner_id": "owner-123",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            }
+        },
+    ]
+
+    workspace = storage.consume_workspace_invite("valid-token", {"sub": "member-123"})
+
+    assert workspace is not None
+    assert table.delete_requests[0]["Key"] == {"PK": "INVITE#valid-token", "SK": "META"}
 
 
 def test_review_quota_uses_an_atomic_expiring_counter(table: FakeTable) -> None:
@@ -323,3 +363,35 @@ def test_remote_operation_releases_global_slot_when_user_slots_are_full(
     assert storage.acquire_remote_operation("user-123") is None
     assert len(fake_table.delete_requests) == 1
     assert fake_table.delete_requests[0]["Key"]["PK"] == "REMOTE#GLOBAL"
+
+
+def test_conversations_are_stored_compressed_and_read_back(table: FakeTable) -> None:
+    turns = [{"id": "t1", "role": "user", "content": "Repairs? " * 2_000}]
+
+    storage.save_conversation("user-123", "conv-12345678", turns, "Repairs")
+
+    item = table.put_requests[0]["Item"]
+    assert "turns" not in item and len(item["turns_gz"]) < 2_000
+    table.get_responses = [{"Item": item}]
+    assert storage.get_conversation("user-123", "conv-12345678")["turns"] == turns
+
+
+def test_conversations_saved_before_compression_still_load(table: FakeTable) -> None:
+    legacy = [{"id": "t1", "role": "user", "content": "Old question"}]
+    table.get_responses = [{"Item": {"turns": legacy, "title": "Old", "updated_at": "x"}}]
+
+    assert storage.get_conversation("user-123", "conv-12345678")["turns"] == legacy
+
+
+def test_an_oversized_conversation_drops_its_oldest_turns_instead_of_failing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import os as _os
+
+    monkeypatch.setattr(storage, "MAX_DOCUMENT_BYTES", 2_000)
+    turns = [{"id": f"t{i}", "role": "user", "content": _os.urandom(600).hex()} for i in range(10)]
+
+    kept, packed = storage._pack_turns(turns)
+
+    assert len(packed) <= 2_000
+    assert kept == turns[-len(kept) :] and len(kept) < len(turns)

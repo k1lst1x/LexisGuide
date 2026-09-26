@@ -125,7 +125,7 @@ export function DocumentsView() {
                 {doc.deadline ? new Date(doc.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
                   : doc.findings.some((f) => /deadline/i.test(f.title + f.category) && f.severity !== 'pass') ? <em className="ws-warn">Missing</em> : '—'}
               </span>
-              <button type="button" className="ws-btn ws-btn-sm" onClick={() => ws.openInReview(doc)}>Review <ArrowRight size={13} /></button>
+              <button type="button" className="ws-btn ws-btn-sm" aria-label={`Review ${documentDisplayName(doc)}`} onClick={() => ws.openInReview(doc)}>Review <ArrowRight size={13} aria-hidden="true" /></button>
             </article>
           )
         })}

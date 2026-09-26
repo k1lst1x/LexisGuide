@@ -294,3 +294,7 @@
 @media (prefers-reduced-motion: reduce) {
   .adm *, .adm-gate * { animation: none !important; transition: none !important; }
 }
+
+.adm-integration { align-items: flex-start; }
+.adm-integration > div { min-width: 0; }
+.adm-integration p { margin-top: 2px; font-size: 12.5px; overflow-wrap: anywhere; }

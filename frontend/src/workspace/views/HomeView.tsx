@@ -128,7 +128,7 @@ export function HomeView() {
           className="ws-deadlines-card"
           title="Deadlines"
           subtitle={`${stats.deadlines.length} confirmed date${stats.deadlines.length === 1 ? '' : 's'} · ${stats.missingDeadline.length} need${stats.missingDeadline.length === 1 ? 's' : ''} clarification`}
-          action={<button type="button" className="ws-link" onClick={() => firstDeadline ? ws.openInReview(firstDeadline.doc) : ws.go('documents')}>Review <ArrowRight size={13} /></button>}
+          action={<button type="button" className="ws-link" aria-label={firstDeadline ? `Review the deadline in ${documentDisplayName(firstDeadline.doc)}` : 'Review deadlines in Documents'} onClick={() => firstDeadline ? ws.openInReview(firstDeadline.doc) : ws.go('documents')}>Review <ArrowRight size={13} aria-hidden="true" /></button>}
           id="deadlines-title"
         >
           {(stats.deadlines.length > 0 || stats.missingDeadline.length > 0) && (

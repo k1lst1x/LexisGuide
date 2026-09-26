@@ -72,6 +72,19 @@ def _hex32(value: bytes | str) -> str:
     return value if value.startswith("0x") else "0x" + value
 
 
+def _secret_region(secret_arn: str) -> str:
+    """Return the Secrets Manager region encoded in an ARN.
+
+    The API runs in us-west-2, while the recorder key can safely remain in a
+    different Secrets Manager region.  Boto3 does not automatically switch
+    regions for a full ARN, so use the ARN's region when it is available.
+    """
+    parts = secret_arn.split(":", 5)
+    if len(parts) == 6 and parts[0] == "arn" and parts[2] == "secretsmanager" and parts[3]:
+        return parts[3]
+    return os.getenv("AWS_REGION", "us-east-1")
+
+
 def _private_key() -> str:
     key = os.getenv("LEDGER_PRIVATE_KEY", "").strip()
     if key:
@@ -79,7 +92,7 @@ def _private_key() -> str:
     arn = os.getenv("LEDGER_PRIVATE_KEY_SECRET_ARN", "").strip()
     if not arn:
         raise LedgerError("No recorder key is configured.")
-    secret = boto3.client("secretsmanager", region_name=os.getenv("AWS_REGION")).get_secret_value(
+    secret = boto3.client("secretsmanager", region_name=_secret_region(arn)).get_secret_value(
         SecretId=arn
     )["SecretString"]
     try:
