@@ -143,6 +143,12 @@ class SupervisorAgent:
         if not request.context.document_excerpt:
             return []
         question = request.messages[-1].content.lower()
+        if re.search(r"\b(apply|accept|use) (?:the )?(?:rewrite|draft|wording|change)\b", question):
+            return ["apply_rewrite"]
+        if re.search(r"\b(mark|set) (?:this )?(?:finding|issue|problem) (?:as )?(?:resolved|done)\b", question):
+            return ["resolve"]
+        if re.search(r"\b(create|add|make) (?:a )?(?:task|reminder|follow-?up)\b", question):
+            return ["create_task"]
         if re.search(r"\b(re-?check|review again|scan again|analyse again)\b", question):
             return ["review"]
         if re.search(r"\b(negotiate|negotiation|ask for)\b", question):

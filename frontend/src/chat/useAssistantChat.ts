@@ -24,7 +24,7 @@ export type AttachmentMeta = { name: string; kind: string; chars: number }
 /** A file attached in this conversation, with the text read from it. */
 export type ChatFile = AttachmentMeta & { id: string; text: string; truncated?: boolean }
 
-export type WorkspaceAction = 'review' | 'negotiate' | 'rewrite'
+export type WorkspaceAction = 'review' | 'negotiate' | 'rewrite' | 'apply_rewrite' | 'resolve' | 'create_task'
 export type Turn = { id: string; role: 'user' | 'assistant'; content: string; local?: boolean; attachments?: AttachmentMeta[]; workspaceActions?: WorkspaceAction[] }
 export type Mode = 'live' | 'guide' | 'unknown'
 

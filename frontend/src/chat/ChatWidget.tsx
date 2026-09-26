@@ -99,7 +99,12 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
                 <MessageFiles files={turn.attachments} />
                 {turn.role === 'assistant' && turn.workspaceActions?.map((action) => (
                   <button key={action} type="button" className="cw-workspace-action" onClick={() => onWorkspaceAction?.(action)}>
-                    {action === 'review' ? 'Re-check this document' : action === 'negotiate' ? 'Suggest negotiation points' : 'Draft clearer wording'}
+                    {action === 'review' ? 'Re-check this document'
+                      : action === 'negotiate' ? 'Suggest negotiation points'
+                        : action === 'rewrite' ? 'Draft clearer wording'
+                          : action === 'apply_rewrite' ? 'Apply the current draft'
+                            : action === 'resolve' ? 'Mark current issue resolved'
+                              : 'Create follow-up task'}
                   </button>
                 ))}
                 {turn.role === 'assistant' && turn.id !== 'welcome' && (
