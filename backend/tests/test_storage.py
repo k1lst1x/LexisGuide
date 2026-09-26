@@ -202,6 +202,15 @@ def test_workspace_invites_use_a_direct_key_and_are_consumed_once(
                     "created_at": "2026-01-01T00:00:00+00:00",
                 }
             },
+            {},
+            {
+                "Item": {
+                    "id": "workspace-123",
+                    "name": "Shared review",
+                    "owner_id": "owner-123",
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                }
+            },
         ]
     )
     monkeypatch.setattr(storage, "_table", lambda: consuming_table)
@@ -217,10 +226,9 @@ def test_workspace_invites_use_a_direct_key_and_are_consumed_once(
         "SK": "META",
     }
     assert consuming_table.delete_requests[0]["ConditionExpression"] is not None
-    assert [request["Item"]["SK"] for request in consuming_table.put_requests] == [
-        "MEMBER#member-123",
-        "WORKSPACE#workspace-123",
-    ]
+    transaction = consuming_table.transaction_requests[0]["TransactItems"]
+    assert transaction[1]["Put"]["Item"]["SK"] == "MEMBER#member-123"
+    assert transaction[2]["Put"]["Item"]["SK"] == "WORKSPACE#workspace-123"
 
 
 def test_workspace_messages_share_a_workspace_partition(table: FakeTable) -> None:
@@ -231,8 +239,9 @@ def test_workspace_messages_share_a_workspace_partition(table: FakeTable) -> Non
         "doc-1",
     )
 
-    assert table.put_requests[0]["Item"]["PK"] == "WORKSPACE#workspace-123"
-    assert table.put_requests[0]["Item"]["SK"].startswith("MESSAGE#")
+    transaction = table.transaction_requests[0]["TransactItems"]
+    assert transaction[0]["Put"]["Item"]["PK"] == "WORKSPACE#workspace-123"
+    assert transaction[0]["Put"]["Item"]["SK"].startswith("MESSAGE#")
     assert message["author_email"] == "member@example.com"
 
 
@@ -263,6 +272,15 @@ def test_workspace_invites_accept_dynamodb_decimal_timestamps(table: FakeTable) 
                 "expires_at": Decimal(str(int(storage.time.time()) + 600)),
             }
         },
+        {
+            "Item": {
+                "id": "workspace-123",
+                "name": "Shared review",
+                "owner_id": "owner-123",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            }
+        },
+        {},
         {
             "Item": {
                 "id": "workspace-123",

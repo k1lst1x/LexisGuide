@@ -25,7 +25,17 @@ class MemoryTable:
         self.items.pop((Key["PK"], Key["SK"]), None)
 
     def query(self, KeyConditionExpression: Any, **_: Any) -> dict[str, Any]:  # noqa: N803
-        partition = KeyConditionExpression.get_expression()["values"][1]
+        def strings(expression: Any) -> list[str]:
+            values = expression.get_expression()["values"]
+            found: list[str] = []
+            for value in values:
+                if isinstance(value, str):
+                    found.append(value)
+                elif hasattr(value, "get_expression"):
+                    found.extend(strings(value))
+            return found
+
+        partition = next(value for value in strings(KeyConditionExpression) if "#" in value)
         return {"Items": [item for (pk, _), item in self.items.items() if pk == partition]}
 
     @contextmanager
@@ -107,3 +117,20 @@ def test_an_invite_to_a_deleted_workspace_cannot_be_redeemed(table: MemoryTable)
 
     assert storage.consume_workspace_invite("tok", {"sub": "carol"}) is None
     assert ("WORKSPACE#hosted", "MEMBER#carol") not in table.keys()
+
+
+def test_admin_removal_revokes_every_channel_membership(table: MemoryTable) -> None:
+    table.put_item(
+        Item={
+            "PK": "WORKSPACE#hosted",
+            "SK": "CHANMEM#private#bob",
+            "channel_id": "private",
+            "user_id": "bob",
+        }
+    )
+
+    storage.admin_remove_workspace_member("hosted", "bob")
+
+    assert ("WORKSPACE#hosted", "MEMBER#bob") not in table.keys()
+    assert ("USER#bob", "WORKSPACE#hosted") not in table.keys()
+    assert ("WORKSPACE#hosted", "CHANMEM#private#bob") not in table.keys()

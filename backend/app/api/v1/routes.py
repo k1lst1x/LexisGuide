@@ -31,6 +31,8 @@ from app.storage import (
     consume_review_quota,
     consume_statute_quota,
     consume_workspace_invite,
+    consume_workspace_invite_quota,
+    consume_workspace_message_quota,
     create_record_with_limit,
     create_workspace,
     create_workspace_channel,
@@ -683,7 +685,13 @@ async def read_workspaces(user: dict[str, str] = Depends(current_user)) -> list[
 async def create_shared_workspace(
     payload: WorkspaceCreate, user: dict[str, str] = Depends(current_user)
 ) -> Workspace:
-    return Workspace(**create_workspace(user, payload.name.strip()))
+    workspace = create_workspace(user, payload.name.strip())
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Workspace storage limit reached.",
+        )
+    return Workspace(**workspace)
 
 
 @router.get("/workspaces/{workspace_id}/members", response_model=list[WorkspaceMember])
@@ -843,6 +851,11 @@ async def post_workspace_channel(
     channel = create_workspace_channel(
         workspace_id, payload.name, payload.description.strip(), creator=user
     )
+    if channel is None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Channel storage limit reached.",
+        )
     return _channel_view(workspace_id, channel["id"], user)
 
 
@@ -966,11 +979,16 @@ async def post_workspace_message(
     channel = _channel_or_404(workspace_id, payload.channel_id)
     if not is_channel_member(workspace_id, payload.channel_id, user["sub"]):
         raise HTTPException(status_code=403, detail=f"Join #{channel['name']} to post in it.")
+    if not consume_workspace_message_quota(workspace_id, user["sub"]):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Message rate limit reached. Please try again shortly.",
+        )
     attachment = payload.attachment.strip() if payload.attachment else None
     attachment_title = ""
     for document in payload.documents:
         try:
-            share_workspace_file(
+            shared = share_workspace_file(
                 workspace_id, _document_key(document.id), document.model_dump(), user
             )
             record_shared_version(workspace_id, user, document.id, document.text, document.title)
@@ -979,6 +997,11 @@ async def post_workspace_message(
                 status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail=f"{document.title} is too large to share.",
             ) from error
+        if shared is None:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Shared-file storage limit reached.",
+            )
         if document.id == attachment:
             attachment_title = document.title
     message = create_workspace_message(
@@ -990,6 +1013,11 @@ async def post_workspace_message(
         mentions=[mention.model_dump() for mention in payload.mentions],
         attachment_title=attachment_title,
     )
+    if message is None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Message storage limit reached.",
+        )
     return _message_view(message, [], set(), user)
 
 
@@ -1007,7 +1035,18 @@ async def react_to_message(
     message = get_workspace_message(workspace_id, payload.channel_id, message_id)
     if message is None:
         raise HTTPException(status_code=404, detail="Message not found.")
-    toggle_message_reaction(workspace_id, payload.channel_id, message_id, payload.emoji, user)
+    outcome = toggle_message_reaction(
+        workspace_id, payload.channel_id, message_id, payload.emoji, user
+    )
+    if outcome in {"limit", "rate_limit"}:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Reaction rate limit reached. Please try again shortly."
+                if outcome == "rate_limit"
+                else "Reaction storage limit reached."
+            ),
+        )
     reactions = channel_reactions(workspace_id, payload.channel_id).get(message_id, [])
     return _message_view(message, reactions, saved_message_ids(user["sub"], workspace_id), user)
 
@@ -1025,7 +1064,11 @@ async def save_message(
     _workspace_member(workspace_id, user)
     if get_workspace_message(workspace_id, channel_id, message_id) is None:
         raise HTTPException(status_code=404, detail="Message not found.")
-    set_message_saved(user["sub"], workspace_id, channel_id, message_id, True)
+    if not set_message_saved(user["sub"], workspace_id, channel_id, message_id, True):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Saved-message storage limit reached.",
+        )
 
 
 @router.delete(
@@ -1085,6 +1128,11 @@ async def update_workspace_file(
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="This document is too large."
         ) from error
+    if meta is None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Shared-file storage limit reached.",
+        )
     return SharedFileMeta(**meta)
 
 
@@ -1138,6 +1186,11 @@ async def create_shared_workspace_invite(
     if not membership or membership.get("role") not in {"owner", "admin"}:
         raise HTTPException(
             status_code=403, detail="Only workspace owners or admins can invite members."
+        )
+    if not consume_workspace_invite_quota(workspace_id):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Invite rate limit reached. Please try again tomorrow.",
         )
     invite = create_workspace_invite(workspace_id, user["sub"])
     return WorkspaceInvite(invite_code=invite["token"])

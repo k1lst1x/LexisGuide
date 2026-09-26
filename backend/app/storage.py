@@ -36,6 +36,19 @@ REMOTE_OPERATION_LEASE_SECONDS = 60
 MAX_RECORDS_PER_USER = 500
 MAX_CONVERSATIONS_PER_USER = 100
 MAX_DOCUMENTS_PER_USER = 200
+# Shared-workspace data is durable and can be written by any authenticated
+# member.  These caps bound the long-lived DynamoDB footprint independently of
+# API Gateway's request-rate throttle.
+MAX_WORKSPACES_PER_USER = 40
+MAX_MEMBERS_PER_WORKSPACE = 100
+MAX_CHANNELS_PER_WORKSPACE = 50
+MAX_MESSAGES_PER_WORKSPACE = 10_000
+MAX_REACTIONS_PER_WORKSPACE = 50_000
+MAX_SHARED_FILES_PER_WORKSPACE = 100
+MAX_SAVED_MESSAGES_PER_USER = 2_000
+WORKSPACE_INVITE_RATE_LIMIT_PER_DAY = 25
+WORKSPACE_MESSAGE_RATE_LIMIT_PER_WINDOW = 60
+WORKSPACE_REACTION_RATE_LIMIT_PER_WINDOW = 120
 # DynamoDB items stop at 400 KB. Compressed bodies stay well under it, leaving
 # room for the other attributes.
 MAX_DOCUMENT_BYTES = 350_000
@@ -122,6 +135,31 @@ def _quota_count(user_id: str, kind: str) -> int:
     return int(value) if isinstance(value, int | Decimal) and value >= 0 else 0
 
 
+def _count_workspace_resources(workspace_id: str, prefix: str) -> int:
+    """Count rows in one shared workspace, including pre-quota data."""
+    query_args: dict[str, Any] = {
+        "KeyConditionExpression": Key("PK").eq(f"WORKSPACE#{workspace_id}")
+        & Key("SK").begins_with(prefix),
+        "Select": "COUNT",
+    }
+    total = 0
+    while True:
+        response = _table().query(**query_args)
+        total += response.get("Count", len(response.get("Items", [])))
+        last_evaluated_key = response.get("LastEvaluatedKey")
+        if last_evaluated_key is None:
+            return total
+        query_args["ExclusiveStartKey"] = last_evaluated_key
+
+
+def _workspace_quota_count(workspace_id: str, kind: str) -> int:
+    item = _table().get_item(
+        Key={"PK": f"WORKSPACE#{workspace_id}", "SK": f"QUOTA#{kind}"}
+    ).get("Item", {})
+    value = item.get("count", 0)
+    return int(value) if isinstance(value, int | Decimal) and value >= 0 else 0
+
+
 def _cancellation_reason(error: ClientError, index: int) -> str | None:
     reasons = error.response.get("CancellationReasons", [])
     if index >= len(reasons):
@@ -190,6 +228,171 @@ def _create_resource_with_limit(
                 return "exists"
             # Another request updated the quota after our read. Reconcile and retry.
     raise RuntimeError("Could not reserve persistent storage after concurrent writes.")
+
+
+def _create_workspace_resource_with_limit(
+    workspace_id: str,
+    *,
+    kind: str,
+    prefix: str,
+    limit: int,
+    item: dict[str, Any],
+) -> str:
+    """Atomically add one bounded resource to a shared workspace.
+
+    Workspace rows use the same table partition, but their quota has to be
+    scoped to the workspace rather than to whichever member made the request.
+    Counting existing rows first keeps deployments that predate this safeguard
+    inside the new cap too.
+    """
+    for _ in range(RESOURCE_WRITE_RETRIES):
+        stored_count = _count_workspace_resources(workspace_id, prefix)
+        observed_quota = _workspace_quota_count(workspace_id, kind)
+        count = max(stored_count, observed_quota)
+        if count >= limit:
+            return "limit"
+
+        table = _table()
+        try:
+            table.meta.client.transact_write_items(
+                TransactItems=[
+                    {
+                        "Put": {
+                            "TableName": table.name,
+                            "Item": item,
+                            "ConditionExpression": "attribute_not_exists(PK)",
+                        }
+                    },
+                    {
+                        "Update": {
+                            "TableName": table.name,
+                            "Key": {
+                                "PK": f"WORKSPACE#{workspace_id}",
+                                "SK": f"QUOTA#{kind}",
+                            },
+                            "UpdateExpression": "SET #count = :new_count",
+                            "ConditionExpression": (
+                                "attribute_not_exists(#count) OR #count = :observed_count"
+                            ),
+                            "ExpressionAttributeNames": {"#count": "count"},
+                            "ExpressionAttributeValues": {
+                                ":new_count": count + 1,
+                                ":observed_count": observed_quota,
+                            },
+                        }
+                    },
+                ]
+            )
+            return "created"
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") != "TransactionCanceledException":
+                raise
+            if _cancellation_reason(error, 0) == "ConditionalCheckFailed":
+                return "exists"
+            # Another request updated this workspace's quota; reconcile first.
+    raise RuntimeError("Could not reserve shared workspace storage after concurrent writes.")
+
+
+def _invalidate_workspace_quotas(workspace_id: str, *kinds: str) -> None:
+    """Force the next allocation to reconcile after a batch deletion."""
+    with _table().batch_writer() as batch:
+        for kind in kinds:
+            batch.delete_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": f"QUOTA#{kind}"})
+
+
+def _reserve_workspace_membership(
+    workspace_id: str,
+    user_id: str,
+    member: dict[str, Any],
+    pointer: dict[str, Any],
+) -> str:
+    """Atomically reserve both sides of a workspace membership.
+
+    A join consumes capacity in the workspace and in the member's own
+    workspace list.  Reserving both counters in one transaction prevents
+    concurrent invite redemptions from bypassing either boundary.
+    """
+    for _ in range(RESOURCE_WRITE_RETRIES):
+        observed_workspace_quota = _workspace_quota_count(workspace_id, "MEMBERS")
+        observed_user_quota = _quota_count(user_id, "WORKSPACES")
+        workspace_count = max(
+            _count_workspace_resources(workspace_id, "MEMBER#"), observed_workspace_quota
+        )
+        user_count = max(_count_user_resources(user_id, "WORKSPACE#"), observed_user_quota)
+        if workspace_count >= MAX_MEMBERS_PER_WORKSPACE:
+            return "workspace_limit"
+        if user_count >= MAX_WORKSPACES_PER_USER:
+            return "user_limit"
+        table = _table()
+        try:
+            table.meta.client.transact_write_items(
+                TransactItems=[
+                    {
+                        "ConditionCheck": {
+                            "TableName": table.name,
+                            "Key": _member_revocation_key(workspace_id, user_id),
+                            "ConditionExpression": "attribute_not_exists(PK)",
+                        }
+                    },
+                    {
+                        "Put": {
+                            "TableName": table.name,
+                            "Item": member,
+                            "ConditionExpression": "attribute_not_exists(PK)",
+                        }
+                    },
+                    {
+                        "Put": {
+                            "TableName": table.name,
+                            "Item": pointer,
+                            "ConditionExpression": "attribute_not_exists(PK)",
+                        }
+                    },
+                    {
+                        "Update": {
+                            "TableName": table.name,
+                            "Key": {
+                                "PK": f"WORKSPACE#{workspace_id}",
+                                "SK": "QUOTA#MEMBERS",
+                            },
+                            "UpdateExpression": "SET #count = :new_count",
+                            "ConditionExpression": (
+                                "attribute_not_exists(#count) OR #count = :observed_count"
+                            ),
+                            "ExpressionAttributeNames": {"#count": "count"},
+                            "ExpressionAttributeValues": {
+                                ":new_count": workspace_count + 1,
+                                ":observed_count": observed_workspace_quota,
+                            },
+                        }
+                    },
+                    {
+                        "Update": {
+                            "TableName": table.name,
+                            "Key": {"PK": f"USER#{user_id}", "SK": "QUOTA#WORKSPACES"},
+                            "UpdateExpression": "SET #count = :new_count",
+                            "ConditionExpression": (
+                                "attribute_not_exists(#count) OR #count = :observed_count"
+                            ),
+                            "ExpressionAttributeNames": {"#count": "count"},
+                            "ExpressionAttributeValues": {
+                                ":new_count": user_count + 1,
+                                ":observed_count": observed_user_quota,
+                            },
+                        }
+                    },
+                ]
+            )
+            return "created"
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") != "TransactionCanceledException":
+                raise
+            if _cancellation_reason(error, 0) == "ConditionalCheckFailed":
+                return "revoked"
+            if _cancellation_reason(error, 1) == "ConditionalCheckFailed":
+                return "exists"
+            # One of the counters changed. Reconcile both before trying again.
+    raise RuntimeError("Could not reserve workspace membership after concurrent writes.")
 
 
 def create_record_with_limit(
@@ -346,45 +549,93 @@ def list_records(user_id: str) -> list[dict[str, Any]]:
         query_args["ExclusiveStartKey"] = last_evaluated_key
 
 
-def create_workspace(owner: dict[str, str], name: str) -> dict[str, Any]:
+def create_workspace(owner: dict[str, str], name: str) -> dict[str, Any] | None:
+    """Create a workspace under the caller's durable workspace allowance."""
     workspace_id = str(uuid4())
     now = datetime.now(UTC).isoformat()
     workspace = {"id": workspace_id, "name": name, "owner_id": owner["sub"], "created_at": now}
     table = _table()
-    table.put_item(Item={"PK": f"WORKSPACE#{workspace_id}", "SK": "META", **workspace})
-    table.put_item(
-        Item={
-            "PK": f"WORKSPACE#{workspace_id}",
-            "SK": f"MEMBER#{owner['sub']}",
-            "workspace_id": workspace_id,
-            "user_id": owner["sub"],
-            "email": owner.get("email", ""),
-            "name": owner.get("name", ""),
-            "role": "owner",
-            "joined_at": now,
-        }
-    )
-    table.put_item(
-        Item={
-            "PK": f"USER#{owner['sub']}",
-            "SK": f"WORKSPACE#{workspace_id}",
-            "workspace_id": workspace_id,
-            "role": "owner",
-            "name": name,
-            "joined_at": now,
-        }
-    )
-    table.put_item(
-        Item={
-            "PK": f"WORKSPACE#{workspace_id}",
-            "SK": "CHANNEL#general",
-            "id": "general",
-            "workspace_id": workspace_id,
-            "name": "General",
-            "created_at": now,
-        }
-    )
-    return workspace
+    owner_id = owner["sub"]
+    for _ in range(RESOURCE_WRITE_RETRIES):
+        stored_count = _count_user_resources(owner_id, "WORKSPACE#")
+        observed_quota = _quota_count(owner_id, "WORKSPACES")
+        count = max(stored_count, observed_quota)
+        if count >= MAX_WORKSPACES_PER_USER:
+            return None
+        try:
+            table.meta.client.transact_write_items(
+                TransactItems=[
+                    {
+                        "Put": {
+                            "TableName": table.name,
+                            "Item": {"PK": f"WORKSPACE#{workspace_id}", "SK": "META", **workspace},
+                            "ConditionExpression": "attribute_not_exists(PK)",
+                        }
+                    },
+                    {
+                        "Put": {
+                            "TableName": table.name,
+                            "Item": {
+                                "PK": f"WORKSPACE#{workspace_id}",
+                                "SK": f"MEMBER#{owner_id}",
+                                "workspace_id": workspace_id,
+                                "user_id": owner_id,
+                                "email": owner.get("email", ""),
+                                "name": owner.get("name", ""),
+                                "role": "owner",
+                                "joined_at": now,
+                            },
+                        }
+                    },
+                    {
+                        "Put": {
+                            "TableName": table.name,
+                            "Item": {
+                                "PK": f"USER#{owner_id}",
+                                "SK": f"WORKSPACE#{workspace_id}",
+                                "workspace_id": workspace_id,
+                                "role": "owner",
+                                "name": name,
+                                "joined_at": now,
+                            },
+                            "ConditionExpression": "attribute_not_exists(PK)",
+                        }
+                    },
+                    {
+                        "Put": {
+                            "TableName": table.name,
+                            "Item": {
+                                "PK": f"WORKSPACE#{workspace_id}",
+                                "SK": "CHANNEL#general",
+                                "id": "general",
+                                "workspace_id": workspace_id,
+                                "name": "General",
+                                "created_at": now,
+                            },
+                        }
+                    },
+                    {
+                        "Update": {
+                            "TableName": table.name,
+                            "Key": {"PK": f"USER#{owner_id}", "SK": "QUOTA#WORKSPACES"},
+                            "UpdateExpression": "SET #count = :new_count",
+                            "ConditionExpression": (
+                                "attribute_not_exists(#count) OR #count = :observed_count"
+                            ),
+                            "ExpressionAttributeNames": {"#count": "count"},
+                            "ExpressionAttributeValues": {
+                                ":new_count": count + 1,
+                                ":observed_count": observed_quota,
+                            },
+                        }
+                    },
+                ]
+            )
+            return workspace
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") != "TransactionCanceledException":
+                raise
+    raise RuntimeError("Could not reserve workspace storage after concurrent writes.")
 
 
 def list_workspaces(user_id: str) -> list[dict[str, Any]]:
@@ -443,6 +694,17 @@ def set_workspace_member_role(workspace_id: str, user_id: str, role: str) -> Non
 
 def remove_workspace_member(workspace_id: str, user_id: str) -> None:
     """Take someone out of a workspace, including every channel they joined."""
+    # Establish this barrier before listing grants. A concurrent join either
+    # lands before the listing and is removed below, or sees the barrier and
+    # is rejected by ``add_channel_member``.
+    _table().put_item(
+        Item={
+            "PK": f"WORKSPACE#{workspace_id}",
+            "SK": f"REVOKED#{user_id}",
+            "user_id": user_id,
+            "revoked_at": datetime.now(UTC).isoformat(),
+        }
+    )
     keys = [
         {"PK": f"WORKSPACE#{workspace_id}", "SK": f"MEMBER#{user_id}"},
         {"PK": f"USER#{user_id}", "SK": f"WORKSPACE#{workspace_id}"},
@@ -455,6 +717,7 @@ def remove_workspace_member(workspace_id: str, user_id: str) -> None:
     with _table().batch_writer() as batch:
         for key in keys:
             batch.delete_item(Key=key)
+        batch.delete_item(Key={"PK": f"USER#{user_id}", "SK": "QUOTA#WORKSPACES"})
 
 
 def delete_workspace(workspace_id: str) -> None:
@@ -479,6 +742,10 @@ def _channel_key(workspace_id: str, channel_id: str) -> dict[str, str]:
 
 def _channel_member_sk(channel_id: str, user_id: str) -> str:
     return f"CHANMEM#{channel_id}#{user_id}"
+
+
+def _member_revocation_key(workspace_id: str, user_id: str) -> dict[str, str]:
+    return {"PK": f"WORKSPACE#{workspace_id}", "SK": f"REVOKED#{user_id}"}
 
 
 def _query_prefix(workspace_id: str, prefix: str, **extra: Any) -> list[dict[str, Any]]:
@@ -589,7 +856,7 @@ def channel_name_taken(workspace_id: str, name: str, except_id: str | None = Non
 
 def create_workspace_channel(
     workspace_id: str, name: str, description: str = "", creator: dict[str, str] | None = None
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     """Create a channel; whoever creates it is its first member."""
     channel_id = str(uuid4())
     now = datetime.now(UTC).isoformat()
@@ -605,7 +872,17 @@ def create_workspace_channel(
         "created_at": now,
         "members_seeded": True,
     }
-    _table().put_item(Item=channel)
+    result = _create_workspace_resource_with_limit(
+        workspace_id,
+        kind="CHANNELS",
+        prefix="CHANNEL#",
+        limit=MAX_CHANNELS_PER_WORKSPACE,
+        item=channel,
+    )
+    if result == "limit":
+        return None
+    if result == "exists":
+        raise RuntimeError("A generated channel id unexpectedly already exists.")
     if creator.get("sub"):
         add_channel_member(workspace_id, channel_id, creator)
     return channel
@@ -658,6 +935,7 @@ def delete_workspace_channel(workspace_id: str, channel_id: str) -> bool:
     with _table().batch_writer() as batch:
         for key in keys:
             batch.delete_item(Key=key)
+    _invalidate_workspace_quotas(workspace_id, "CHANNELS", "MESSAGES", "REACTIONS")
     return True
 
 
@@ -673,18 +951,48 @@ def is_channel_member(workspace_id: str, channel_id: str, user_id: str) -> bool:
     )
 
 
-def add_channel_member(workspace_id: str, channel_id: str, user: dict[str, str]) -> None:
-    _table().put_item(
-        Item={
-            "PK": f"WORKSPACE#{workspace_id}",
-            "SK": _channel_member_sk(channel_id, user["sub"]),
-            "channel_id": channel_id,
-            "user_id": user["sub"],
-            "email": user.get("email", ""),
-            "name": user.get("name", ""),
-            "joined_at": datetime.now(UTC).isoformat(),
-        }
-    )
+def add_channel_member(workspace_id: str, channel_id: str, user: dict[str, str]) -> bool:
+    """Join a channel only while the workspace membership is still active."""
+    table = _table()
+    user_id = user["sub"]
+    try:
+        table.meta.client.transact_write_items(
+            TransactItems=[
+                {
+                    "ConditionCheck": {
+                        "TableName": table.name,
+                        "Key": {"PK": f"WORKSPACE#{workspace_id}", "SK": f"MEMBER#{user_id}"},
+                        "ConditionExpression": "attribute_exists(PK)",
+                    }
+                },
+                {
+                    "ConditionCheck": {
+                        "TableName": table.name,
+                        "Key": _member_revocation_key(workspace_id, user_id),
+                        "ConditionExpression": "attribute_not_exists(PK)",
+                    }
+                },
+                {
+                    "Put": {
+                        "TableName": table.name,
+                        "Item": {
+                            "PK": f"WORKSPACE#{workspace_id}",
+                            "SK": _channel_member_sk(channel_id, user_id),
+                            "channel_id": channel_id,
+                            "user_id": user_id,
+                            "email": user.get("email", ""),
+                            "name": user.get("name", ""),
+                            "joined_at": datetime.now(UTC).isoformat(),
+                        },
+                    }
+                },
+            ]
+        )
+        return True
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") == "TransactionCanceledException":
+            return False
+        raise
 
 
 def remove_channel_member(workspace_id: str, channel_id: str, user_id: str) -> None:
@@ -728,7 +1036,7 @@ def create_workspace_message(
     channel_id: str = GENERAL,
     mentions: list[dict[str, str]] | None = None,
     attachment_title: str = "",
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     """Store a message inside one shared workspace's partition.
 
     Messages never live under a browser or a user partition, so every member
@@ -751,15 +1059,24 @@ def create_workspace_message(
         "attachment_title": attachment_title,
         "mentions": mentions or [],
     }
-    _table().put_item(
-        Item={
-            "PK": f"WORKSPACE#{workspace_id}",
-            # ISO-8601 is lexicographically ordered, keeping DynamoDB reads in
-            # conversation order without a table-wide scan.
-            "SK": f"MESSAGE#{channel_id}#{now}#{message_id}",
-            **message,
-        }
+    item = {
+        "PK": f"WORKSPACE#{workspace_id}",
+        # ISO-8601 is lexicographically ordered, keeping DynamoDB reads in
+        # conversation order without a table-wide scan.
+        "SK": f"MESSAGE#{channel_id}#{now}#{message_id}",
+        **message,
+    }
+    result = _create_workspace_resource_with_limit(
+        workspace_id,
+        kind="MESSAGES",
+        prefix="MESSAGE#",
+        limit=MAX_MESSAGES_PER_WORKSPACE,
+        item=item,
     )
+    if result == "limit":
+        return None
+    if result == "exists":
+        raise RuntimeError("A generated message id unexpectedly already exists.")
     try:
         _table().update_item(
             Key=_channel_key(workspace_id, channel_id),
@@ -826,6 +1143,7 @@ def delete_workspace_message(workspace_id: str, message: dict[str, Any]) -> None
     with _table().batch_writer() as batch:
         for key in keys:
             batch.delete_item(Key=key)
+    _invalidate_workspace_quotas(workspace_id, "MESSAGES", "REACTIONS")
 
 
 def consume_review_quota(user_id: str) -> bool:
@@ -960,6 +1278,44 @@ def _consume_quota(kind: str, user_id: str, window_seconds: int, request_limit: 
     return True
 
 
+def consume_workspace_invite_quota(workspace_id: str) -> bool:
+    """Keep one-day invite rows bounded before DynamoDB TTL removes them."""
+    return _consume_quota(
+        "WORKSPACE_INVITE",
+        workspace_id,
+        24 * 60 * 60,
+        _bounded_positive_int(
+            "WORKSPACE_INVITE_RATE_LIMIT_PER_DAY", WORKSPACE_INVITE_RATE_LIMIT_PER_DAY, 1_000
+        ),
+    )
+
+
+def consume_workspace_message_quota(workspace_id: str, user_id: str) -> bool:
+    return _consume_quota(
+        "WORKSPACE_MESSAGE",
+        f"{workspace_id}:{user_id}",
+        60,
+        _bounded_positive_int(
+            "WORKSPACE_MESSAGE_RATE_LIMIT_PER_WINDOW",
+            WORKSPACE_MESSAGE_RATE_LIMIT_PER_WINDOW,
+            1_000,
+        ),
+    )
+
+
+def consume_workspace_reaction_quota(workspace_id: str, user_id: str) -> bool:
+    return _consume_quota(
+        "WORKSPACE_REACTION",
+        f"{workspace_id}:{user_id}",
+        60,
+        _bounded_positive_int(
+            "WORKSPACE_REACTION_RATE_LIMIT_PER_WINDOW",
+            WORKSPACE_REACTION_RATE_LIMIT_PER_WINDOW,
+            2_000,
+        ),
+    )
+
+
 def create_workspace_invite(workspace_id: str, inviter_id: str) -> dict[str, Any]:
     token = secrets.token_urlsafe(18)
     now = datetime.now(UTC)
@@ -1014,28 +1370,42 @@ def consume_workspace_invite(token: str, user: dict[str, str]) -> dict[str, Any]
     # The workspace may have been deleted since the invite was issued.
     if not table.get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": "META"}).get("Item"):
         return None
+    if get_workspace_membership(workspace_id, user["sub"]):
+        # A second valid invite must not demote an existing admin or owner.
+        return table.get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": "META"}).get("Item")
+    # Remove any pre-removal channel grants before opening the barrier. This
+    # also repairs a workspace that was removed by an older deployment.
+    _delete_keys(
+        [
+            {"PK": item["PK"], "SK": item["SK"]}
+            for item in _query_prefix(workspace_id, "CHANMEM#")
+            if item.get("user_id") == user["sub"]
+        ]
+    )
+    table.delete_item(Key=_member_revocation_key(workspace_id, user["sub"]))
+    if _count_workspace_resources(workspace_id, "MEMBER#") >= MAX_MEMBERS_PER_WORKSPACE:
+        return None
     now = datetime.now(UTC).isoformat()
-    table.put_item(
-        Item={
-            "PK": f"WORKSPACE#{workspace_id}",
-            "SK": f"MEMBER#{user['sub']}",
-            "workspace_id": workspace_id,
-            "user_id": user["sub"],
-            "email": user.get("email", ""),
-            "name": user.get("name", ""),
-            "role": "member",
-            "joined_at": now,
-        }
-    )
-    table.put_item(
-        Item={
-            "PK": f"USER#{user['sub']}",
-            "SK": f"WORKSPACE#{workspace_id}",
-            "workspace_id": workspace_id,
-            "role": "member",
-            "joined_at": now,
-        }
-    )
+    member = {
+        "PK": f"WORKSPACE#{workspace_id}",
+        "SK": f"MEMBER#{user['sub']}",
+        "workspace_id": workspace_id,
+        "user_id": user["sub"],
+        "email": user.get("email", ""),
+        "name": user.get("name", ""),
+        "role": "member",
+        "joined_at": now,
+    }
+    pointer = {
+        "PK": f"USER#{user['sub']}",
+        "SK": f"WORKSPACE#{workspace_id}",
+        "workspace_id": workspace_id,
+        "role": "member",
+        "joined_at": now,
+    }
+    result = _reserve_workspace_membership(workspace_id, user["sub"], member, pointer)
+    if result in {"workspace_limit", "user_limit", "revoked"}:
+        return None
     return table.get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": "META"}).get("Item")
 
 
@@ -1073,6 +1443,8 @@ def _query_partition(partition: str) -> list[dict[str, Any]]:
 
 
 def _delete_keys(keys: list[dict[str, str]]) -> None:
+    if not keys:
+        return
     with _table().batch_writer() as batch:
         for key in keys:
             batch.delete_item(Key=key)
@@ -1137,6 +1509,11 @@ def admin_get_workspace(workspace_id: str) -> dict[str, Any] | None:
 def admin_delete_workspace(workspace_id: str) -> None:
     """Remove a workspace, its memberships, and each member's pointer to it."""
     items = _query_partition(f"WORKSPACE#{workspace_id}")
+    member_ids = {
+        item["user_id"]
+        for item in items
+        if item["SK"].startswith("MEMBER#") and item.get("user_id")
+    }
     keys = [{"PK": item["PK"], "SK": item["SK"]} for item in items]
     keys += [
         {"PK": f"USER#{item['user_id']}", "SK": f"WORKSPACE#{workspace_id}"}
@@ -1144,15 +1521,14 @@ def admin_delete_workspace(workspace_id: str) -> None:
         if item["SK"].startswith("MEMBER#") and item.get("user_id")
     ]
     _delete_keys(keys)
+    with _table().batch_writer() as batch:
+        for user_id in member_ids:
+            batch.delete_item(Key={"PK": f"USER#{user_id}", "SK": "QUOTA#WORKSPACES"})
 
 
 def admin_remove_workspace_member(workspace_id: str, user_id: str) -> None:
-    _delete_keys(
-        [
-            {"PK": f"WORKSPACE#{workspace_id}", "SK": f"MEMBER#{user_id}"},
-            {"PK": f"USER#{user_id}", "SK": f"WORKSPACE#{workspace_id}"},
-        ]
-    )
+    """Administrative removal must revoke the same channel grants as normal removal."""
+    remove_workspace_member(workspace_id, user_id)
 
 
 def admin_user_data(user_id: str) -> dict[str, Any]:
@@ -1565,14 +1941,21 @@ def _reaction_key(
 
 def toggle_message_reaction(
     workspace_id: str, channel_id: str, message_id: str, emoji: str, user: dict[str, str]
-) -> bool:
-    """Add this person's reaction, or take it back. Returns True when added."""
+) -> str:
+    """Add, remove, or refuse a reaction when the workspace is full."""
     key = _reaction_key(workspace_id, channel_id, message_id, emoji, user["sub"])
     if _table().get_item(Key=key).get("Item"):
         _table().delete_item(Key=key)
-        return False
-    _table().put_item(
-        Item={
+        _invalidate_workspace_quotas(workspace_id, "REACTIONS")
+        return "removed"
+    if not consume_workspace_reaction_quota(workspace_id, user["sub"]):
+        return "rate_limit"
+    result = _create_workspace_resource_with_limit(
+        workspace_id,
+        kind="REACTIONS",
+        prefix="REACT#",
+        limit=MAX_REACTIONS_PER_WORKSPACE,
+        item={
             **key,
             "message_id": message_id,
             "channel_id": channel_id,
@@ -1580,9 +1963,13 @@ def toggle_message_reaction(
             "user_id": user["sub"],
             "name": user.get("name") or user.get("email") or "Workspace member",
             "created_at": datetime.now(UTC).isoformat(),
-        }
+        },
     )
-    return True
+    if result == "limit":
+        return "limit"
+    if result == "exists":
+        return "removed"
+    return "added"
 
 
 def channel_reactions(workspace_id: str, channel_id: str) -> dict[str, list[dict[str, Any]]]:
@@ -1597,20 +1984,32 @@ def channel_reactions(workspace_id: str, channel_id: str) -> dict[str, list[dict
 
 def set_message_saved(
     user_id: str, workspace_id: str, channel_id: str, message_id: str, saved: bool
-) -> None:
+) -> bool:
     key = {"PK": f"USER#{user_id}", "SK": f"SAVED#{workspace_id}#{message_id}"}
     if saved:
-        _table().put_item(
-            Item={
-                **key,
-                "workspace_id": workspace_id,
-                "channel_id": channel_id,
-                "message_id": message_id,
-                "saved_at": datetime.now(UTC).isoformat(),
-            }
+        item = {
+            **key,
+            "workspace_id": workspace_id,
+            "channel_id": channel_id,
+            "message_id": message_id,
+            "saved_at": datetime.now(UTC).isoformat(),
+        }
+        result = _create_resource_with_limit(
+            user_id,
+            kind="SAVED_MESSAGES",
+            prefix="SAVED#",
+            limit=MAX_SAVED_MESSAGES_PER_USER,
+            item=item,
         )
+        if result == "limit":
+            return False
+        if result == "exists":
+            _table().put_item(Item=item)
+        return True
     else:
         _table().delete_item(Key=key)
+        _table().delete_item(Key={"PK": f"USER#{user_id}", "SK": "QUOTA#SAVED_MESSAGES"})
+        return True
 
 
 def saved_message_ids(user_id: str, workspace_id: str) -> set[str]:
@@ -1627,7 +2026,7 @@ def _file_key(workspace_id: str, document_key: str) -> dict[str, str]:
 
 def share_workspace_file(
     workspace_id: str, document_key: str, document: dict[str, Any], user: dict[str, str]
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     """Store (or replace) a document snapshot every member of the workspace can open."""
     now = datetime.now(UTC).isoformat()
     meta = {
@@ -1639,9 +2038,22 @@ def share_workspace_file(
         "shared_by_name": user.get("name") or user.get("email") or "Workspace member",
         "updated_at": now,
     }
-    _table().put_item(
-        Item={**_file_key(workspace_id, document_key), **meta, "body": _pack(document)}
+    item = {**_file_key(workspace_id, document_key), **meta, "body": _pack(document)}
+    key = _file_key(workspace_id, document_key)
+    if _table().get_item(Key=key).get("Item"):
+        _table().put_item(Item=item)
+        return meta
+    result = _create_workspace_resource_with_limit(
+        workspace_id,
+        kind="FILES",
+        prefix="FILE#",
+        limit=MAX_SHARED_FILES_PER_WORKSPACE,
+        item=item,
     )
+    if result == "limit":
+        return None
+    if result == "exists":
+        _table().put_item(Item=item)
     return meta
 
 

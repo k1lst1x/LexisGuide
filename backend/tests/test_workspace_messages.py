@@ -28,6 +28,7 @@ def test_members_can_post_and_read_workspace_messages(
     monkeypatch.setattr(routes, "get_workspace_membership", lambda *_: {"role": "member"})
     monkeypatch.setattr(routes, "get_workspace_channel", lambda *_: {"id": "general"})
     monkeypatch.setattr(routes, "is_channel_member", lambda *_: True)
+    monkeypatch.setattr(routes, "consume_workspace_message_quota", lambda *_: True)
     monkeypatch.setattr(routes, "channel_reactions", lambda *_: {})
     monkeypatch.setattr(routes, "saved_message_ids", lambda *_: set())
     monkeypatch.setattr(routes, "create_workspace_message", lambda *_, **__: stored)
@@ -43,3 +44,22 @@ def test_members_can_post_and_read_workspace_messages(
     assert created.json()["author_email"] == "person@example.com"
     assert listed.status_code == 200
     assert listed.json()[0]["text"] == "Please review the deadline."
+
+
+def test_message_storage_limit_returns_429(
+    authenticated_client: TestClient, monkeypatch
+) -> None:
+    monkeypatch.setattr(routes, "get_workspace_membership", lambda *_: {"role": "member"})
+    monkeypatch.setattr(
+        routes, "get_workspace_channel", lambda *_: {"id": "general", "name": "General"}
+    )
+    monkeypatch.setattr(routes, "is_channel_member", lambda *_: True)
+    monkeypatch.setattr(routes, "consume_workspace_message_quota", lambda *_: True)
+    monkeypatch.setattr(routes, "create_workspace_message", lambda *_, **__: None)
+
+    response = authenticated_client.post(
+        "/api/v1/workspaces/workspace-123/messages", json={"text": "One too many."}
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Message storage limit reached."
