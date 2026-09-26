@@ -408,71 +408,250 @@ def list_workspace_members(workspace_id: str) -> list[dict[str, Any]]:
     return response.get("Items", [])
 
 
-def list_workspace_channels(workspace_id: str) -> list[dict[str, Any]]:
-    channels = (
-        _table()
-        .query(
-            KeyConditionExpression=Key("PK").eq(f"WORKSPACE#{workspace_id}")
-            & Key("SK").begins_with("CHANNEL#")
-        )
-        .get("Items", [])
+GENERAL = "general"
+
+
+def _channel_key(workspace_id: str, channel_id: str) -> dict[str, str]:
+    return {"PK": f"WORKSPACE#{workspace_id}", "SK": f"CHANNEL#{channel_id}"}
+
+
+def _channel_member_sk(channel_id: str, user_id: str) -> str:
+    return f"CHANMEM#{channel_id}#{user_id}"
+
+
+def _query_prefix(workspace_id: str, prefix: str, **extra: Any) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    args: dict[str, Any] = {
+        "KeyConditionExpression": Key("PK").eq(f"WORKSPACE#{workspace_id}")
+        & Key("SK").begins_with(prefix),
+        **extra,
+    }
+    while True:
+        response = _table().query(**args)
+        items.extend(response.get("Items", []))
+        last = response.get("LastEvaluatedKey")
+        if last is None or "Limit" in extra:
+            return items
+        args["ExclusiveStartKey"] = last
+
+
+def _general(workspace_id: str) -> dict[str, Any]:
+    return {
+        **_channel_key(workspace_id, GENERAL),
+        "id": GENERAL,
+        "workspace_id": workspace_id,
+        "name": "General",
+        "description": (
+            "Everyone in the workspace. Announcements and anything that fits no other channel."
+        ),
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _seed_channel_members(workspace_id: str, channel: dict[str, Any]) -> None:
+    """Channels made before membership existed were open to everyone; keep
+    that by making every current workspace member a member, once."""
+    with _table().batch_writer() as batch:
+        for member in list_workspace_members(workspace_id):
+            batch.put_item(
+                Item={
+                    "PK": f"WORKSPACE#{workspace_id}",
+                    "SK": _channel_member_sk(channel["id"], member["user_id"]),
+                    "channel_id": channel["id"],
+                    "user_id": member["user_id"],
+                    "email": member.get("email", ""),
+                    "name": member.get("name", ""),
+                    "joined_at": channel.get("created_at", ""),
+                }
+            )
+    _table().update_item(
+        Key=_channel_key(workspace_id, channel["id"]),
+        UpdateExpression="SET members_seeded = :true",
+        ExpressionAttributeValues={":true": True},
     )
+
+
+def list_workspace_channels(workspace_id: str, user_id: str | None = None) -> list[dict[str, Any]]:
+    """Every channel in a workspace, with its member count and whether
+    ``user_id`` belongs to it. General comes first, then by name."""
+    channels = _query_prefix(workspace_id, "CHANNEL#")
     # Workspaces created before channels shipped get General lazily, without
     # losing any of their existing messages.
-    if not channels:
-        now = datetime.now(UTC).isoformat()
-        general = {
-            "PK": f"WORKSPACE#{workspace_id}",
-            "SK": "CHANNEL#general",
-            "id": "general",
-            "workspace_id": workspace_id,
-            "name": "General",
-            "created_at": now,
-        }
+    if not any(channel["id"] == GENERAL for channel in channels):
+        general = _general(workspace_id)
         _table().put_item(Item=general)
-        channels = [general]
-    return sorted(
-        channels, key=lambda channel: (channel["id"] != "general", channel["name"].lower())
-    )
+        channels.append(general)
+    for channel in channels:
+        if channel["id"] != GENERAL and not channel.get("members_seeded"):
+            _seed_channel_members(workspace_id, channel)
+    memberships = _query_prefix(workspace_id, "CHANMEM#")
+    workspace_members = list_workspace_members(workspace_id)
+    counts: dict[str, int] = {}
+    mine: set[str] = set()
+    for membership in memberships:
+        counts[membership["channel_id"]] = counts.get(membership["channel_id"], 0) + 1
+        if membership.get("user_id") == user_id:
+            mine.add(membership["channel_id"])
+    listed = []
+    for channel in channels:
+        is_general = channel["id"] == GENERAL
+        listed.append(
+            {
+                **channel,
+                "member_count": len(workspace_members)
+                if is_general
+                else counts.get(channel["id"], 0),
+                "is_member": is_general or channel["id"] in mine,
+            }
+        )
+    return sorted(listed, key=lambda channel: (channel["id"] != GENERAL, channel["name"].lower()))
 
 
 def get_workspace_channel(workspace_id: str, channel_id: str) -> dict[str, Any] | None:
-    channel = (
-        _table()
-        .get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": f"CHANNEL#{channel_id}"})
-        .get("Item")
-    )
-    if channel is None and channel_id == "general":
+    channel = _table().get_item(Key=_channel_key(workspace_id, channel_id)).get("Item")
+    if channel is None and channel_id == GENERAL:
         # Backfill General for a pre-channel workspace before its first read or
-        # write, even when the client has not opened the channel menu yet.
-        list_workspace_channels(workspace_id)
-        channel = (
-            _table()
-            .get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": "CHANNEL#general"})
-            .get("Item")
-        )
+        # write, even when the client has not opened the channel list yet.
+        channel = _general(workspace_id)
+        _table().put_item(Item=channel)
     return channel
 
 
-def create_workspace_channel(workspace_id: str, name: str) -> dict[str, Any]:
+def channel_name_taken(workspace_id: str, name: str, except_id: str | None = None) -> bool:
+    wanted = name.casefold()
+    return any(
+        channel["name"].casefold() == wanted and channel["id"] != except_id
+        for channel in _query_prefix(workspace_id, "CHANNEL#")
+    )
+
+
+def create_workspace_channel(
+    workspace_id: str, name: str, description: str = "", creator: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """Create a channel; whoever creates it is its first member."""
     channel_id = str(uuid4())
+    now = datetime.now(UTC).isoformat()
+    creator = creator or {}
     channel = {
-        "PK": f"WORKSPACE#{workspace_id}",
-        "SK": f"CHANNEL#{channel_id}",
+        **_channel_key(workspace_id, channel_id),
         "id": channel_id,
         "workspace_id": workspace_id,
         "name": name,
-        "created_at": datetime.now(UTC).isoformat(),
+        "description": description,
+        "created_by": creator.get("sub", ""),
+        "created_by_name": creator.get("name") or creator.get("email", ""),
+        "created_at": now,
+        "members_seeded": True,
     }
     _table().put_item(Item=channel)
+    if creator.get("sub"):
+        add_channel_member(workspace_id, channel_id, creator)
     return channel
 
 
+def update_workspace_channel(
+    workspace_id: str, channel_id: str, name: str | None = None, description: str | None = None
+) -> dict[str, Any]:
+    fields = {
+        key: value
+        for key, value in (("name", name), ("description", description))
+        if value is not None
+    }
+    if not fields:
+        return get_workspace_channel(workspace_id, channel_id) or {}
+    names = {f"#f{index}": key for index, key in enumerate(fields)}
+    values = {f":v{index}": value for index, value in enumerate(fields.values())}
+    response = _table().update_item(
+        Key=_channel_key(workspace_id, channel_id),
+        UpdateExpression="SET " + ", ".join(f"#f{i} = :v{i}" for i in range(len(fields))),
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=values,
+        ReturnValues="ALL_NEW",
+    )
+    return response["Attributes"]
+
+
 def delete_workspace_channel(workspace_id: str, channel_id: str) -> bool:
-    if channel_id == "general" or not get_workspace_channel(workspace_id, channel_id):
+    """Remove a channel with its memberships and messages. General stays."""
+    if channel_id == GENERAL or not get_workspace_channel(workspace_id, channel_id):
         return False
-    _table().delete_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": f"CHANNEL#{channel_id}"})
+    keys = [
+        {"PK": item["PK"], "SK": item["SK"]}
+        for item in _query_prefix(workspace_id, f"CHANMEM#{channel_id}#")
+    ]
+    keys += [
+        {"PK": item["PK"], "SK": item["SK"]}
+        for item in _query_prefix(workspace_id, f"MESSAGE#{channel_id}#")
+    ]
+    keys += [
+        {"PK": item["PK"], "SK": item["SK"]}
+        for item in _legacy_messages(workspace_id)
+        if item.get("channel_id") == channel_id
+    ]
+    keys.append(_channel_key(workspace_id, channel_id))
+    with _table().batch_writer() as batch:
+        for key in keys:
+            batch.delete_item(Key=key)
     return True
+
+
+def is_channel_member(workspace_id: str, channel_id: str, user_id: str) -> bool:
+    if channel_id == GENERAL:
+        return get_workspace_membership(workspace_id, user_id) is not None
+    return bool(
+        _table()
+        .get_item(
+            Key={"PK": f"WORKSPACE#{workspace_id}", "SK": _channel_member_sk(channel_id, user_id)}
+        )
+        .get("Item")
+    )
+
+
+def add_channel_member(workspace_id: str, channel_id: str, user: dict[str, str]) -> None:
+    _table().put_item(
+        Item={
+            "PK": f"WORKSPACE#{workspace_id}",
+            "SK": _channel_member_sk(channel_id, user["sub"]),
+            "channel_id": channel_id,
+            "user_id": user["sub"],
+            "email": user.get("email", ""),
+            "name": user.get("name", ""),
+            "joined_at": datetime.now(UTC).isoformat(),
+        }
+    )
+
+
+def remove_channel_member(workspace_id: str, channel_id: str, user_id: str) -> None:
+    _table().delete_item(
+        Key={"PK": f"WORKSPACE#{workspace_id}", "SK": _channel_member_sk(channel_id, user_id)}
+    )
+
+
+def list_channel_members(workspace_id: str, channel_id: str) -> list[dict[str, Any]]:
+    """Channel members with their workspace role, earliest joiner first."""
+    workspace_members = {
+        member["user_id"]: member for member in list_workspace_members(workspace_id)
+    }
+    if channel_id == GENERAL:
+        people = list(workspace_members.values())
+    else:
+        people = [
+            {**workspace_members.get(item["user_id"], {}), **item}
+            for item in _query_prefix(workspace_id, f"CHANMEM#{channel_id}#")
+        ]
+    return sorted(
+        [
+            {
+                "user_id": person["user_id"],
+                "email": person.get("email", ""),
+                "name": person.get("name", ""),
+                "role": workspace_members.get(person["user_id"], {}).get("role", "member"),
+                "joined_at": person.get("joined_at", ""),
+            }
+            for person in people
+        ],
+        key=lambda person: person["joined_at"],
+    )
 
 
 def create_workspace_message(
@@ -480,12 +659,14 @@ def create_workspace_message(
     user: dict[str, str],
     text: str,
     attachment: str | None = None,
-    channel_id: str = "general",
+    channel_id: str = GENERAL,
 ) -> dict[str, Any]:
     """Store a message inside one shared workspace's partition.
 
     Messages never live under a browser or a user partition, so every member
-    who passes the workspace-membership check reads the same ordered thread.
+    who passes the membership check reads the same ordered thread. Each
+    channel's messages share a key prefix, so reading one channel never reads
+    another's.
     """
     now = datetime.now(UTC).isoformat()
     message_id = str(uuid4())
@@ -493,6 +674,7 @@ def create_workspace_message(
         "id": message_id,
         "workspace_id": workspace_id,
         "channel_id": channel_id,
+        "author_id": user.get("sub", ""),
         "user": user.get("name") or user.get("email") or "Workspace member",
         "author_email": user.get("email", ""),
         "text": text,
@@ -504,34 +686,68 @@ def create_workspace_message(
             "PK": f"WORKSPACE#{workspace_id}",
             # ISO-8601 is lexicographically ordered, keeping DynamoDB reads in
             # conversation order without a table-wide scan.
-            "SK": f"MESSAGE#{now}#{message_id}",
+            "SK": f"MESSAGE#{channel_id}#{now}#{message_id}",
             **message,
         }
     )
+    try:
+        _table().update_item(
+            Key=_channel_key(workspace_id, channel_id),
+            UpdateExpression="SET last_message_at = :at",
+            ConditionExpression=Attr("PK").exists(),
+            ExpressionAttributeValues={":at": now},
+        )
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            raise
     return message
 
 
+def _legacy_messages(workspace_id: str, limit: int | None = None) -> list[dict[str, Any]]:
+    """Messages stored before each channel had its own key prefix. Their key
+    is MESSAGE#<timestamp>#<id>, and all were written in 2026 or later."""
+    extra: dict[str, Any] = {"ScanIndexForward": False}
+    if limit:
+        extra["Limit"] = limit
+    return [
+        item
+        for item in _query_prefix(workspace_id, "MESSAGE#20", **extra)
+        if len(item["SK"].split("#")) == 3
+    ]
+
+
 def list_workspace_messages(
-    workspace_id: str, channel_id: str = "general", limit: int = 200
+    workspace_id: str, channel_id: str = GENERAL, limit: int = 200
 ) -> list[dict[str, Any]]:
-    response = _table().query(
-        KeyConditionExpression=Key("PK").eq(f"WORKSPACE#{workspace_id}")
-        & Key("SK").begins_with("MESSAGE#"),
-        ScanIndexForward=False,
-        Limit=limit,
+    """A channel's newest messages, oldest first."""
+    current = _query_prefix(
+        workspace_id, f"MESSAGE#{channel_id}#", ScanIndexForward=False, Limit=limit
     )
-    # The query reads newest first so a busy workspace stays bounded; the UI
-    # receives chronological order.
-    return list(
-        reversed(
-            [
-                item
-                for item in response.get("Items", [])
-                # Messages written before channels belong to General.
-                if item.get("channel_id", "general") == channel_id
-            ]
-        )
+    legacy = [
+        item
+        for item in _legacy_messages(workspace_id, limit)
+        # Messages written before channels belong to General.
+        if item.get("channel_id", GENERAL) == channel_id
+    ]
+    merged = sorted(current + legacy, key=lambda item: item["created_at"])
+    return merged[-limit:]
+
+
+def get_workspace_message(
+    workspace_id: str, channel_id: str, message_id: str
+) -> dict[str, Any] | None:
+    return next(
+        (
+            item
+            for item in list_workspace_messages(workspace_id, channel_id, limit=1_000)
+            if item["id"] == message_id
+        ),
+        None,
     )
+
+
+def delete_workspace_message(workspace_id: str, message: dict[str, Any]) -> None:
+    _table().delete_item(Key={"PK": message["PK"], "SK": message["SK"]})
 
 
 def consume_review_quota(user_id: str) -> bool:

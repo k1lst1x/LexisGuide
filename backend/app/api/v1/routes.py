@@ -20,6 +20,8 @@ from app.lawfirm import (
 from app.legal_agent import configured_agent
 from app.storage import (
     acquire_remote_operation,
+    add_channel_member,
+    channel_name_taken,
     consume_chat_quota,
     consume_review_quota,
     consume_statute_quota,
@@ -30,11 +32,15 @@ from app.storage import (
     create_workspace_invite,
     create_workspace_message,
     delete_workspace_channel,
+    delete_workspace_message,
     get_conversation,
     get_lawyer_verification,
     get_profile,
     get_workspace_channel,
     get_workspace_membership,
+    get_workspace_message,
+    is_channel_member,
+    list_channel_members,
     list_conversations,
     list_records,
     list_workspace_channels,
@@ -44,10 +50,12 @@ from app.storage import (
     put_profile,
     release_lawyer_attempt,
     release_remote_operation,
+    remove_channel_member,
     reserve_lawyer_attempt,
     save_conversation_with_limit,
     save_lawyer_verification,
     set_workspace_linked_document,
+    update_workspace_channel,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["v1"])
@@ -146,6 +154,7 @@ class WorkspaceMessageCreate(BaseModel):
 class WorkspaceMessage(BaseModel):
     id: str
     user: str
+    author_id: str = ""
     author_email: str = ""
     text: str
     created_at: str
@@ -153,22 +162,45 @@ class WorkspaceMessage(BaseModel):
     channel_id: str = "general"
 
 
+def _clean_channel_name(value: str) -> str:
+    value = " ".join(value.strip().lstrip("#").split())
+    if not value:
+        raise ValueError("Channel name must not be blank")
+    return value
+
+
 class WorkspaceChannelCreate(BaseModel):
     name: str = Field(min_length=1, max_length=60)
+    description: str = Field(default="", max_length=250)
 
     @field_validator("name")
     @classmethod
     def clean_name(cls, value: str) -> str:
-        value = " ".join(value.strip().split())
-        if not value:
-            raise ValueError("Channel name must not be blank")
-        return value
+        return _clean_channel_name(value)
+
+
+class WorkspaceChannelUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    description: str | None = Field(default=None, max_length=250)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str | None) -> str | None:
+        return None if value is None else _clean_channel_name(value)
 
 
 class WorkspaceChannel(BaseModel):
     id: str
     name: str
+    description: str = ""
+    created_by: str = ""
+    created_by_name: str = ""
     created_at: str
+    last_message_at: str = ""
+    member_count: int = 0
+    is_member: bool = False
+    # Whether the caller may edit or delete it: its creator, or a workspace admin.
+    can_manage: bool = False
 
 
 class WorkspaceLinkedDocument(BaseModel):
@@ -615,13 +647,51 @@ async def read_workspace_members(
     return [WorkspaceMember(**member) for member in list_workspace_members(workspace_id)]
 
 
+CHANNEL_ID = r"^[A-Za-z0-9-]{1,80}$"
+
+
+def _workspace_member(workspace_id: str, user: dict[str, str]) -> dict:
+    membership = get_workspace_membership(workspace_id, user["sub"])
+    if not membership:
+        raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
+    return membership
+
+
+def _channel_or_404(workspace_id: str, channel_id: str) -> dict:
+    channel = get_workspace_channel(workspace_id, channel_id)
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found.")
+    return channel
+
+
+def _can_manage(membership: dict, channel: dict, user: dict[str, str]) -> bool:
+    """A channel's creator, or a workspace owner or admin, may change it."""
+    return membership.get("role") in {"owner", "admin"} or channel.get("created_by") == user["sub"]
+
+
+def _as_view(channel: dict, membership: dict, user: dict[str, str]) -> WorkspaceChannel:
+    return WorkspaceChannel(**channel, can_manage=_can_manage(membership, channel, user))
+
+
+def _channel_view(workspace_id: str, channel_id: str, user: dict[str, str]) -> WorkspaceChannel:
+    membership = get_workspace_membership(workspace_id, user["sub"]) or {}
+    listed = list_workspace_channels(workspace_id, user["sub"])
+    channel = next((item for item in listed if item["id"] == channel_id), None)
+    if channel is None:
+        raise HTTPException(status_code=404, detail="Channel not found.")
+    return _as_view(channel, membership, user)
+
+
 @router.get("/workspaces/{workspace_id}/channels", response_model=list[WorkspaceChannel])
 async def read_workspace_channels(
     workspace_id: str, user: dict[str, str] = Depends(current_user)
 ) -> list[WorkspaceChannel]:
-    if not get_workspace_membership(workspace_id, user["sub"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
-    return [WorkspaceChannel(**channel) for channel in list_workspace_channels(workspace_id)]
+    """Every channel, joined or not, so people can browse and join them."""
+    membership = _workspace_member(workspace_id, user)
+    return [
+        _as_view(channel, membership, user)
+        for channel in list_workspace_channels(workspace_id, user["sub"])
+    ]
 
 
 @router.post(
@@ -634,41 +704,117 @@ async def post_workspace_channel(
     payload: WorkspaceChannelCreate,
     user: dict[str, str] = Depends(current_user),
 ) -> WorkspaceChannel:
-    membership = get_workspace_membership(workspace_id, user["sub"])
-    if not membership or membership.get("role") not in {"owner", "admin"}:
+    """Any member can start a channel, as in Slack; they join it first."""
+    _workspace_member(workspace_id, user)
+    if channel_name_taken(workspace_id, payload.name):
+        raise HTTPException(status_code=409, detail=f"#{payload.name} already exists.")
+    channel = create_workspace_channel(
+        workspace_id, payload.name, payload.description.strip(), creator=user
+    )
+    return _channel_view(workspace_id, channel["id"], user)
+
+
+@router.patch("/workspaces/{workspace_id}/channels/{channel_id}", response_model=WorkspaceChannel)
+async def patch_workspace_channel(
+    workspace_id: str,
+    payload: WorkspaceChannelUpdate,
+    channel_id: str = Path(pattern=CHANNEL_ID),
+    user: dict[str, str] = Depends(current_user),
+) -> WorkspaceChannel:
+    membership = _workspace_member(workspace_id, user)
+    channel = _channel_or_404(workspace_id, channel_id)
+    if not _can_manage(membership, channel, user):
         raise HTTPException(
-            status_code=403, detail="Only workspace owners or admins can add channels."
+            status_code=403,
+            detail="Only the channel's creator or a workspace admin can edit it.",
         )
-    return WorkspaceChannel(**create_workspace_channel(workspace_id, payload.name))
+    if channel_id == "general" and payload.name is not None and payload.name != channel["name"]:
+        raise HTTPException(status_code=400, detail="General cannot be renamed.")
+    if payload.name and channel_name_taken(workspace_id, payload.name, except_id=channel_id):
+        raise HTTPException(status_code=409, detail=f"#{payload.name} already exists.")
+    update_workspace_channel(
+        workspace_id,
+        channel_id,
+        name=payload.name,
+        description=None if payload.description is None else payload.description.strip(),
+    )
+    return _channel_view(workspace_id, channel_id, user)
 
 
 @router.delete(
     "/workspaces/{workspace_id}/channels/{channel_id}", status_code=status.HTTP_204_NO_CONTENT
 )
 async def remove_workspace_channel(
-    workspace_id: str, channel_id: str, user: dict[str, str] = Depends(current_user)
+    workspace_id: str,
+    channel_id: str = Path(pattern=CHANNEL_ID),
+    user: dict[str, str] = Depends(current_user),
 ) -> None:
-    membership = get_workspace_membership(workspace_id, user["sub"])
-    if not membership or membership.get("role") not in {"owner", "admin"}:
+    membership = _workspace_member(workspace_id, user)
+    channel = _channel_or_404(workspace_id, channel_id)
+    if channel_id == "general":
+        raise HTTPException(status_code=400, detail="General cannot be deleted.")
+    if not _can_manage(membership, channel, user):
         raise HTTPException(
-            status_code=403, detail="Only workspace owners or admins can delete channels."
+            status_code=403,
+            detail="Only the channel's creator or a workspace admin can delete it.",
         )
-    if not delete_workspace_channel(workspace_id, channel_id):
-        raise HTTPException(
-            status_code=400, detail="General cannot be deleted, or the channel no longer exists."
-        )
+    delete_workspace_channel(workspace_id, channel_id)
+
+
+@router.post(
+    "/workspaces/{workspace_id}/channels/{channel_id}/join", response_model=WorkspaceChannel
+)
+async def join_workspace_channel(
+    workspace_id: str,
+    channel_id: str = Path(pattern=CHANNEL_ID),
+    user: dict[str, str] = Depends(current_user),
+) -> WorkspaceChannel:
+    _workspace_member(workspace_id, user)
+    _channel_or_404(workspace_id, channel_id)
+    if channel_id != "general":
+        add_channel_member(workspace_id, channel_id, user)
+    return _channel_view(workspace_id, channel_id, user)
+
+
+@router.post(
+    "/workspaces/{workspace_id}/channels/{channel_id}/leave", response_model=WorkspaceChannel
+)
+async def leave_workspace_channel(
+    workspace_id: str,
+    channel_id: str = Path(pattern=CHANNEL_ID),
+    user: dict[str, str] = Depends(current_user),
+) -> WorkspaceChannel:
+    _workspace_member(workspace_id, user)
+    _channel_or_404(workspace_id, channel_id)
+    if channel_id == "general":
+        raise HTTPException(status_code=400, detail="Everyone stays in General.")
+    remove_channel_member(workspace_id, channel_id, user["sub"])
+    return _channel_view(workspace_id, channel_id, user)
+
+
+@router.get(
+    "/workspaces/{workspace_id}/channels/{channel_id}/members",
+    response_model=list[WorkspaceMember],
+)
+async def read_channel_members(
+    workspace_id: str,
+    channel_id: str = Path(pattern=CHANNEL_ID),
+    user: dict[str, str] = Depends(current_user),
+) -> list[WorkspaceMember]:
+    _workspace_member(workspace_id, user)
+    _channel_or_404(workspace_id, channel_id)
+    return [WorkspaceMember(**member) for member in list_channel_members(workspace_id, channel_id)]
 
 
 @router.get("/workspaces/{workspace_id}/messages", response_model=list[WorkspaceMessage])
 async def read_workspace_messages(
     workspace_id: str,
-    channel_id: str = Query(default="general", alias="channel_id", pattern=r"^[A-Za-z0-9-]{1,80}$"),
+    channel_id: str = Query(default="general", alias="channel_id", pattern=CHANNEL_ID),
     user: dict[str, str] = Depends(current_user),
 ) -> list[WorkspaceMessage]:
-    if not get_workspace_membership(workspace_id, user["sub"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
-    if not get_workspace_channel(workspace_id, channel_id):
-        raise HTTPException(status_code=404, detail="Channel not found.")
+    """Any workspace member can read a channel, so they can look before joining."""
+    _workspace_member(workspace_id, user)
+    _channel_or_404(workspace_id, channel_id)
     return [
         WorkspaceMessage(**message) for message in list_workspace_messages(workspace_id, channel_id)
     ]
@@ -684,14 +830,38 @@ async def post_workspace_message(
     payload: WorkspaceMessageCreate,
     user: dict[str, str] = Depends(current_user),
 ) -> WorkspaceMessage:
-    if not get_workspace_membership(workspace_id, user["sub"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
-    if not get_workspace_channel(workspace_id, payload.channel_id):
-        raise HTTPException(status_code=404, detail="Channel not found.")
+    _workspace_member(workspace_id, user)
+    channel = _channel_or_404(workspace_id, payload.channel_id)
+    if not is_channel_member(workspace_id, payload.channel_id, user["sub"]):
+        raise HTTPException(status_code=403, detail=f"Join #{channel['name']} to post in it.")
     attachment = payload.attachment.strip() if payload.attachment else None
     return WorkspaceMessage(
         **create_workspace_message(workspace_id, user, payload.text, attachment, payload.channel_id)
     )
+
+
+@router.delete(
+    "/workspaces/{workspace_id}/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def remove_workspace_message(
+    workspace_id: str,
+    message_id: str = Path(pattern=CHANNEL_ID),
+    channel_id: str = Query(default="general", pattern=CHANNEL_ID),
+    user: dict[str, str] = Depends(current_user),
+) -> None:
+    """Authors can delete their own messages; workspace admins can delete any."""
+    membership = _workspace_member(workspace_id, user)
+    message = get_workspace_message(workspace_id, channel_id, message_id)
+    if message is None:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    own = message.get("author_id") == user["sub"] or (
+        not message.get("author_id")
+        and bool(user.get("email"))
+        and message.get("author_email", "").lower() == user["email"].lower()
+    )
+    if not own and membership.get("role") not in {"owner", "admin"}:
+        raise HTTPException(status_code=403, detail="You can only delete your own messages.")
+    delete_workspace_message(workspace_id, message)
 
 
 @router.put("/workspaces/{workspace_id}/linked-document", response_model=Workspace)

@@ -27,6 +27,7 @@ def test_members_can_post_and_read_workspace_messages(
     }
     monkeypatch.setattr(routes, "get_workspace_membership", lambda *_: {"role": "member"})
     monkeypatch.setattr(routes, "get_workspace_channel", lambda *_: {"id": "general"})
+    monkeypatch.setattr(routes, "is_channel_member", lambda *_: True)
     monkeypatch.setattr(routes, "create_workspace_message", lambda *_: stored)
     monkeypatch.setattr(routes, "list_workspace_messages", lambda *_: [stored])
 
