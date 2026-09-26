@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import gzip
+import json
 import os
 import secrets
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from functools import lru_cache
 from hashlib import sha256
 from typing import Any
@@ -12,7 +15,6 @@ from uuid import uuid4
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
-from boto3.dynamodb.types import TypeSerializer
 from botocore.exceptions import ClientError
 
 INVITE_TTL_SECONDS = 24 * 60 * 60
@@ -34,6 +36,10 @@ REMOTE_OPERATION_LEASE_SECONDS = 60
 # user-controlled data, even when an authenticated client writes continuously.
 MAX_RECORDS_PER_USER = 500
 MAX_CONVERSATIONS_PER_USER = 100
+MAX_DOCUMENTS_PER_USER = 200
+# DynamoDB items stop at 400 KB. Compressed bodies stay well under it, leaving
+# room for the other attributes.
+MAX_DOCUMENT_BYTES = 350_000
 RESOURCE_WRITE_RETRIES = 5
 
 
@@ -97,8 +103,7 @@ def save_record(user_id: str, record_id: str, record: dict[str, Any]) -> dict[st
 def _count_user_resources(user_id: str, prefix: str) -> int:
     """Count all matching rows, including legacy rows created before quotas existed."""
     query_args: dict[str, Any] = {
-        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}")
-        & Key("SK").begins_with(prefix),
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with(prefix),
         "Select": "COUNT",
     }
     total = 0
@@ -112,16 +117,10 @@ def _count_user_resources(user_id: str, prefix: str) -> int:
 
 
 def _quota_count(user_id: str, kind: str) -> int:
-    item = _table().get_item(
-        Key={"PK": f"USER#{user_id}", "SK": f"QUOTA#{kind}"}
-    ).get("Item", {})
+    item = _table().get_item(Key={"PK": f"USER#{user_id}", "SK": f"QUOTA#{kind}"}).get("Item", {})
+    # DynamoDB hands numbers back as Decimal, never int.
     value = item.get("count", 0)
-    return value if isinstance(value, int) and value >= 0 else 0
-
-
-def _serialize(values: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    serializer = TypeSerializer()
-    return {key: serializer.serialize(value) for key, value in values.items()}
+    return int(value) if isinstance(value, int | Decimal) and value >= 0 else 0
 
 
 def _cancellation_reason(error: ClientError, index: int) -> str | None:
@@ -141,6 +140,10 @@ def _create_resource_with_limit(
 ) -> str:
     """Atomically write one new row and its exact user quota.
 
+    Values go to ``table.meta.client`` as plain Python: a DynamoDB resource's
+    client serializes them itself, so pre-serialized values would be encoded
+    twice and every transaction rejected.
+
     The initial count is reconciled from existing rows, so accounts created
     before this guardrail cannot receive a second allocation. A conditional
     transaction keeps the item and quota inseparable under concurrent writes.
@@ -159,24 +162,23 @@ def _create_resource_with_limit(
                     {
                         "Put": {
                             "TableName": table.name,
-                            "Item": _serialize(item),
+                            "Item": item,
                             "ConditionExpression": "attribute_not_exists(PK)",
                         }
                     },
                     {
                         "Update": {
                             "TableName": table.name,
-                            "Key": _serialize(
-                                {"PK": f"USER#{user_id}", "SK": f"QUOTA#{kind}"}
-                            ),
+                            "Key": {"PK": f"USER#{user_id}", "SK": f"QUOTA#{kind}"},
                             "UpdateExpression": "SET #count = :new_count",
                             "ConditionExpression": (
                                 "attribute_not_exists(#count) OR #count = :observed_count"
                             ),
                             "ExpressionAttributeNames": {"#count": "count"},
-                            "ExpressionAttributeValues": _serialize(
-                                {":new_count": count + 1, ":observed_count": observed_quota}
-                            ),
+                            "ExpressionAttributeValues": {
+                                ":new_count": count + 1,
+                                ":observed_count": observed_quota,
+                            },
                         }
                     },
                 ]
@@ -798,7 +800,7 @@ def admin_data_totals() -> dict[str, int]:
         pk, sk = item["PK"], item["SK"]
         if pk.startswith("WORKSPACE#") and sk == "META":
             totals["workspaces"] += 1
-        elif sk.startswith("RECORD#"):
+        elif sk.startswith(("RECORD#", "DOC#")):
             totals["documents"] += 1
         elif sk.startswith("CHAT#"):
             totals["conversations"] += 1
@@ -883,7 +885,7 @@ def admin_user_data(user_id: str) -> dict[str, Any]:
     profile = next((item for item in items if item["SK"] == "PROFILE"), {})
     return {
         "display_name": profile.get("display_name", ""),
-        "documents": sum(item["SK"].startswith("RECORD#") for item in items),
+        "documents": sum(item["SK"].startswith(("RECORD#", "DOC#")) for item in items),
         "conversations": sum(item["SK"].startswith("CHAT#") for item in items),
         "workspaces": workspaces,
         "lawyer_verification": get_lawyer_verification(user_id),
@@ -1052,3 +1054,178 @@ def update_ledger_change(user_id: str, sort_key: str, fields: dict[str, Any]) ->
         ExpressionAttributeNames=names,
         ExpressionAttributeValues=values,
     )
+
+
+# ── Saved workspace ──────────────────────────────────────────────────────────
+# The documents a person works on, and where they left off, so a refresh or a
+# new device opens the workspace exactly as it was. Each document is one item
+# in the owner's partition, its body gzip-compressed JSON.
+
+
+class DocumentTooLargeError(ValueError):
+    pass
+
+
+def consume_document_save_quota(user_id: str) -> bool:
+    """Saves are debounced in the browser; this only stops a runaway client."""
+    return _consume_quota(
+        "DOCSAVE",
+        user_id,
+        60,
+        _bounded_positive_int("DOCUMENT_SAVE_RATE_LIMIT_PER_WINDOW", 120, 1_000),
+    )
+
+
+def document_sort_key(document_key: str) -> str:
+    return f"DOC#{document_key}"
+
+
+def _pack(document: dict[str, Any]) -> bytes:
+    body = gzip.compress(json.dumps(document, separators=(",", ":")).encode("utf-8"))
+    if len(body) > MAX_DOCUMENT_BYTES:
+        raise DocumentTooLargeError("This document is too large to save.")
+    return body
+
+
+def _unpack(item: dict[str, Any]) -> dict[str, Any]:
+    body = item.get("body")
+    raw = getattr(body, "value", body)  # boto3 returns a Binary wrapper.
+    return {
+        "document_id": item.get("document_id", ""),
+        "document": json.loads(gzip.decompress(bytes(raw)).decode("utf-8")) if raw else {},
+        "resolved": list(item.get("resolved") or []),
+        "updated_at": item.get("updated_at", ""),
+    }
+
+
+def save_document(
+    user_id: str,
+    document_key: str,
+    document_id: str,
+    document: dict[str, Any],
+    resolved: list[str],
+) -> str:
+    """Create or replace one saved document. Returns "saved", or "limit" when
+    this would be a new document beyond the per-person allowance."""
+    now = datetime.now(UTC).isoformat()
+    fields = {
+        "document_id": document_id,
+        "body": _pack(document),
+        "resolved": resolved,
+        "updated_at": now,
+    }
+    key = {"PK": f"USER#{user_id}", "SK": document_sort_key(document_key)}
+    try:
+        # Replacing an existing document never touches the quota.
+        _table().update_item(
+            Key=key,
+            UpdateExpression="SET #id = :id, #body = :body, #resolved = :resolved, #at = :at",
+            ConditionExpression=Attr("PK").exists(),
+            ExpressionAttributeNames={
+                "#id": "document_id",
+                "#body": "body",
+                "#resolved": "resolved",
+                "#at": "updated_at",
+            },
+            ExpressionAttributeValues={
+                ":id": document_id,
+                ":body": fields["body"],
+                ":resolved": resolved,
+                ":at": now,
+            },
+        )
+        return "saved"
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            raise
+    result = _create_resource_with_limit(
+        user_id,
+        kind="DOCUMENTS",
+        prefix="DOC#",
+        limit=MAX_DOCUMENTS_PER_USER,
+        item={**key, **fields, "created_at": now},
+    )
+    if result == "exists":
+        # Created by a concurrent save between our two writes; replace it.
+        _table().put_item(Item={**key, **fields, "created_at": now})
+        return "saved"
+    return "limit" if result == "limit" else "saved"
+
+
+def list_documents(user_id: str) -> list[dict[str, Any]]:
+    """Every saved document, most recently changed first."""
+    items: list[dict[str, Any]] = []
+    query_args: dict[str, Any] = {
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("DOC#")
+    }
+    while True:
+        response = _table().query(**query_args)
+        items.extend(response.get("Items", []))
+        last_evaluated_key = response.get("LastEvaluatedKey")
+        if last_evaluated_key is None:
+            break
+        query_args["ExclusiveStartKey"] = last_evaluated_key
+    documents = [_unpack(item) for item in items]
+    documents.sort(key=lambda entry: entry["updated_at"], reverse=True)
+    return documents
+
+
+def get_document(user_id: str, document_key: str) -> dict[str, Any] | None:
+    item = (
+        _table()
+        .get_item(Key={"PK": f"USER#{user_id}", "SK": document_sort_key(document_key)})
+        .get("Item")
+    )
+    return _unpack(item) if item else None
+
+
+def delete_document(user_id: str, document_key: str) -> None:
+    """Remove a saved document and give its allowance back."""
+    table = _table()
+    key = {"PK": f"USER#{user_id}", "SK": document_sort_key(document_key)}
+    try:
+        table.meta.client.transact_write_items(
+            TransactItems=[
+                {
+                    "Delete": {
+                        "TableName": table.name,
+                        "Key": key,
+                        "ConditionExpression": "attribute_exists(PK)",
+                    }
+                },
+                {
+                    "Update": {
+                        "TableName": table.name,
+                        "Key": {"PK": f"USER#{user_id}", "SK": "QUOTA#DOCUMENTS"},
+                        "UpdateExpression": "SET #count = #count - :one",
+                        "ConditionExpression": "#count > :zero",
+                        "ExpressionAttributeNames": {"#count": "count"},
+                        "ExpressionAttributeValues": {":one": 1, ":zero": 0},
+                    }
+                },
+            ]
+        )
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") != "TransactionCanceledException":
+            raise
+        # Already gone, or no quota row to decrement: make sure the item is gone.
+        table.delete_item(Key=key)
+
+
+def get_workspace_state(user_id: str) -> dict[str, Any]:
+    item = _table().get_item(Key={"PK": f"USER#{user_id}", "SK": "WORKSPACE_STATE"}).get("Item")
+    if not item:
+        return {}
+    return json.loads(item.get("state", "{}"))
+
+
+def put_workspace_state(user_id: str, state: dict[str, Any]) -> dict[str, Any]:
+    _table().put_item(
+        Item={
+            "PK": f"USER#{user_id}",
+            "SK": "WORKSPACE_STATE",
+            "state": json.dumps(state, separators=(",", ":")),
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    return state
