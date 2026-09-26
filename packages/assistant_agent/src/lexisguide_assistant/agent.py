@@ -67,6 +67,11 @@ def _context_block(context: ChatContext) -> str:
     ]
     if context.jurisdiction:
         lines.append(f"Jurisdiction: {context.jurisdiction}")
+    if context.workspace_name:
+        channel = f" · channel {context.channel_name}" if context.channel_name else ""
+        lines.append(f"Workspace: {context.workspace_name}{channel}")
+    if context.section_summary:
+        lines.append(f"Current section details: {context.section_summary}")
     if context.document_title:
         score = (
             f", score {context.document_score}/100" if context.document_score is not None else ""

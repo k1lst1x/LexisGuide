@@ -10,6 +10,19 @@ export function WorkspaceChat({ userEmail }: { userEmail?: string }) {
   const doc = ws.selected
   const open = openFindings(doc, ws.resolved[doc.id])
   const current = ws.activeFinding
+  const sectionSummary = ws.nav === 'overview'
+    ? `${ws.documents.length} documents, ${ws.stats.open.length} open findings, and ${ws.stats.deadlines.length} detected deadlines.`
+    : ws.nav === 'documents'
+      ? `${ws.documents.length} documents are available. ${documentDisplayName(doc)} is selected.`
+      : ws.nav === 'linter'
+        ? `${open.length} open findings in ${documentDisplayName(doc)}. ${current ? `The selected finding is ${current.title}.` : 'No finding is selected.'}`
+        : ws.nav === 'team'
+          ? `${ws.activeWorkspace ? `${ws.activeWorkspace.name} · ` : ''}${ws.comments.length} messages in the ${ws.activeChannelId} channel and ${ws.members.length} members.`
+          : ws.nav === 'chain'
+            ? `Activity history for ${documentDisplayName(doc)} is in view.`
+            : ws.nav === 'settings'
+              ? `Workspace settings are in view. Jurisdiction: ${ws.jurisdiction || 'not set'}.`
+              : `AI assistant for ${documentDisplayName(doc)}.`
 
   // Answers grounded in the workspace when the live agent is unavailable.
   const fallback = (question: string) => {
@@ -50,6 +63,10 @@ export function WorkspaceChat({ userEmail }: { userEmail?: string }) {
         open_findings: open.map((f) => `${f.title} (${f.category})`),
         current_finding: current ? `${current.title}: ${current.explanation} Evidence: “${current.evidence}”` : undefined,
         jurisdiction: ws.jurisdiction || undefined,
+        section_summary: sectionSummary,
+        workspace_name: ws.activeWorkspace?.name,
+        channel_name: ws.activeWorkspace ? ws.activeChannelId : undefined,
+        workspace_id: ws.activeWorkspace && !ws.activeWorkspace.id.startsWith('local-') ? ws.activeWorkspace.id : undefined,
       }}
       onWorkspaceAction={(action) => {
         if (action === 'apply_rewrite') {

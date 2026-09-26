@@ -43,6 +43,10 @@ export function AssistantView() {
           open_findings: findings.map((finding) => `${finding.title} (${finding.category})`),
           current_finding: current ? `${current.title}: ${current.explanation} Evidence: “${current.evidence}”` : undefined,
           jurisdiction: ws.jurisdiction || undefined,
+          section_summary: `${ws.documents.length} documents, ${findings.length} open findings in ${documentDisplayName(document)}, and ${ws.tasks.filter((task) => !task.completed).length} open follow-up tasks.`,
+          workspace_name: ws.activeWorkspace?.name,
+          channel_name: ws.activeWorkspace ? ws.activeChannelId : undefined,
+          workspace_id: ws.activeWorkspace && !ws.activeWorkspace.id.startsWith('local-') ? ws.activeWorkspace.id : undefined,
         }}
         onWorkspaceAction={(action) => {
           if (action === 'apply_rewrite') {

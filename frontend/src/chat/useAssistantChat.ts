@@ -15,6 +15,10 @@ export type ChatContext = {
   open_findings?: string[]
   current_finding?: string
   jurisdiction?: string
+  /** A concise, current summary of the workspace section the person is viewing. */
+  section_summary?: string
+  workspace_name?: string
+  channel_name?: string
   /** An API-verified workspace boundary for a shared conversation. */
   workspace_id?: string
 }

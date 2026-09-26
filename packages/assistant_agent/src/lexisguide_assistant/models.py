@@ -50,6 +50,9 @@ class ChatContext(BaseModel):
     open_findings: list[str] = Field(default_factory=list, max_length=12)
     current_finding: str | None = Field(default=None, max_length=1_000)
     jurisdiction: str | None = Field(default=None, max_length=200)
+    section_summary: str | None = Field(default=None, max_length=1_200)
+    workspace_name: str | None = Field(default=None, max_length=200)
+    channel_name: str | None = Field(default=None, max_length=120)
     # The API verifies membership before a workspace-scoped request is sent to
     # the model. It is an isolation boundary, not information the model may use
     # as authority.
