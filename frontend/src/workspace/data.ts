@@ -46,7 +46,7 @@ export type WorkspaceSummary = {
   linked_document_title?: string | null
 }
 export type WorkspaceMember = { user_id: string; email: string; name: string; role: string; joined_at: string }
-export type WorkspaceMessage = { id: string; user: string; text: string; time: string; saved?: boolean; attachment?: string }
+export type WorkspaceMessage = { id: string; user: string; authorEmail?: string; text: string; time: string; saved?: boolean; attachment?: string }
 export type WorkspaceTask = { id: string; title: string; detail: string; completed: boolean }
 export type AssistantAction = 'evidence' | 'revision' | 'task' | 'message' | 'assign' | 'due-date' | 'policy'
 export type AssistantApprovalAction = Exclude<AssistantAction, 'evidence' | 'policy'>

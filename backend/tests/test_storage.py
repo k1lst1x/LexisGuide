@@ -223,6 +223,19 @@ def test_workspace_invites_use_a_direct_key_and_are_consumed_once(
     ]
 
 
+def test_workspace_messages_share_a_workspace_partition(table: FakeTable) -> None:
+    message = storage.create_workspace_message(
+        "workspace-123",
+        {"sub": "member-123", "email": "member@example.com", "name": "Member"},
+        "Please review this.",
+        "doc-1",
+    )
+
+    assert table.put_requests[0]["Item"]["PK"] == "WORKSPACE#workspace-123"
+    assert table.put_requests[0]["Item"]["SK"].startswith("MESSAGE#")
+    assert message["author_email"] == "member@example.com"
+
+
 def test_expired_workspace_invites_cannot_be_redeemed(table: FakeTable) -> None:
     table.get_responses = [
         {

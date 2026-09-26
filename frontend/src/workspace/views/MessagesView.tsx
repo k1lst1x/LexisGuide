@@ -148,7 +148,7 @@ export function MessagesView() {
       ...ws.documents.filter((d) => d.title.toLowerCase().includes(query.toLowerCase())).map((d) => ({ key: d.id, title: documentDisplayName(d), detail: d.type, kind: 'Document' })),
     ]
     : []
-  const send = () => { ws.sendMessage(ws.draft, attachment); setAttachment(null); setEmojiOpen(false) }
+  const send = () => { void ws.sendMessage(ws.draft, attachment); setAttachment(null); setEmojiOpen(false) }
   const linked = ws.linkedDocument ?? ws.selected
   const linkedTitle = ws.activeWorkspace?.linked_document_title || documentDisplayName(linked)
   const workspaceName = ws.activeWorkspace?.name ?? 'Personal workspace'
@@ -258,7 +258,7 @@ export function MessagesView() {
             <div className="ws-chat" aria-live="polite">
               <div className="ws-day">Today</div>
               {shown.map((message) => {
-                const mine = message.user.startsWith('You')
+                const mine = message.user.startsWith('You') || (!!ws.userEmail && message.authorEmail?.toLowerCase() === ws.userEmail.toLowerCase())
                 const reacts = ws.reactions[message.id] ?? []
                 return (
                   <article key={message.id} className={`ws-msg ${mine ? 'is-mine' : ''}`}>

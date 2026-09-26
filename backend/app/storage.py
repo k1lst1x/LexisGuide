@@ -396,6 +396,52 @@ def list_workspace_members(workspace_id: str) -> list[dict[str, Any]]:
     return response.get("Items", [])
 
 
+def create_workspace_message(
+    workspace_id: str,
+    user: dict[str, str],
+    text: str,
+    attachment: str | None = None,
+) -> dict[str, Any]:
+    """Store a message inside one shared workspace's partition.
+
+    Messages never live under a browser or a user partition, so every member
+    who passes the workspace-membership check reads the same ordered thread.
+    """
+    now = datetime.now(UTC).isoformat()
+    message_id = str(uuid4())
+    message = {
+        "id": message_id,
+        "workspace_id": workspace_id,
+        "user": user.get("name") or user.get("email") or "Workspace member",
+        "author_email": user.get("email", ""),
+        "text": text,
+        "created_at": now,
+        "attachment": attachment or "",
+    }
+    _table().put_item(
+        Item={
+            "PK": f"WORKSPACE#{workspace_id}",
+            # ISO-8601 is lexicographically ordered, keeping DynamoDB reads in
+            # conversation order without a table-wide scan.
+            "SK": f"MESSAGE#{now}#{message_id}",
+            **message,
+        }
+    )
+    return message
+
+
+def list_workspace_messages(workspace_id: str, limit: int = 200) -> list[dict[str, Any]]:
+    response = _table().query(
+        KeyConditionExpression=Key("PK").eq(f"WORKSPACE#{workspace_id}")
+        & Key("SK").begins_with("MESSAGE#"),
+        ScanIndexForward=False,
+        Limit=limit,
+    )
+    # The query reads newest first so a busy workspace stays bounded; the UI
+    # receives chronological order.
+    return list(reversed(response.get("Items", [])))
+
+
 def consume_review_quota(user_id: str) -> bool:
     """Atomically reserve one bounded Bedrock review per authenticated user.
 

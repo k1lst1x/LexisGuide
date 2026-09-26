@@ -27,6 +27,7 @@ from app.storage import (
     create_record_with_limit,
     create_workspace,
     create_workspace_invite,
+    create_workspace_message,
     get_conversation,
     get_lawyer_verification,
     get_profile,
@@ -34,6 +35,7 @@ from app.storage import (
     list_conversations,
     list_records,
     list_workspace_members,
+    list_workspace_messages,
     list_workspaces,
     put_profile,
     release_lawyer_attempt,
@@ -121,6 +123,28 @@ class WorkspaceMember(BaseModel):
 
 class WorkspaceInvite(BaseModel):
     invite_code: str
+
+
+class WorkspaceMessageCreate(BaseModel):
+    text: str = Field(min_length=1, max_length=4_000)
+    attachment: str | None = Field(default=None, max_length=160)
+
+    @field_validator("text")
+    @classmethod
+    def strip_message(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Message text must not be blank")
+        return value
+
+
+class WorkspaceMessage(BaseModel):
+    id: str
+    user: str
+    author_email: str = ""
+    text: str
+    created_at: str
+    attachment: str | None = None
 
 
 class WorkspaceLinkedDocument(BaseModel):
@@ -565,6 +589,33 @@ async def read_workspace_members(
     if not get_workspace_membership(workspace_id, user["sub"]):
         raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
     return [WorkspaceMember(**member) for member in list_workspace_members(workspace_id)]
+
+
+@router.get("/workspaces/{workspace_id}/messages", response_model=list[WorkspaceMessage])
+async def read_workspace_messages(
+    workspace_id: str, user: dict[str, str] = Depends(current_user)
+) -> list[WorkspaceMessage]:
+    if not get_workspace_membership(workspace_id, user["sub"]):
+        raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
+    return [WorkspaceMessage(**message) for message in list_workspace_messages(workspace_id)]
+
+
+@router.post(
+    "/workspaces/{workspace_id}/messages",
+    response_model=WorkspaceMessage,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_workspace_message(
+    workspace_id: str,
+    payload: WorkspaceMessageCreate,
+    user: dict[str, str] = Depends(current_user),
+) -> WorkspaceMessage:
+    if not get_workspace_membership(workspace_id, user["sub"]):
+        raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
+    attachment = payload.attachment.strip() if payload.attachment else None
+    return WorkspaceMessage(
+        **create_workspace_message(workspace_id, user, payload.text, attachment)
+    )
 
 
 @router.put("/workspaces/{workspace_id}/linked-document", response_model=Workspace)

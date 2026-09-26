@@ -6,7 +6,7 @@ import {
   extractDocumentText, fileTitle, openFindings, sampleDocs,
   type Finding, type NavItem, type SampleDoc, type WorkspaceMember, type WorkspaceMessage, type WorkspaceSummary, type WorkspaceTask,
 } from './data'
-import { reviewNewDocument, runDocumentAction, workspaceRequest } from './api'
+import { reviewNewDocument, runDocumentAction, workspaceRequest, type SharedWorkspaceMessage } from './api'
 import { recordChange, recordEdit, sha256Hex } from './ledger'
 
 const RESOLVED_KEY = 'lexisguide:resolved-findings'
@@ -42,6 +42,24 @@ function createLocalInviteCode(workspaceId: string) {
     window.localStorage.setItem(LOCAL_INVITES_KEY, JSON.stringify({ ...current, [workspaceId]: code }))
   } catch { /* the code remains usable in this session */ }
   return code
+}
+
+function displayMessageTime(createdAt: string) {
+  const date = new Date(createdAt)
+  return Number.isNaN(date.getTime())
+    ? 'Just now'
+    : date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function sharedMessage(message: SharedWorkspaceMessage): WorkspaceMessage {
+  return {
+    id: message.id,
+    user: message.user,
+    authorEmail: message.author_email,
+    text: message.text,
+    time: displayMessageTime(message.created_at),
+    attachment: message.attachment || undefined,
+  }
 }
 
 function messageGroups() {
@@ -117,6 +135,27 @@ function useWorkspaceState(userEmail?: string) {
   }, [messagesByWorkspace])
   useEffect(() => { window.localStorage.setItem(RESOLVED_KEY, JSON.stringify(resolved)) }, [resolved])
   useEffect(() => { activeWorkspaceRef.current = activeWorkspace }, [activeWorkspace])
+  useEffect(() => {
+    const workspace = activeWorkspace
+    if (!workspace || workspace.id.startsWith('local-') || !userEmail) return
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const remote = await workspaceRequest<SharedWorkspaceMessage[]>(`/workspaces/${workspace.id}/messages`)
+        if (cancelled) return
+        const received = remote.map(sharedMessage)
+        setMessagesByWorkspace((current) => {
+          const optimistic = (current[workspace.id] ?? []).filter((message) => message.id.startsWith('local-message-'))
+          return { ...current, [workspace.id]: [...received, ...optimistic] }
+        })
+      } catch {
+        // The local copy remains visible while a connection is unavailable.
+      }
+    }
+    void refresh()
+    const interval = window.setInterval(() => void refresh(), 4_000)
+    return () => { cancelled = true; window.clearInterval(interval) }
+  }, [activeWorkspace, userEmail])
   useEffect(() => {
     if (!notice) return
     const timer = window.setTimeout(() => setNotice(''), 5200)
@@ -311,20 +350,48 @@ function useWorkspaceState(userEmail?: string) {
     return true
   }, [selected, updateDocument])
 
-  const sendMessage = useCallback((text: string, attachment?: string | null) => {
+  const sendMessage = useCallback(async (text: string, attachment?: string | null) => {
     const trimmed = text.trim()
     if (!trimmed) return
     const now = Date.now()
     const key = `${activeMessageWorkspace}:${trimmed}:${attachment ?? ''}`
     if (lastMessageSend.current?.key === key && now - lastMessageSend.current.at < 1_000) return
     lastMessageSend.current = { key, at: now }
+    const workspace = activeWorkspaceRef.current
+    const localMessage: WorkspaceMessage = {
+      id: `local-message-${now}-${Math.random().toString(36).slice(2, 8)}`,
+      user: 'You (Reviewer)',
+      authorEmail: userEmail?.toLowerCase(),
+      text: trimmed,
+      time: 'Just now',
+      saved: false,
+      attachment: attachment || undefined,
+    }
     messagesChanged.current = true
     setMessagesByWorkspace((current) => ({
       ...current,
-      [activeMessageWorkspace]: [...(current[activeMessageWorkspace] ?? []), { id: `message-${now}-${Math.random().toString(36).slice(2, 8)}`, user: 'You (Reviewer)', text: trimmed, time: 'Just now', saved: false, attachment: attachment || undefined }],
+      [activeMessageWorkspace]: [...(current[activeMessageWorkspace] ?? []), localMessage],
     }))
     setDraft('')
-  }, [activeMessageWorkspace])
+    if (!workspace || workspace.id.startsWith('local-')) return
+    try {
+      const created = await workspaceRequest<SharedWorkspaceMessage>(`/workspaces/${workspace.id}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ text: trimmed, attachment: attachment || undefined }),
+      })
+      const persisted = sharedMessage(created)
+      setMessagesByWorkspace((current) => ({
+        ...current,
+        [workspace.id]: (current[workspace.id] ?? []).map((message) => message.id === localMessage.id ? persisted : message),
+      }))
+    } catch (error) {
+      setMessagesByWorkspace((current) => ({
+        ...current,
+        [workspace.id]: (current[workspace.id] ?? []).filter((message) => message.id !== localMessage.id),
+      }))
+      setWorkspaceNotice(error instanceof Error ? error.message : 'Message could not be sent.')
+    }
+  }, [activeMessageWorkspace, userEmail])
 
   const toggleReaction = useCallback((messageId: string, emoji: string) => {
     setReactionsByWorkspace((current) => {
