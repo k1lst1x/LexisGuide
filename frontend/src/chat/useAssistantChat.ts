@@ -2,7 +2,7 @@
    LexisGuideAssistant agent through /api/v1/chat. Kept apart from any layout so
    the popup panel and the assistant page can be shaped differently while
    answering identically. */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cognitoGetIdToken } from '../aws'
 import { apiBase, fetchConversation, saveConversation } from '../workspace/api'
 
@@ -145,10 +145,12 @@ export function useAssistantChat({ storageKey, context, greeting, fallback, pers
   }, [persist, conversationId, turns])
 
   // The context and fallback are rebuilt on every render of the caller; holding
-  // them in refs keeps `ask` stable so effects do not re-fire per keystroke.
+  // them in refs keeps `ask` stable. A layout effect runs before the browser
+  // accepts the next interaction, so a just-selected document is never one
+  // request behind when the person immediately asks a question.
   const contextRef = useRef(context)
   const fallbackRef = useRef(fallback)
-  useEffect(() => { contextRef.current = context; fallbackRef.current = fallback })
+  useLayoutEffect(() => { contextRef.current = context; fallbackRef.current = fallback })
 
   const callAgent = useCallback(async (history: Turn[], files: ChatFile[], signal: AbortSignal): Promise<{ reply: string; actions: WorkspaceAction[] } | null> => {
     let token = await cognitoGetIdToken().catch(() => null)
