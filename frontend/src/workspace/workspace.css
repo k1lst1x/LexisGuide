@@ -472,6 +472,7 @@
 .ws-summary { display: flex; gap: 10px; margin: 16px 24px 0; padding: 12px 14px; border-radius: 12px; background: var(--green-soft); color: var(--green); }
 .ws-summary p { color: var(--ink); font-size: 13.5px; }
 .ws-paper-text { padding: 22px 28px 30px; font-family: var(--serif); font-size: 16.5px; line-height: 1.75; color: var(--ink); }
+.ws-paper-text-highlighted { white-space: pre-wrap; }
 .ws-paper-text p.is-blank { height: .8em; }
 .ws-mark { padding: 1px 1px; border-radius: 3px; color: inherit; cursor: pointer; -webkit-box-decoration-break: clone; box-decoration-break: clone; transition: background-color .15s, box-shadow .15s; }
 .ws-mark-critical { background: rgba(229, 115, 90, .22); box-shadow: inset 0 -2px 0 rgba(180, 65, 47, .6); }
