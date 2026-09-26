@@ -21,6 +21,8 @@ export type ChatContext = {
   channel_name?: string
   /** An API-verified workspace boundary for a shared conversation. */
   workspace_id?: string
+  /** The person's open follow-up tasks, so the assistant does not repeat them. */
+  open_tasks?: string[]
 }
 
 /** A file shown on a message: its name and size, never its text. */
@@ -29,7 +31,20 @@ export type AttachmentMeta = { name: string; kind: string; chars: number }
 export type ChatFile = AttachmentMeta & { id: string; text: string; truncated?: boolean }
 
 export type WorkspaceAction = 'review' | 'negotiate' | 'rewrite' | 'apply_rewrite' | 'resolve' | 'create_task'
-export type Turn = { id: string; role: 'user' | 'assistant'; content: string; local?: boolean; attachments?: AttachmentMeta[]; workspaceActions?: WorkspaceAction[] }
+/** A follow-up the assistant suggests, or adds when asked to. */
+export type ProposedTask = { title: string; detail?: string; priority?: 'high' | 'medium' | 'low' }
+export type Turn = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  local?: boolean
+  attachments?: AttachmentMeta[]
+  workspaceActions?: WorkspaceAction[]
+  /** The person told the assistant to act: the app runs the actions and adds the tasks. */
+  autoApply?: boolean
+  tasks?: ProposedTask[]
+}
+type AgentAnswer = { reply: string; actions: WorkspaceAction[]; autoApply: boolean; tasks: ProposedTask[] }
 export type Mode = 'live' | 'guide' | 'unknown'
 
 const MAX_HISTORY = 12
@@ -156,7 +171,7 @@ export function useAssistantChat({ storageKey, context, greeting, fallback, pers
   const fallbackRef = useRef(fallback)
   useLayoutEffect(() => { contextRef.current = context; fallbackRef.current = fallback })
 
-  const callAgent = useCallback(async (history: Turn[], files: ChatFile[], signal: AbortSignal): Promise<{ reply: string; actions: WorkspaceAction[] } | null> => {
+  const callAgent = useCallback(async (history: Turn[], files: ChatFile[], signal: AbortSignal): Promise<AgentAnswer | null> => {
     let token = await cognitoGetIdToken().catch(() => null)
     if (!token) { setMode('guide'); setNotice('signed-out'); return null }
     const current = contextRef.current
@@ -183,11 +198,13 @@ export function useAssistantChat({ storageKey, context, greeting, fallback, pers
     }
     if (response.status === 429) { setNotice('You’re sending messages quickly. Please wait a minute and try again.'); return null }
     if (!response.ok) throw new Error(`chat ${response.status}`)
-    const data = await response.json() as { reply?: string; workspace_actions?: WorkspaceAction[] }
+    const data = await response.json() as { reply?: string; workspace_actions?: WorkspaceAction[]; auto_apply?: boolean; tasks?: ProposedTask[] }
     setMode('live')
     setNotice('')
     const reply = data.reply?.trim()
-    return reply ? { reply, actions: data.workspace_actions ?? [] } : null
+    return reply
+      ? { reply, actions: data.workspace_actions ?? [], autoApply: Boolean(data.auto_apply), tasks: data.tasks ?? [] }
+      : null
   }, [conversationId])
 
   /** Answer the last question in `history`, with the files it can see. */
@@ -199,7 +216,7 @@ export function useAssistantChat({ storageKey, context, greeting, fallback, pers
     const controller = new AbortController()
     abortRef.current = controller
 
-    let response: { reply: string; actions: WorkspaceAction[] } | null = null
+    let response: AgentAnswer | null = null
     let stopped = false
     try {
       response = await callAgent(history, files, controller.signal)
@@ -220,6 +237,8 @@ export function useAssistantChat({ storageKey, context, greeting, fallback, pers
         content: response?.reply ?? fallbackRef.current(question),
         local: !response,
         workspaceActions: response?.actions,
+        autoApply: response?.autoApply || undefined,
+        tasks: response?.tasks.length ? response.tasks : undefined,
       }]
       turnsRef.current = answered
       setTurns(answered)

@@ -253,52 +253,103 @@ export async function saveConversation(conversationId: string, turns: StoredTurn
 }
 
 export type AiSearchResult = {
+  /** Markdown, from the assistant or the keyword fallback. */
   answer: string
-  confidence?: string
-  findings?: Array<{ title: string; explanation: string; severity: string; rule?: string }>
-  sources?: Array<{ title?: string; citation?: string }>
+  /** Where the answer came from: the live assistant, or a search of the text in this browser. */
+  mode: 'ai' | 'keyword'
+  /** Documents the answer names or that match the question, most relevant first. */
+  sources: Array<{ id: string; title: string; detail: string }>
 }
 
-/** Natural-language search across the workspace, grounded in local findings when offline. */
-export async function aiSearch(query: string, documents: SampleDoc[], selectedDoc: SampleDoc): Promise<AiSearchResult> {
-  const trimmed = query.trim()
-  const lower = trimmed.toLowerCase()
-  try {
-    const context = documents.slice(0, 3).map((d) => `Document "${d.title}" (${d.type}):\n${d.text.slice(0, 1500)}`).join('\n\n')
-    const data = await analyze({ document_text: context, action: 'review', user_context: trimmed, goals: ['search', 'qa'] })
-    if (data && (data.summary || data.findings?.length)) {
-      return {
-        answer: data.summary || `Reviewed your workspace for “${trimmed}” and found ${data.findings?.length || 0} relevant clauses.`,
-        confidence: data.confidence ? `Confidence: ${data.confidence}` : undefined,
-        findings: data.findings?.map((f) => ({ title: f.title, explanation: f.explanation, severity: f.severity || 'warning', rule: f.suggested_rewrite || f.negotiation_point || f.why_it_matters || undefined })),
-        sources: data.sources || [{ title: selectedDoc.title, citation: `${selectedDoc.agency} · ${selectedDoc.type}` }],
+// Enough of each document for the assistant to find what is asked; the rest
+// of a long document is represented by its findings.
+const LIBRARY_EXCERPT = 2_500
+const LIBRARY_LIMIT = 12
+
+const words = (text: string) => text.toLowerCase().match(/[a-z0-9§.]{3,}/g) ?? []
+const STOP = new Set(['the', 'and', 'for', 'what', 'which', 'who', 'how', 'does', 'this', 'that', 'with', 'are', 'about', 'from', 'have', 'there', 'any', 'can', 'you', 'our', 'your', 'find', 'show', 'explain', 'document', 'documents'])
+
+/** Documents ranked by how many of the question's words they contain. */
+function rankDocuments(query: string, documents: SampleDoc[]) {
+  const terms = [...new Set(words(query).filter((word) => !STOP.has(word)))]
+  return documents
+    .map((doc) => {
+      const haystack = `${doc.title} ${doc.type} ${doc.text} ${doc.findings.map((f) => `${f.title} ${f.explanation}`).join(' ')}`.toLowerCase()
+      return { doc, hits: terms.filter((term) => haystack.includes(term)).length, terms: terms.length }
+    })
+    .filter((item) => item.hits > 0)
+    .sort((a, b) => b.hits - a.hits || a.doc.score - b.doc.score)
+}
+
+/** Which documents an answer names, in the order it names them. */
+function citedDocuments(answer: string, documents: SampleDoc[]) {
+  const text = answer.toLowerCase()
+  return documents
+    .map((doc) => ({ doc, at: text.indexOf(doc.title.toLowerCase()) }))
+    .filter((item) => item.at >= 0)
+    .sort((a, b) => a.at - b.at)
+    .map((item) => item.doc)
+}
+
+const source = (doc: SampleDoc) => ({ id: doc.id, title: doc.title, detail: `${doc.type} · score ${doc.score}/100` })
+
+/** Ask a question across every document in the workspace.
+    Signed in, the LexisGuide assistant answers from the documents (and says so
+    when none of them cover it). Otherwise, or if it cannot be reached, a
+    keyword search of the documents in this browser answers honestly. */
+export async function aiSearch(query: string, documents: SampleDoc[]): Promise<AiSearchResult> {
+  const question = query.trim()
+  const token = await cognitoGetIdToken().catch(() => null)
+  if (token) {
+    try {
+      const library = [...documents]
+        .sort((a, b) => a.score - b.score)
+        .slice(0, LIBRARY_LIMIT)
+        .map((doc) => ({
+          title: doc.title.slice(0, 300),
+          type: doc.type.slice(0, 120),
+          score: doc.score,
+          open_findings: doc.findings.filter((f) => f.severity !== 'pass').slice(0, 12).map((f) => `${f.title} (${f.category})`.slice(0, 200)),
+          excerpt: doc.text.slice(0, LIBRARY_EXCERPT),
+        }))
+      const response = await fetch(`${apiBase()}/api/v1/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          conversation_id: `search-${crypto.randomUUID()}`,
+          messages: [{ role: 'user', content: question.slice(0, 2_000) }],
+          context: { page: 'AI Search', library },
+        }),
+      })
+      if (response.ok) {
+        const data = await response.json() as { reply?: string }
+        const reply = data.reply?.trim()
+        if (reply) {
+          const cited = citedDocuments(reply, documents)
+          return { answer: reply, mode: 'ai', sources: cited.map(source) }
+        }
       }
+    } catch {
+      // Answer from the documents in the browser instead.
     }
-  } catch {
-    // Fall through to the document-grounded answer below.
   }
 
-  await new Promise((resolve) => setTimeout(resolve, 350))
-  const target = documents.find((d) => d.title.toLowerCase().includes(lower) || d.text.toLowerCase().includes(lower)
-    || d.findings.some((f) => f.title.toLowerCase().includes(lower) || f.explanation.toLowerCase().includes(lower))) || selectedDoc
-  const topic = /terminat|notice/.test(lower) ? 'termination' : /dispute|arbitrat/.test(lower) ? 'dispute' : /liab|repair/.test(lower) ? 'liability' : /score|fair/.test(lower) ? 'score' : 'general'
-  const relevant = target.findings.filter((f) =>
-    topic === 'termination' ? /deadline|period|time|notice/i.test(f.title + f.category)
-      : topic === 'dispute' ? /right|appeal|process/i.test(f.title + f.category)
-        : topic === 'liability' ? /responsibility|cost|obligation/i.test(f.title + f.category)
-          : topic === 'score' ? f.severity !== 'pass' : true).slice(0, 3)
-  const lowest = [...documents].sort((a, b) => a.score - b.score)[0]
-  const answer = {
-    termination: `In “${target.title}”, termination provisions require explicit calendar dates or written notice periods (typically 30 days) before cancellation. Open-ended wording like “standard filing period” leaves you unsure when you must act.`,
-    dispute: `Dispute terms should give clear notice and a chance to respond before rights are lost. “${target.title}” should state the hearing schedule and how to appeal.`,
-    liability: `In “${target.title}”, “may result in liability” shifts costs to you without a cap or a clear definition of who repairs what. Ask for an itemized limit in writing.`,
-    score: `“${lowest.title}” has the lowest score in your workspace at ${lowest.score}/100, with ${lowest.findings.filter((f) => f.severity === 'critical').length} high-impact findings. Clarifying its deadlines and appeal path will raise it most.`,
-    general: `Reviewed ${documents.length} documents for “${trimmed}”. In “${target.title}” (${target.type}), the key terms to confirm are notice timelines, liability limits, and how to appeal.`,
-  }[topic]
+  const ranked = rankDocuments(question, documents)
+  if (!ranked.length) {
+    return {
+      answer: `None of your ${documents.length} document${documents.length === 1 ? '' : 's'} mention “${question}”.${token ? ' The AI assistant could not be reached right now, so only the text of your documents was searched.' : ' Sign in to ask the AI assistant, which can also answer general questions.'}`,
+      mode: 'keyword',
+      sources: [],
+    }
+  }
+  const top = ranked.slice(0, 3)
+  const lines = top.map(({ doc, hits, terms }) => {
+    const finding = doc.findings.find((f) => words(question).some((term) => `${f.title} ${f.explanation}`.toLowerCase().includes(term)))
+    return `- **${doc.title}** (${doc.type}, score ${doc.score}/100): matches ${hits} of ${terms} search terms${finding ? `. Related finding: ${finding.title}.` : '.'}`
+  })
   return {
-    answer,
-    confidence: 'Grounded in your workspace findings',
-    findings: (relevant.length ? relevant : target.findings.slice(0, 2)).map((f) => ({ title: f.title, explanation: f.explanation, severity: f.severity, rule: f.rule })),
-    sources: [{ title: target.title, citation: `${target.agency} · Score ${target.score}/100` }],
+    answer: `${top.length === 1 ? 'This document matches' : 'These documents match'} “${question}”:\n${lines.join('\n')}`,
+    mode: 'keyword',
+    sources: top.map(({ doc }) => source(doc)),
   }
 }

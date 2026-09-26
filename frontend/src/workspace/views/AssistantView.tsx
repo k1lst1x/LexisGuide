@@ -47,7 +47,9 @@ export function AssistantView() {
           workspace_name: ws.activeWorkspace?.name,
           channel_name: ws.activeWorkspace ? ws.activeChannelId : undefined,
           workspace_id: ws.activeWorkspace && !ws.activeWorkspace.id.startsWith('local-') ? ws.activeWorkspace.id : undefined,
+          open_tasks: ws.tasks.filter((task) => !task.completed).map((task) => task.title).slice(0, 30),
         }}
+        onTasks={ws.addAssistantTasks}
         onWorkspaceAction={(action) => {
           if (action === 'apply_rewrite') {
             if (current) void ws.runAction('rewrite', true)

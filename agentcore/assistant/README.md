@@ -6,7 +6,7 @@ popup. The agent itself (prompt, tools, Converse tool-use loop) lives in the sha
 local mode and this runtime behave identically.
 
 Payload in: `{"messages": [{"role": "user", "content": "..."}], "context": {...}}`.
-Payload out: `{"reply": "...", "tools_used": [...]}`.
+Payload out: `{"reply": "...", "workspace_actions": [...], "tasks": [...], "auto_apply": false, ...}`. See [`packages/assistant_agent`](../../packages/assistant_agent) for how the agent team works and how to deploy it.
 
 ## Local test
 

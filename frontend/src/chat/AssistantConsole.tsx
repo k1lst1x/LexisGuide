@@ -7,7 +7,9 @@ import { AttachButton, DropOverlay, MessageFiles, SentText, StagedFiles, type At
 import { CopyAnswer, RegenerateAnswer } from './MessageActions'
 import { PromptComposer } from './PromptComposer'
 import { RichText } from './RichText'
-import { useAssistantChat, type ChatContext, type Turn, type WorkspaceAction } from './useAssistantChat'
+import { useAssistantChat, type ChatContext, type ProposedTask, type Turn, type WorkspaceAction } from './useAssistantChat'
+import { useAutoActions } from './useAutoActions'
+import { TurnActions } from './TurnActions'
 import { useFileDrop } from './useFileDrop'
 import './chat.css'
 
@@ -22,18 +24,11 @@ export type AssistantConsoleProps = {
   /** Documents the person can attach without uploading them again. */
   documents?: AttachableDocument[]
   onWorkspaceAction?: (action: WorkspaceAction) => void
+  /** Add tasks the assistant suggested, or added because the person asked. */
+  onTasks?: (tasks: ProposedTask[]) => void
 }
 
-function actionLabel(action: WorkspaceAction) {
-  return action === 'review' ? 'Re-check this document'
-    : action === 'negotiate' ? 'Suggest negotiation points'
-      : action === 'rewrite' ? 'Draft a revision for this issue'
-        : action === 'apply_rewrite' ? 'Apply the current draft'
-          : action === 'resolve' ? 'Mark current issue resolved'
-            : 'Create follow-up task'
-}
-
-function Message({ turn, onRegenerate, onWorkspaceAction }: { turn: Turn; onRegenerate?: () => void; onWorkspaceAction?: (action: WorkspaceAction) => void }) {
+function Message({ turn, onRegenerate, onWorkspaceAction, onTasks }: { turn: Turn; onRegenerate?: () => void; onWorkspaceAction?: (action: WorkspaceAction) => void; onTasks?: (tasks: ProposedTask[]) => void }) {
   const isAssistant = turn.role === 'assistant'
   return (
     <article className={`ac-msg ac-msg-${turn.role}`}>
@@ -43,9 +38,7 @@ function Message({ turn, onRegenerate, onWorkspaceAction }: { turn: Turn; onRege
       <div className="ac-bubble">
         {isAssistant ? <RichText text={turn.content} /> : <SentText text={turn.content} />}
         <MessageFiles files={turn.attachments} />
-        {isAssistant && turn.workspaceActions?.filter((action) => action !== 'apply_rewrite').map((action) => (
-          <button key={action} type="button" className="ac-workspace-action" onClick={() => onWorkspaceAction?.(action)}>{actionLabel(action)}</button>
-        ))}
+        <TurnActions turn={turn} prefix="ac" onWorkspaceAction={onWorkspaceAction} onTasks={onTasks} />
         {isAssistant && turn.id !== 'welcome' && (
           <span className="ac-actions">
             <CopyAnswer text={turn.content} />
@@ -66,13 +59,13 @@ export function AssistantConsole({
   pendingQuestion,
   documents = [],
   onWorkspaceAction,
+  onTasks,
 }: AssistantConsoleProps) {
   const chat = useAssistantChat({ storageKey, context, greeting, fallback, persist: true })
   const { dragging, dropProps } = useFileDrop((files) => void chat.attachFiles(files))
   const lastAnswer = [...chat.turns].reverse().find((turn) => turn.role === 'assistant' && turn.id !== 'welcome')
   const threadRef = useRef<HTMLDivElement>(null)
   const lastPending = useRef<number | null>(null)
-  const appliedActions = useRef(new Set<string>())
 
   // Only the welcome line means nothing has been asked yet, so the box sits in
   // the middle of the page rather than under an empty transcript.
@@ -89,17 +82,8 @@ export function AssistantConsole({
     void chat.ask(pendingQuestion.text)
   }, [pendingQuestion, chat])
 
-  // Consent is collected conversationally. Once the agent returns an approved
-  // apply action, change the selected working-copy passage exactly once.
-  useEffect(() => {
-    for (const turn of chat.turns) {
-      if (turn.role !== 'assistant' || !turn.workspaceActions?.includes('apply_rewrite')) continue
-      const key = `${turn.id}:apply_rewrite`
-      if (appliedActions.current.has(key)) continue
-      appliedActions.current.add(key)
-      onWorkspaceAction?.('apply_rewrite')
-    }
-  }, [chat.turns, onWorkspaceAction])
+  // What the person told the assistant to do runs once; the rest is offered.
+  useAutoActions(chat.turns, onWorkspaceAction, onTasks)
 
   return (
     <section className={`ac ${started ? 'is-started' : ''}`} aria-label="Ask LexisGuide" {...dropProps}>
@@ -111,6 +95,7 @@ export function AssistantConsole({
               key={turn.id}
               turn={turn}
               onWorkspaceAction={onWorkspaceAction}
+              onTasks={onTasks}
               onRegenerate={turn.id === lastAnswer?.id && chat.canRegenerate ? () => void chat.regenerate() : undefined}
             />
           ))}

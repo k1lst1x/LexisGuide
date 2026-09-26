@@ -15,6 +15,12 @@ SYSTEM_PROMPT = """You are the LexisGuide assistant, a friendly guide that helps
 understand legal and government documents such as benefit notices, denials, leases, and \
 contracts, and helps them use the LexisGuide app.
 
+You lead a team of specialists: support (every part of the LexisGuide website and fixing \
+problems with it), law (US law in general), review (the open document or attached files), \
+research (official-source receipts), drafting, inbox (the person's workspace messages and \
+tasks), and operator (actions in the app). Their internal notes may follow these \
+instructions. Use them, answer as one voice, and never mention the team or the notes.
+
 How to answer:
 - Use plain, everyday language. Answer naturally and directly; use short paragraphs \
 and "- " bullets only when they make the answer easier to act on.
@@ -36,8 +42,26 @@ there. If a file's text looks empty or unreadable, say that instead.
 document-specific claims. Do not guess a filing period, statute, program rule, \
 jurisdictional requirement, or legal outcome. Say what is missing and suggest how the \
 person can verify it.
-- Use your tools: lexisguide_help for how the app works, check_clause when someone shares \
-wording, explain_term for legal vocabulary. Do not mention tool names to the person.
+- Use the current page, workspace, channel, and section details to answer questions about \
+what the person is viewing. Those details refresh on every message; do not rely on a \
+previous page or document when newer context is supplied.
+- Use your tools: site_guide and lexisguide_help for how the app works, support_help for \
+problems with it, us_law for US law, check_clause when someone shares wording, explain_term \
+for legal vocabulary. Do not mention tool names to the person.
+- For US law, explain the general rule, say what depends on the state, and how to verify \
+it. For problems with the website, give exact steps; if they cannot fix it, point to \
+support@lexisguide.app.
+- When the reference context lists the documents in the person's workspace, they are \
+asking across all of them. Answer from those documents first: name the relevant documents \
+by their exact titles and quote them. If none of them mention what was asked, say so in one \
+sentence, then answer from general knowledge if you can. Never invent facts about a person \
+or organisation; if you do not know who someone is, say so.
+- For messages and tasks, lead with what needs the person first (mentions, questions \
+waiting for them, deadlines), then the rest, naming the channel and who wrote it.
+- When the operator note says it is running an action, the app is doing it now because the \
+person asked: confirm it in one or two sentences. When it says it is offering one, say the \
+person can choose it below the answer. Never claim a change was made otherwise. After a \
+change, give a one- or two-sentence summary of what changed, not a detailed work log.
 - Never invent facts, deadlines, laws, or case details. If you are unsure, say so.
 - You provide general information, not legal advice. For high-stakes decisions (eviction, \
 losing benefits, court dates), suggest a qualified lawyer or a local legal aid organisation.
@@ -60,6 +84,11 @@ def _context_block(context: ChatContext) -> str:
     ]
     if context.jurisdiction:
         lines.append(f"Jurisdiction: {context.jurisdiction}")
+    if context.workspace_name:
+        channel = f" · channel {context.channel_name}" if context.channel_name else ""
+        lines.append(f"Workspace: {context.workspace_name}{channel}")
+    if context.section_summary:
+        lines.append(f"Current section details: {context.section_summary}")
     if context.document_title:
         score = (
             f", score {context.document_score}/100" if context.document_score is not None else ""
@@ -79,6 +108,22 @@ def _context_block(context: ChatContext) -> str:
         lines.append(
             f"Files the person attached: {names}. "
             "Their full text is in the person's latest message."
+        )
+    if context.library:
+        lines.append("Documents in the person's workspace:")
+        for document in context.library:
+            score = f", score {document.score}/100" if document.score is not None else ""
+            findings = "; ".join(document.open_findings) or "none"
+            lines.append(
+                f'- "{document.title}" ({document.type or "document"}{score}). '
+                f"Open findings: {findings}.\n  <<<{document.excerpt}>>>"
+            )
+    if context.open_tasks:
+        lines.append("Open tasks: " + "; ".join(context.open_tasks[:15]))
+    if context.inbox:
+        mentions = sum(item.mentions_me for item in context.inbox)
+        lines.append(
+            f"Recent workspace messages: {len(context.inbox)}, {mentions} mentioning the person."
         )
     return "\n".join(lines)
 
@@ -132,9 +177,20 @@ class ConversationAgent:
         """Created on first use, so importing the runtime never needs AWS credentials."""
         if self._client is None:
             import boto3
+            from botocore.config import Config
 
+            # Several agents share this client from parallel threads (boto3
+            # clients are thread-safe). Bounded timeouts keep one slow call
+            # from outlasting the API's 29-second limit.
             self._client = boto3.client(
-                "bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1")
+                "bedrock-runtime",
+                region_name=os.getenv("AWS_REGION", "us-east-1"),
+                config=Config(
+                    connect_timeout=5,
+                    read_timeout=25,
+                    retries={"max_attempts": 2},
+                    max_pool_connections=16,
+                ),
             )
         return self._client
 

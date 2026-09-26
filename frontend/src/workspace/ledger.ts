@@ -2,8 +2,9 @@
 
    Each change to a document the person added (created, reviewed, edited,
    rewrite applied, renamed) is fingerprinted here with SHA-256 and sent to the
-   API, which writes it to the DocumentLedger contract on Base. Only the
-   fingerprint leaves the browser; the text never does.
+   API, which writes the fingerprint to the DocumentLedger contract on Base.
+   The text goes with it to the person's own storage, never on chain, so the
+   History tab can bring back any version and prove it against its block.
 
    Recording is best-effort and never blocks the workspace: signed out, offline,
    or with the ledger turned off, the document simply has no on-chain history. */
@@ -37,6 +38,22 @@ export type LedgerChange = {
   entry_hash: string
   previous_entry: string
   error: string
+  has_version?: boolean
+  changed_by?: string
+}
+
+/** A document as it was at one change, checked against the chain by the API. */
+export type LedgerVersion = {
+  change_id: string
+  document_id: string
+  kind: ChangeKind
+  title: string
+  content_hash: string
+  text: string
+  matches_fingerprint: boolean
+  on_chain: 'verified' | 'mismatch' | 'pending' | 'unavailable'
+  block_number: number | null
+  tx_hash: string
 }
 
 export const KIND_LABELS: Record<ChangeKind, string> = {
@@ -85,8 +102,20 @@ export function ledgerInfo(): Promise<LedgerInfo | null> {
   return info
 }
 
-export function fetchHistory(documentId: string): Promise<LedgerChange[] | null> {
-  return request<LedgerChange[]>(`/changes?${new URLSearchParams({ document_id: documentId })}`).catch(() => null)
+const scope = (documentId: string, workspaceId?: string) =>
+  new URLSearchParams({ document_id: documentId, ...(workspaceId ? { workspace_id: workspaceId } : {}) })
+
+/** A document's history: the person's own, or a workspace's for a shared document. */
+export function fetchHistory(documentId: string, workspaceId?: string): Promise<LedgerChange[] | null> {
+  return request<LedgerChange[]>(`/changes?${scope(documentId, workspaceId)}`).catch(() => null)
+}
+
+/** The text of one earlier version, with the API's check against its block. */
+export function fetchVersion(documentId: string, changeId: string, workspaceId?: string): Promise<LedgerVersion | null> {
+  return request<LedgerVersion>(`/changes/${encodeURIComponent(changeId)}/version?${scope(documentId, workspaceId)}`)
+    // A reply without text is not a version the page can show or compare.
+    .then((version) => (version && typeof version.text === 'string' ? version : null))
+    .catch(() => null)
 }
 
 /** "sending" carries a stand-in for the change before the API has it, so the
@@ -125,7 +154,10 @@ export function recordChange(input: { documentId: string; kind: ChangeKind; text
       content_hash: await sha256Hex(input.text),
       title: input.title,
     }
-    const sending = request<LedgerChange>('/changes', { method: 'POST', body: JSON.stringify(body) }).catch(() => null)
+    // The version itself rides along so it can be restored later; it is not
+    // part of the stand-in shown while sending.
+    const sent = { ...body, text: input.text }
+    const sending = request<LedgerChange>('/changes', { method: 'POST', body: JSON.stringify(sent) }).catch(() => null)
     // Show the change as pending straight away, then refresh once its block is in.
     const change: LedgerChange = {
       ...body, status: 'pending', created_at: new Date().toISOString(), attempts: 0, tx_hash: '',

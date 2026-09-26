@@ -164,13 +164,13 @@ export function HomeView() {
         </Card>
         <Card title="Recent activity" action={<button type="button" className="ws-link" onClick={() => ws.go('chain')}>View all</button>} id="activity-title">
           <ul className="ws-feed">
-            {ws.comments.slice(-3).reverse().map((message) => (
-              <li key={message.id}><i className="ws-feed-dot" /><div><strong>{message.user}</strong><p>{message.text}</p><small>{message.time}</small></div></li>
+            {ws.recentMessageActivity.slice(0, 3).map((message) => (
+              <li key={`${message.workspaceId}-${message.channelId}-${message.id}`}><button type="button" className="ws-feed-item" onClick={() => void ws.openWorkspaceChannel(message.workspaceId, message.channelId)}><i className="ws-feed-dot" /><div><strong>{message.user}</strong><p>{message.text}</p><small>{message.workspaceName} · #{message.channelId} · {message.time}</small></div><ChevronRight size={16} aria-hidden="true" /></button></li>
             ))}
             {documents.filter((doc) => doc.id.startsWith('upload-')).slice(0, 2).map((doc) => (
-              <li key={doc.id}><i className="ws-feed-dot ws-feed-dot-green" /><div><strong>Reviewed {documentDisplayName(doc)}</strong><p>{doc.findings.length} checks · score {doc.score}</p><small>{doc.date}</small></div></li>
+              <li key={doc.id}><button type="button" className="ws-feed-item" onClick={() => ws.openInReview(doc)}><i className="ws-feed-dot ws-feed-dot-green" /><div><strong>Reviewed {documentDisplayName(doc)}</strong><p>{doc.findings.length} checks · score {doc.score}</p><small>{doc.date}</small></div><ChevronRight size={16} aria-hidden="true" /></button></li>
             ))}
-            <li><i className="ws-feed-dot ws-feed-dot-muted" /><div><strong><Sparkles size={13} /> Updated benefits decision passed review</strong><p>Score rose from 54 to 89 across four versions.</p><small>Sep 14</small></div></li>
+            <li><button type="button" className="ws-feed-item" onClick={() => ws.openInReview(documents[0])}><i className="ws-feed-dot ws-feed-dot-muted" /><div><strong><Sparkles size={13} /> Updated benefits decision passed review</strong><p>Score rose from 54 to 89 across four versions.</p><small>Sep 14</small></div><ChevronRight size={16} aria-hidden="true" /></button></li>
           </ul>
         </Card>
       </div>

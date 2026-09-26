@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, CloudAlert, CloudCheck, LoaderCircle, LogOut, Search, Settings, Sparkles, X } from 'lucide-react'
+import { Bell, CloudAlert, CloudCheck, FileText, LoaderCircle, LogOut, Search, Settings, Sparkles, X } from 'lucide-react'
 import { useWorkspace } from './store'
 import { aiSearch, type AiSearchResult } from './api'
+import { RichText } from '../chat/RichText'
 import { documentDisplayName, documentKind, openFindings } from './data'
 
 const AI_PROMPTS = ['Find termination without notice clauses', 'Which document has the lowest score?', 'Explain tenant liability and repair risks']
@@ -43,7 +44,7 @@ export function SearchBox() {
     setQuery(text)
     setLoading(true)
     setResult(null)
-    setResult(await aiSearch(text, ws.documents, ws.selected))
+    setResult(await aiSearch(text, ws.documents))
     setLoading(false)
   }
   const go = (docId: string, findingId?: string) => { ws.openInReview(docId, findingId); setOpen(false); setQuery('') }
@@ -94,14 +95,25 @@ export function SearchBox() {
             <div className="ws-ai-search">
               <div className="ws-chips">{AI_PROMPTS.map((p) => <button key={p} type="button" onClick={() => void runAi(p)}>{p}</button>)}</div>
               <button type="button" className="ws-btn ws-btn-dark ws-btn-sm" disabled={loading || !query.trim()} onClick={() => void runAi(query)}>{loading ? 'Thinking…' : 'Ask AI'}</button>
-              {loading && <p className="ws-muted">Reading your documents…</p>}
-              {result && (
-                <article className="ws-ai-answer">
-                  <header><Sparkles size={14} /> AI answer {result.confidence && <em>{result.confidence}</em>}</header>
-                  <p>{result.answer}</p>
-                  {result.findings?.map((f, i) => <div key={`${f.title}-${i}`} className="ws-ai-finding"><strong>{f.title}</strong><small>{f.explanation}</small></div>)}
-                  {result.sources?.length ? <small className="ws-muted">Sources: {result.sources.map((s) => s.title).join(' · ')}</small> : null}
-                  <button type="button" className="ws-btn ws-btn-sm" onClick={() => { ws.openInReview(ws.selected); setOpen(false) }}>Open in Review</button>
+              {loading && <p className="ws-muted" role="status"><LoaderCircle size={13} className="ws-spin" aria-hidden="true" /> Reading your {ws.documents.length} documents…</p>}
+              {result && !loading && (
+                <article className="ws-ai-answer" aria-live="polite">
+                  <header>
+                    <Sparkles size={14} /> {result.mode === 'ai' ? 'AI answer' : 'Search result'}
+                    <em>{result.mode === 'ai' ? `Across your ${ws.documents.length} documents` : 'Keyword search of your documents'}</em>
+                  </header>
+                  <div className="ws-ai-answer-text"><RichText text={result.answer} /></div>
+                  {result.sources.length > 0 && (
+                    <div className="ws-ai-sources">
+                      <small className="ws-muted">{result.mode === 'ai' ? 'Documents in this answer' : 'Matching documents'}</small>
+                      {result.sources.map((item) => (
+                        <button key={item.id} type="button" className="ws-result" onClick={() => go(item.id)}>
+                          <span className="ws-doc-icon"><FileText size={14} /></span>
+                          <span><strong>{item.title}</strong><small>{item.detail} · open in Review</small></span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </article>
               )}
             </div>
@@ -132,6 +144,7 @@ export function Notifications() {
     {
       id: 'review-ready',
       category: 'Review',
+      tone: 'review',
       title: 'Review ready',
       detail: `${documentDisplayName(ws.selected)} has ${open_} item${open_ === 1 ? '' : 's'} to review.`,
       time: 'Just now',
@@ -140,6 +153,7 @@ export function Notifications() {
     {
       id: 'scan-updated',
       category: 'Document',
+      tone: 'document',
       title: 'AI scan updated',
       detail: `${ws.selected.findings.length} checks were evaluated on the current document.`,
       time: 'Today',
@@ -148,6 +162,7 @@ export function Notifications() {
     ...(latestDocument.id !== ws.selected.id ? [{
       id: `document-${latestDocument.id}`,
       category: 'Document',
+      tone: 'document',
       title: 'Recent document activity',
       detail: `${documentDisplayName(latestDocument)} is ready to review.`,
       time: 'Recently added',
@@ -156,6 +171,7 @@ export function Notifications() {
     ...(teammateMessage ? [{
       id: `message-${teammateMessage.id}`,
       category: 'Workspace',
+      tone: 'workspace',
       title: `${teammateMessage.user} posted in ${ws.activeWorkspace?.name ?? 'your workspace'}`,
       detail: teammateMessage.text.length > 120 ? `${teammateMessage.text.slice(0, 117)}…` : teammateMessage.text,
       time: teammateMessage.time,
@@ -164,6 +180,7 @@ export function Notifications() {
     {
       id: 'product-update',
       category: 'Product update',
+      tone: 'product',
       title: 'What’s new in LexisGuide',
       detail: 'Use AI to re-check a document, draft revisions, apply approved wording, and create follow-up tasks.',
       time: 'Latest product update',
@@ -179,7 +196,7 @@ export function Notifications() {
         <section className="ws-popover ws-notify" role="dialog" aria-label="Latest announcements">
           <header className="ws-notify-head"><div><h3>Notifications</h3><p>Latest activity in your workspace</p></div><button type="button" onClick={() => dismissAnd(() => ws.go('chain'))}>View activity</button></header>
           {items.map((item) => (
-            <button key={item.id} type="button" className="ws-notify-item" onClick={item.onClick}>
+            <button key={item.id} type="button" className={`ws-notify-item is-${item.tone}`} onClick={item.onClick}>
               <span className="ws-notify-meta">{item.category}<small>{item.time}</small></span>
               <strong>{item.title}</strong>
               <p>{item.detail}</p>

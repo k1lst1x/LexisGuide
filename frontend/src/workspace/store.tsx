@@ -152,6 +152,21 @@ function useWorkspaceState(userEmail?: string) {
     ? `${activeWorkspace.id}:${activeChannelId}`
     : PERSONAL_WORKSPACE_ID
   const comments = messagesByWorkspace[activeMessageWorkspace] ?? []
+  const recentMessageActivity = useMemo(() => Object.entries(messagesByWorkspace)
+    .flatMap(([key, messages]) => {
+      const divider = key.lastIndexOf(':')
+      const workspaceId = divider > 0 ? key.slice(0, divider) : PERSONAL_WORKSPACE_ID
+      const channelId = divider > 0 ? key.slice(divider + 1) : 'general'
+      const workspace = workspaces.find((item) => item.id === workspaceId)
+      return messages.map((message) => ({
+        ...message,
+        workspaceId,
+        workspaceName: workspace?.name ?? (workspaceId === PERSONAL_WORKSPACE_ID ? 'Personal workspace' : 'Shared workspace'),
+        channelId,
+      }))
+    })
+    .slice(-12)
+    .reverse(), [messagesByWorkspace, workspaces])
   const activeFinding = selected.findings.find((finding) => finding.id === activeFindingId) ?? null
   const isDemo = !documents.some((doc) => doc.id.startsWith('upload-'))
 
@@ -584,6 +599,23 @@ function useWorkspaceState(userEmail?: string) {
     setTasks((current) => [...current, { id: `task-${Date.now()}-${current.length}`, title, detail, completed: false }])
   }, [])
 
+  /** Tasks from the assistant, most urgent first, skipping ones already open. */
+  const addAssistantTasks = useCallback((proposed: Array<{ title: string; detail?: string; priority?: 'high' | 'medium' | 'low' }>) => {
+    const rank = { high: 0, medium: 1, low: 2 }
+    const ordered = [...proposed].sort((a, b) => rank[a.priority ?? 'medium'] - rank[b.priority ?? 'medium'])
+    setTasks((current) => {
+      const open = new Set(current.filter((task) => !task.completed).map((task) => task.title.toLowerCase()))
+      const fresh = ordered.filter((task) => !open.has(task.title.toLowerCase())).map((task, index) => ({
+        id: `task-${Date.now()}-${current.length + index}`,
+        title: task.title,
+        detail: [task.priority === 'high' ? 'High priority' : '', task.detail ?? ''].filter(Boolean).join(' · ') || 'From the assistant',
+        completed: false,
+      }))
+      return [...current, ...fresh]
+    })
+    setNotice(`Added ${proposed.length} task${proposed.length === 1 ? '' : 's'} to Messages → Tasks.`)
+  }, [])
+
   const toggleTask = useCallback((taskId: string) => {
     setTasks((current) => current.map((task) => task.id === taskId ? { ...task, completed: !task.completed } : task))
   }, [])
@@ -731,6 +763,42 @@ function useWorkspaceState(userEmail?: string) {
     try { setMembers(await workspaceRequest<WorkspaceMember[]>(`/workspaces/${workspace.id}/members`)) } catch { setMembers([]) }
   }, [workspaces])
 
+  /** Open the exact group conversation named by an activity item. */
+  const openWorkspaceChannel = useCallback(async (workspaceId: string, channelId = 'general') => {
+    if (workspaceId === PERSONAL_WORKSPACE_ID) {
+      setActiveWorkspace(null)
+      setActiveChannelId('general')
+      setNavState('team')
+      return
+    }
+    let workspace = workspaces.find((item) => item.id === workspaceId) ?? null
+    // A feed item can arrive from a group that was joined on another device,
+    // before the Home page has refreshed its workspace list. Resolve it first
+    // instead of leaving the person on the Home page with a vague error.
+    if (!workspace) {
+      try {
+        const remote = await workspaceRequest<WorkspaceSummary[]>('/workspaces')
+        workspace = remote.find((item) => item.id === workspaceId) ?? null
+        if (workspace) {
+          setWorkspaces((current) => {
+            const merged = [...remote, ...current.filter((item) => item.id.startsWith('local-') && !remote.some((remoteItem) => remoteItem.id === item.id))]
+            saveLocalWorkspaces(merged)
+            return merged
+          })
+        }
+      } catch { /* fall through to the clear unavailable notice below */ }
+    }
+    if (!workspace) {
+      setWorkspaceNotice('This group is no longer available.')
+      return
+    }
+    activeWorkspaceRef.current = workspace
+    setActiveWorkspace(workspace)
+    setActiveChannelId(channelId || 'general')
+    setNavState('team')
+    try { setMembers(await workspaceRequest<WorkspaceMember[]>(`/workspaces/${workspace.id}/members`)) } catch { setMembers([]) }
+  }, [workspaces])
+
   const stats = useMemo(() => {
     const open = documents.flatMap((doc) => openFindings(doc, resolved[doc.id]).map((finding) => ({ doc, finding })))
     const deadlines = documents.filter((doc) => doc.deadline).map((doc) => ({ doc, date: new Date(doc.deadline as string) })).sort((a, b) => a.date.getTime() - b.date.getTime())
@@ -746,9 +814,9 @@ function useWorkspaceState(userEmail?: string) {
     restoring, saveStatus,
     resolved, toggleResolved, resolveAndNext, jurisdiction, setJurisdiction, busyAction, runAction, applyRewrite, editText, editDocumentText, renameDocument, removeDocuments,
     notice, setNotice, addOpen, setAddOpen, addStage, setAddStage, addMessage, addDocument, isDemo, stats,
-    comments, toggleReaction, toggleSaved, deleteMessage, sendMessage, importSharedDocument, draft, setDraft, composerFocus, focusComposer, tasks, addTask, toggleTask,
+    comments, recentMessageActivity, toggleReaction, toggleSaved, deleteMessage, sendMessage, importSharedDocument, draft, setDraft, composerFocus, focusComposer, tasks, addTask, addAssistantTasks, toggleTask,
     messageTab, setMessageTab, discuss,
-    workspaces, activeWorkspace, activeChannelId, setActiveChannelId, members, refreshMembers, forgetWorkspace, workspaceNotice, refreshWorkspaces, createWorkspace, createInvite, joinWorkspace, selectWorkspace,
+    workspaces, activeWorkspace, activeChannelId, setActiveChannelId, members, refreshMembers, forgetWorkspace, workspaceNotice, refreshWorkspaces, createWorkspace, createInvite, joinWorkspace, selectWorkspace, openWorkspaceChannel,
     assistantOpen, setAssistantOpen, assistantQuestion, askAssistant,
   }
 }

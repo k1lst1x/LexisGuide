@@ -139,7 +139,7 @@ def test_parse_reply_unwraps_runtime_envelope():
 
 def test_supervisor_routes_document_research_and_drafting_without_applying_changes():
     client = ScriptedBedrock(text_response("Here is a draft; nothing was changed."))
-    reply = SupervisorAgent(ConversationAgent(client, "model")).chat(
+    reply = SupervisorAgent(ConversationAgent(client, "model"), team=False).chat(
         request(
             ("user", "Draft clearer wording for section 768.28."),
             document_excerpt="Either party may terminate.",
@@ -155,7 +155,7 @@ def test_supervisor_routes_document_research_and_drafting_without_applying_chang
 
 def test_targeted_document_revision_is_allowed_but_limited_to_the_finding():
     client = ScriptedBedrock(text_response("Here is focused replacement wording."))
-    SupervisorAgent(ConversationAgent(client, "model")).chat(
+    SupervisorAgent(ConversationAgent(client, "model"), team=False).chat(
         request(
             ("user", "Fix this highlighted clause."),
             document_excerpt="Either party may terminate.",
@@ -222,7 +222,7 @@ def test_an_attached_file_arrives_inside_the_persons_message() -> None:
         },
     )
 
-    SupervisorAgent(ConversationAgent(client=bedrock)).chat(request)
+    SupervisorAgent(ConversationAgent(client=bedrock), team=False).chat(request)
 
     sent = bedrock.calls[0]
     latest = sent["messages"][-1]
@@ -251,7 +251,7 @@ def test_the_review_specialist_reviews_the_attached_file() -> None:
         },
     )
 
-    reply = SupervisorAgent(ConversationAgent(client=bedrock)).chat(request)
+    reply = SupervisorAgent(ConversationAgent(client=bedrock), team=False).chat(request)
 
     assert "review" in reply.agents_used
     notes = bedrock.calls[0]["system"][-1]["text"]
@@ -286,3 +286,32 @@ def test_an_answer_cut_off_by_the_length_limit_says_so() -> None:
 
     assert reply.reply.startswith("Part one")
     assert "Ask me to continue" in reply.reply
+
+
+def test_a_search_across_the_workspace_sees_every_document():
+    client = ScriptedBedrock(text_response("None of your documents mention David Le."))
+    ConversationAgent(client, "model").chat(
+        request(
+            ("user", "who is david le"),
+            page="AI Search",
+            library=[
+                {
+                    "title": "09_AB_1821_Fremont",
+                    "type": "PDF document",
+                    "score": 58,
+                    "open_findings": ["Lack of bill text (Scope)"],
+                    "excerpt": "AB 1821 was enrolled and presented to the Governor.",
+                },
+                {"title": "Lease agreement", "type": "Lease", "score": 62},
+            ],
+        )
+    )
+    context = client.calls[0]["system"][1]["text"]
+    assert "Documents in the person's workspace:" in context
+    assert (
+        '"09_AB_1821_Fremont" (PDF document, score 58/100). Open findings: Lack of bill text'
+        in context
+    )
+    assert "AB 1821 was enrolled" in context
+    assert '"Lease agreement" (Lease, score 62/100). Open findings: none.' in context
+    assert "never invent facts about a person" in client.calls[0]["system"][0]["text"].lower()

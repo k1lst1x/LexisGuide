@@ -193,6 +193,19 @@ class Ledger:
             raise LedgerError(f"Transaction {tx_hash} reverted.")
         return self._anchored(receipt)
 
+    def recorded_content_hash(self, tx_hash: str) -> str | None:
+        """The fingerprint the chain holds for the change in this transaction."""
+        from web3.exceptions import TransactionNotFound
+
+        try:
+            receipt = self.web3.eth.get_transaction_receipt(tx_hash)
+        except TransactionNotFound:
+            return None
+        events = self.contract.events.DocumentChanged().process_receipt(receipt)
+        if not events:
+            return None
+        return _hex32(events[0]["args"]["contentHash"]).removeprefix("0x")
+
     def _anchored(self, receipt: Any) -> Anchored:
         events = self.contract.events.DocumentChanged().process_receipt(receipt)
         if not events:

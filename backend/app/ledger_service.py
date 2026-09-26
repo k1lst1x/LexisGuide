@@ -14,11 +14,16 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from hashlib import sha256
 from typing import Any
+from uuid import uuid4
 
-from app.ledger import Anchored, Ledger, LedgerError
+from app.ledger import Anchored, Ledger, LedgerError, configured_ledger, document_key
 from app.storage import (
     acquire_ledger_writer,
+    consume_ledger_quota,
+    create_ledger_change,
+    list_ledger_changes,
     release_remote_operation,
     update_ledger_change,
 )
@@ -43,6 +48,41 @@ def ledger_writer(wait_seconds: float) -> Iterator[bool]:
     finally:
         if lease is not None:
             release_remote_operation(lease)
+
+
+def record_shared_version(
+    workspace_id: str, user: dict[str, str], document_id: str, text: str, title: str
+) -> None:
+    """Add a shared document's new text to its workspace history.
+
+    The change is stored pending with its text; the next history read writes it
+    to the chain. Sharing the same text again records nothing. Best-effort: a
+    history problem never stops the share itself.
+    """
+    try:
+        if configured_ledger() is None or not consume_ledger_quota(user["sub"]):
+            return
+        owner = f"workspace:{workspace_id}"
+        key = document_key(owner, document_id)
+        content_hash = sha256(text.encode()).hexdigest()
+        earlier = list_ledger_changes(owner, key)
+        if earlier and earlier[-1]["content_hash"] == content_hash:
+            return
+        create_ledger_change(
+            owner,
+            key,
+            {
+                "change_id": str(uuid4()),
+                "document_id": document_id,
+                "kind": "edited" if earlier else "created",
+                "content_hash": content_hash,
+                "title": title,
+                "text": text,
+                "changed_by": user.get("name") or user.get("email") or "",
+            },
+        )
+    except Exception as error:  # noqa: BLE001 - history is best-effort
+        logger.warning("Shared version of %s was not recorded: %s", document_id, error)
 
 
 def _confirm(user_id: str, row: dict[str, Any], anchored: Anchored) -> dict[str, Any]:
