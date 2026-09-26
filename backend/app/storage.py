@@ -409,10 +409,14 @@ def list_workspace_members(workspace_id: str) -> list[dict[str, Any]]:
 
 
 def list_workspace_channels(workspace_id: str) -> list[dict[str, Any]]:
-    channels = _table().query(
-        KeyConditionExpression=Key("PK").eq(f"WORKSPACE#{workspace_id}")
-        & Key("SK").begins_with("CHANNEL#")
-    ).get("Items", [])
+    channels = (
+        _table()
+        .query(
+            KeyConditionExpression=Key("PK").eq(f"WORKSPACE#{workspace_id}")
+            & Key("SK").begins_with("CHANNEL#")
+        )
+        .get("Items", [])
+    )
     # Workspaces created before channels shipped get General lazily, without
     # losing any of their existing messages.
     if not channels:
@@ -433,16 +437,20 @@ def list_workspace_channels(workspace_id: str) -> list[dict[str, Any]]:
 
 
 def get_workspace_channel(workspace_id: str, channel_id: str) -> dict[str, Any] | None:
-    channel = _table().get_item(
-        Key={"PK": f"WORKSPACE#{workspace_id}", "SK": f"CHANNEL#{channel_id}"}
-    ).get("Item")
+    channel = (
+        _table()
+        .get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": f"CHANNEL#{channel_id}"})
+        .get("Item")
+    )
     if channel is None and channel_id == "general":
         # Backfill General for a pre-channel workspace before its first read or
         # write, even when the client has not opened the channel menu yet.
         list_workspace_channels(workspace_id)
-        channel = _table().get_item(
-            Key={"PK": f"WORKSPACE#{workspace_id}", "SK": "CHANNEL#general"}
-        ).get("Item")
+        channel = (
+            _table()
+            .get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": "CHANNEL#general"})
+            .get("Item")
+        )
     return channel
 
 
