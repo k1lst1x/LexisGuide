@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowUpRight, Blocks, CircleAlert, CircleCheck, Fingerprint, Link2, LoaderCircle, ShieldCheck } from 'lucide-react'
+import { ArrowUpRight, Blocks, ChevronDown, ChevronUp, CircleAlert, CircleCheck, Fingerprint, Link2, LoaderCircle, Search, ShieldCheck } from 'lucide-react'
 import { useWorkspace } from '../store'
 import { documentDisplayName, type SampleDoc } from '../data'
 import {
@@ -9,6 +9,7 @@ import {
   ledgerInfo,
   onLedgerChange,
   sha256Hex,
+  type ChangeKind,
   type LedgerChange,
   type LedgerInfo,
 } from '../ledger'
@@ -83,6 +84,127 @@ function useIntegrity(document: SampleDoc | undefined, changes: LedgerChange[] |
   return { matches: latest.content_hash === current.hash, latest }
 }
 
+function ChainEntry({ change, explorer }: { change: LedgerChange; explorer: string }) {
+  return (
+    <li className={`is-${change.status}`}>
+      <div className="ws-chain-block">
+        {change.status === 'confirmed' && change.block_number !== null ? (
+          <>
+            <span>Block</span>
+            {explorer
+              ? <a href={`${explorer}/block/${change.block_number}`} target="_blank" rel="noreferrer">{change.block_number.toLocaleString()}</a>
+              : <strong>{change.block_number.toLocaleString()}</strong>}
+          </>
+        ) : change.status === 'failed'
+          ? <><CircleAlert size={16} aria-hidden="true" /><span>Not recorded</span></>
+          : <><LoaderCircle size={16} className="ws-spin" aria-hidden="true" /><span>Pending</span></>}
+      </div>
+      <div className="ws-chain-body">
+        <div className="ws-chain-title">
+          <strong>{KIND_LABELS[change.kind]}</strong>
+          {change.sequence !== null && <span className="ws-pill">Change #{change.sequence}</span>}
+          {change.status === 'confirmed' && <span className="ws-pill ws-tone-good"><CircleCheck size={12} aria-hidden="true" /> Confirmed</span>}
+        </div>
+        <small>
+          {new Date(change.block_time ? change.block_time * 1000 : change.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+          {change.title && ` · ${change.title}`}
+        </small>
+        <div className="ws-chain-meta">
+          <code title={`SHA-256 ${change.content_hash}`}><Fingerprint size={12} aria-hidden="true" /> {short(change.content_hash, 8, 6)}</code>
+          {change.tx_hash && explorer && (
+            <a href={`${explorer}/tx/${change.tx_hash}`} target="_blank" rel="noreferrer" className="ws-link">
+              Transaction {short(change.tx_hash)} <ArrowUpRight size={13} aria-hidden="true" />
+            </a>
+          )}
+        </div>
+        {change.entry_hash && (
+          <p className="ws-chain-link">
+            <Link2 size={12} aria-hidden="true" />
+            {/^0x0+$/.test(change.previous_entry) ? 'First entry' : `Follows ${short(change.previous_entry)}`} → entry {short(change.entry_hash)}
+          </p>
+        )}
+        {change.status === 'failed' && change.error && <p className="ws-chain-error">{change.error}</p>}
+        {change.status === 'pending' && change.error && <p className="ws-chain-note">{change.error}</p>}
+      </div>
+    </li>
+  )
+}
+
+// The newest few are always shown; the rest wait behind "View all".
+const PREVIEW_COUNT = 5
+type StatusFilter = 'all' | LedgerChange['status']
+const KIND_ORDER: ChangeKind[] = ['created', 'reviewed', 'edited', 'rewrite_applied', 'renamed']
+
+function ChainEvents({ changes, explorer, documentId, label }: { changes: LedgerChange[]; explorer: string; documentId: string; label: string }) {
+  // Expanded and filtered per document, so switching documents starts compact.
+  const [view, setView] = useState<{ documentId: string; kind: 'all' | ChangeKind; status: StatusFilter; query: string } | null>(null)
+  const expanded = view?.documentId === documentId
+  const kind = expanded ? view.kind : 'all'
+  const status = expanded ? view.status : 'all'
+  const query = expanded ? view.query : ''
+  const update = (next: Partial<{ kind: 'all' | ChangeKind; status: StatusFilter; query: string }>) =>
+    setView({ documentId, kind, status, query, ...next })
+
+  const newestFirst = [...changes].reverse()
+  const needle = query.trim().toLowerCase().replace(/,/g, '')
+  const filtered = newestFirst.filter((change) =>
+    (kind === 'all' || change.kind === kind)
+    && (status === 'all' || change.status === status)
+    && (!needle || [String(change.block_number ?? ''), change.tx_hash, change.content_hash, change.entry_hash, change.title, KIND_LABELS[change.kind]]
+      .some((value) => value.toLowerCase().includes(needle))))
+  const shown = expanded ? filtered : newestFirst.slice(0, PREVIEW_COUNT)
+  const hidden = newestFirst.length - PREVIEW_COUNT
+  const kindCounts = new Map(KIND_ORDER.map((item) => [item, newestFirst.filter((change) => change.kind === item).length]))
+  const filtering = kind !== 'all' || status !== 'all' || Boolean(needle)
+
+  return (
+    <>
+      {expanded && (
+        <div className="ws-chain-filters" role="group" aria-label="Filter blockchain events">
+          <div className="ws-segment ws-chain-kinds" role="group" aria-label="Type of change">
+            <button type="button" className={kind === 'all' ? 'is-active' : ''} aria-pressed={kind === 'all'} onClick={() => update({ kind: 'all' })}>All <em>{newestFirst.length}</em></button>
+            {KIND_ORDER.filter((item) => kindCounts.get(item)).map((item) => (
+              <button key={item} type="button" className={kind === item ? 'is-active' : ''} aria-pressed={kind === item} onClick={() => update({ kind: item })}>
+                {KIND_LABELS[item]} <em>{kindCounts.get(item)}</em>
+              </button>
+            ))}
+          </div>
+          <div className="ws-chain-filter-row">
+            <label className="ws-select">
+              <span>Status</span>
+              <select value={status} onChange={(event) => update({ status: event.target.value as StatusFilter })} aria-label="Filter by status">
+                <option value="all">Any</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="pending">Pending</option>
+                <option value="failed">Not recorded</option>
+              </select>
+            </label>
+            <label className="ws-chain-search">
+              <Search size={14} aria-hidden="true" />
+              <input value={query} onChange={(event) => update({ query: event.target.value })} placeholder="Block, transaction, or fingerprint" aria-label="Search blockchain events" />
+            </label>
+          </div>
+          <p className="ws-chain-count" role="status">
+            Showing {filtered.length} of {newestFirst.length} event{newestFirst.length === 1 ? '' : 's'}
+            {filtering && <button type="button" className="ws-link" onClick={() => update({ kind: 'all', status: 'all', query: '' })}>Clear filters</button>}
+          </p>
+        </div>
+      )}
+
+      <ol className="ws-chain" aria-label={label}>
+        {shown.map((change) => <ChainEntry key={change.change_id} change={change} explorer={explorer} />)}
+      </ol>
+      {expanded && !filtered.length && <p className="ws-chain-note">No event matches these filters.</p>}
+
+      {newestFirst.length > PREVIEW_COUNT && (
+        expanded
+          ? <button type="button" className="ws-btn ws-btn-sm ws-chain-more" onClick={() => setView(null)}><ChevronUp size={14} /> Show the latest {PREVIEW_COUNT} only</button>
+          : <button type="button" className="ws-btn ws-btn-sm ws-chain-more" onClick={() => update({})}><ChevronDown size={14} /> View all {newestFirst.length} events <span>· {hidden} older hidden</span></button>
+      )}
+    </>
+  )
+}
+
 export function ChainHistory() {
   const ws = useWorkspace()
   const info = useLedgerInfo()
@@ -144,51 +266,7 @@ export function ChainHistory() {
           {!changes && <p className="ws-chain-note"><LoaderCircle size={14} className="ws-spin" aria-hidden="true" /> Reading this document’s history…</p>}
           {changes && !changes.length && <Empty title="Nothing recorded yet">Changes to {documentDisplayName(document)} will appear here as they are written to the chain.</Empty>}
           {changes && changes.length > 0 && (
-            <ol className="ws-chain" aria-label={`On-chain history of ${documentDisplayName(document)}`}>
-              {[...changes].reverse().map((change) => (
-                <li key={change.change_id} className={`is-${change.status}`}>
-                  <div className="ws-chain-block">
-                    {change.status === 'confirmed' && change.block_number !== null ? (
-                      <>
-                        <span>Block</span>
-                        {explorer
-                          ? <a href={`${explorer}/block/${change.block_number}`} target="_blank" rel="noreferrer">{change.block_number.toLocaleString()}</a>
-                          : <strong>{change.block_number.toLocaleString()}</strong>}
-                      </>
-                    ) : change.status === 'failed'
-                      ? <><CircleAlert size={16} aria-hidden="true" /><span>Not recorded</span></>
-                      : <><LoaderCircle size={16} className="ws-spin" aria-hidden="true" /><span>Pending</span></>}
-                  </div>
-                  <div className="ws-chain-body">
-                    <div className="ws-chain-title">
-                      <strong>{KIND_LABELS[change.kind]}</strong>
-                      {change.sequence !== null && <span className="ws-pill">Change #{change.sequence}</span>}
-                      {change.status === 'confirmed' && <span className="ws-pill ws-tone-good"><CircleCheck size={12} aria-hidden="true" /> Confirmed</span>}
-                    </div>
-                    <small>
-                      {new Date(change.block_time ? change.block_time * 1000 : change.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })}
-                      {change.title && ` · ${change.title}`}
-                    </small>
-                    <div className="ws-chain-meta">
-                      <code title={`SHA-256 ${change.content_hash}`}><Fingerprint size={12} aria-hidden="true" /> {short(change.content_hash, 8, 6)}</code>
-                      {change.tx_hash && explorer && (
-                        <a href={`${explorer}/tx/${change.tx_hash}`} target="_blank" rel="noreferrer" className="ws-link">
-                          Transaction {short(change.tx_hash)} <ArrowUpRight size={13} aria-hidden="true" />
-                        </a>
-                      )}
-                    </div>
-                    {change.entry_hash && (
-                      <p className="ws-chain-link">
-                        <Link2 size={12} aria-hidden="true" />
-                        {/^0x0+$/.test(change.previous_entry) ? 'First entry' : `Follows ${short(change.previous_entry)}`} → entry {short(change.entry_hash)}
-                      </p>
-                    )}
-                    {change.status === 'failed' && change.error && <p className="ws-chain-error">{change.error}</p>}
-                    {change.status === 'pending' && change.error && <p className="ws-chain-note">{change.error}</p>}
-                  </div>
-                </li>
-              ))}
-            </ol>
+            <ChainEvents changes={changes} explorer={explorer} documentId={document.id} label={`On-chain history of ${documentDisplayName(document)}`} />
           )}
         </>
       )}

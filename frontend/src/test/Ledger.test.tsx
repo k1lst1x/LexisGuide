@@ -153,3 +153,53 @@ describe('On-chain history', () => {
     expect(await screen.findByText(/sample documents are not recorded/)).toBeInTheDocument()
   })
 })
+
+describe('Compact on-chain history', () => {
+  it('shows the latest five events and hides the rest behind View all, with filters', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup()
+    const { sha256Hex } = await load()
+    workspace.current = { documents: [DOC], selected: DOC }
+    const hash = await sha256Hex('Draft')
+    history = Array.from({ length: 8 }, (_, index) => ({
+      ...confirmed(hash, 47216500 + index, index + 1),
+      kind: index === 0 ? 'created' : index % 3 === 0 ? 'renamed' : 'edited',
+    }))
+    const { ChainHistory } = await import('../workspace/views/ChainHistory')
+
+    render(<ChainHistory />)
+    const list = await screen.findByRole('list', { name: /On-chain history of/ })
+
+    // Newest five only.
+    expect(within(list).getAllByRole('listitem')).toHaveLength(5)
+    expect(within(list).getByRole('link', { name: '47,216,507' })).toBeInTheDocument()
+    expect(within(list).queryByRole('link', { name: '47,216,502' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /View all 8 events/ }))
+    expect(within(list).getAllByRole('listitem')).toHaveLength(8)
+
+    await user.click(screen.getByRole('button', { name: /^Renamed/ }))
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2)
+    expect(screen.getByText(/Showing 2 of 8 events/)).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Search blockchain events'), '47216506')
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1)
+
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(within(list).getAllByRole('listitem')).toHaveLength(8)
+
+    await user.click(screen.getByRole('button', { name: /Show the latest 5 only/ }))
+    expect(within(list).getAllByRole('listitem')).toHaveLength(5)
+  })
+
+  it('shows no View all button when there are five events or fewer', async () => {
+    const { sha256Hex } = await load()
+    workspace.current = { documents: [DOC], selected: DOC }
+    history = [confirmed(await sha256Hex('Draft'), 47216500, 1)]
+    const { ChainHistory } = await import('../workspace/views/ChainHistory')
+
+    render(<ChainHistory />)
+    await screen.findByRole('list', { name: /On-chain history of/ })
+
+    expect(screen.queryByRole('button', { name: /View all/ })).not.toBeInTheDocument()
+  })
+})
