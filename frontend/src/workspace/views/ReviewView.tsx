@@ -112,7 +112,8 @@ function DocumentText({ doc, activeId, resolved, onSelect }: { doc: SampleDoc; a
 
     // Selecting an item in the finding queue should take the person to the
     // supporting clause, not merely change the detail pane.
-    target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+    // Guarded: scrollIntoView is missing in some embedded browsers and in jsdom.
+    target.scrollIntoView?.({ behavior: 'smooth', block: 'center', inline: 'nearest' })
     target.focus({ preventScroll: true })
   }, [activeId, doc.id])
 
