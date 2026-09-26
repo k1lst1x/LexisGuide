@@ -34,11 +34,14 @@ type Props = {
   expandingComposer?: boolean
   /** Documents the person can attach without uploading them again. */
   documents?: AttachableDocument[]
+  /** The document used as the default context for the next assistant request. */
+  activeDocumentId?: string
+  onDocumentContextChange?: (documentId: string) => void
   onWorkspaceAction?: (action: WorkspaceAction) => void
 }
 
 
-export function ChatWidget({ storageKey, context, suggestions = [], fallback = defaultGuide, greeting, open: controlledOpen, onOpenChange, pendingQuestion, onSignIn, className = '', footer, embedded = false, expandingComposer = false, documents = [], onWorkspaceAction }: Props) {
+export function ChatWidget({ storageKey, context, suggestions = [], fallback = defaultGuide, greeting, open: controlledOpen, onOpenChange, pendingQuestion, onSignIn, className = '', footer, embedded = false, expandingComposer = false, documents = [], activeDocumentId, onDocumentContextChange, onWorkspaceAction }: Props) {
   const chat = useAssistantChat({ storageKey, context, greeting, fallback })
   const { turns, input, setInput, busy, mode, notice, ask, reset, status } = chat
   const [localOpen, setLocalOpen] = useState(false)
@@ -91,6 +94,14 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
             <button type="button" className="cw-icon" onClick={reset} aria-label="Start a new conversation" title="New conversation"><RotateCcw size={15} /></button>
             {!embedded && <button type="button" className="cw-icon" onClick={() => setOpen(false)} aria-label="Close assistant" title="Close"><Minus size={16} /></button>}
           </header>
+          {documents.length > 0 && onDocumentContextChange && (
+            <label className="cw-context">
+              <span>Document context</span>
+              <select value={activeDocumentId ?? ''} onChange={(event) => onDocumentContextChange(event.target.value)} aria-label="Document context">
+                {documents.map((document) => <option key={document.id} value={document.id}>{document.title}</option>)}
+              </select>
+            </label>
+          )}
 
           <div className="cw-list" ref={listRef} aria-live="polite">
             {turns.map((turn) => (
