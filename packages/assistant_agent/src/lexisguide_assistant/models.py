@@ -113,7 +113,9 @@ class ChatReply(BaseModel):
     reply: str
     tools_used: list[str] = Field(default_factory=list)
     agents_used: list[str] = Field(default_factory=list)
-    workspace_actions: list[Literal["review", "negotiate", "rewrite", "apply_rewrite", "resolve", "create_task"]] = Field(default_factory=list)
+    workspace_actions: list[
+        Literal["review", "negotiate", "rewrite", "apply_rewrite", "resolve", "create_task"]
+    ] = Field(default_factory=list)
 
 
 def parse_chat_request(payload: dict[str, Any]) -> ChatRequest:
