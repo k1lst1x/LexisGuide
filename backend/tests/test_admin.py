@@ -132,9 +132,11 @@ def _claims(monkeypatch: pytest.MonkeyPatch, claims: dict[str, Any]) -> None:
             "Jwk", (), {"get_signing_key_from_jwt": lambda self, t: type("K", (), {"key": "k"})()}
         )(),
     )
-    monkeypatch.setattr(auth, "_cognito_user_pool", lambda: type("Pool", (), {
-        "admin_get_user": lambda self, **_: {"Enabled": True}
-    })())
+    monkeypatch.setattr(
+        auth,
+        "_cognito_user_pool",
+        lambda: type("Pool", (), {"admin_get_user": lambda self, **_: {"Enabled": True}})(),
+    )
     monkeypatch.setattr(auth, "user_sessions_valid_after", lambda _username: 0)
     monkeypatch.setattr(auth.jwt, "decode", lambda *_, **__: claims)
 

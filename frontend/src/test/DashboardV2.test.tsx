@@ -84,7 +84,8 @@ describe('Review workflow', () => {
     renderWorkspace()
 
     await user.click(screen.getByRole('button', { name: 'Review' }))
-    await user.click(screen.getByRole('button', { name: /For inquiries, contact the central administrative portal/i }))
+    // Highlights are named after the finding they mark, not the passage text.
+    await user.click(screen.getByRole('button', { name: /^Finding: .*Appeal destination & filing procedure missing/ }))
 
     expect(screen.getByRole('heading', { level: 2, name: 'Appeal destination & filing procedure missing' })).toBeInTheDocument()
     expect(screen.getByText(/does not provide an address, URL, form number/i)).toBeInTheDocument()
