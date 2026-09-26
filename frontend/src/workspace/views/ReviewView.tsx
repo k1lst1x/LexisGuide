@@ -103,6 +103,19 @@ function documentHighlights(doc: SampleDoc): Highlight[] {
 
 function DocumentText({ doc, activeId, resolved, onSelect }: { doc: SampleDoc; activeId: string | null; resolved: string[]; onSelect: (id: string) => void }) {
   const highlights = documentHighlights(doc)
+  const highlightRefs = useRef(new Map<string, HTMLElement>())
+
+  useEffect(() => {
+    if (!activeId) return
+    const target = highlightRefs.current.get(activeId)
+    if (!target) return
+
+    // Selecting an item in the finding queue should take the person to the
+    // supporting clause, not merely change the detail pane.
+    target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+    target.focus({ preventScroll: true })
+  }, [activeId, doc.id])
+
   const parts: Array<{ text: string; highlight?: Highlight }> = []
   let cursor = 0
   for (const highlight of highlights) {
@@ -119,9 +132,17 @@ function DocumentText({ doc, activeId, resolved, onSelect }: { doc: SampleDoc; a
         const done = part.highlight.findings.every((item) => resolved.includes(item.id))
         const active = part.highlight.findings.some((item) => item.id === activeId)
         const label = part.highlight.findings.map((item) => item.title).join('; ')
+        const findingIds = part.highlight.findings.map((item) => item.id)
         return (
           // A <mark> wraps across lines like a physical highlighter; a button cannot.
-          <mark key={index} role="button" tabIndex={0} title={label} aria-label={`Finding: ${label}`} onClick={() => onSelect(finding.id)}
+          <mark key={index} role="button" tabIndex={0} title={label} aria-label={`Finding: ${label}`} data-finding-ids={findingIds.join(' ')}
+            ref={(element) => {
+              for (const id of findingIds) {
+                if (element) highlightRefs.current.set(id, element)
+                else highlightRefs.current.delete(id)
+              }
+            }}
+            onClick={() => onSelect(finding.id)}
             onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(finding.id) } }}
             className={`ws-mark ws-mark-${done ? 'resolved' : finding.severity} ${active ? 'is-active' : ''}`}>
             {part.text}
