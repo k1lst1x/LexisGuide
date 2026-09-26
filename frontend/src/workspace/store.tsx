@@ -320,20 +320,40 @@ function useWorkspaceState(userEmail?: string) {
   }, [jurisdiction])
 
   const runAction = useCallback(async (action: ReviewAction) => {
+    const targetFinding = action === 'rewrite' ? activeFinding : null
+    if (action === 'rewrite' && !targetFinding?.evidence) {
+      setNotice('Select a highlighted finding before drafting a targeted revision.')
+      return
+    }
     setBusyAction(action)
-    setNotice(action === 'rewrite' ? 'Preparing proposed rewrites…' : action === 'negotiate' ? 'Preparing negotiation points…' : 'Re-checking the document…')
+    setNotice(action === 'rewrite' ? 'Preparing a proposed revision for this finding…' : action === 'negotiate' ? 'Preparing negotiation points…' : 'Re-checking the document…')
     try {
-      const updated = await runDocumentAction(selected, action, jurisdiction)
-      updateDocument(updated)
-      void recordChange({ documentId: updated.id, kind: 'reviewed', text: updated.text, title: updated.title })
-      setActiveFindingId(updated.findings[0]?.id ?? null)
-      setNotice(`${action === 'rewrite' ? 'Proposed rewrites' : action === 'negotiate' ? 'Negotiation points' : 'Updated review'} ready. Nothing was applied automatically.`)
+      // A rewrite is intentionally sent as just the selected evidence, not the
+      // whole document. The returned draft is attached to that finding, then
+      // the person can apply it to their working copy after reviewing it.
+      const actionDocument = targetFinding ? { ...selected, text: targetFinding.evidence, findings: [targetFinding] } : selected
+      const updated = await runDocumentAction(actionDocument, action, jurisdiction)
+      if (targetFinding) {
+        const draft = updated.findings.find((finding) => finding.suggestedRewrite)?.suggestedRewrite
+        if (!draft) throw new Error('The AI did not return replacement wording for this finding. Your document is unchanged.')
+        updateDocument({
+          ...selected,
+          findings: selected.findings.map((finding) => finding.id === targetFinding.id ? { ...finding, suggestedRewrite: draft } : finding),
+        })
+        setActiveFindingId(targetFinding.id)
+        setNotice('A targeted draft is ready. Review it, then choose Apply to working copy when you are ready.')
+      } else {
+        updateDocument(updated)
+        void recordChange({ documentId: updated.id, kind: 'reviewed', text: updated.text, title: updated.title })
+        setActiveFindingId(updated.findings[0]?.id ?? null)
+        setNotice(`${action === 'negotiate' ? 'Negotiation points' : 'Updated review'} ready. Nothing was applied automatically.`)
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The AI action failed. Your document is unchanged.')
     } finally {
       setBusyAction(null)
     }
-  }, [selected, jurisdiction, updateDocument])
+  }, [activeFinding, selected, jurisdiction, updateDocument])
 
   const applyRewrite = useCallback((finding: Finding) => {
     if (!finding.suggestedRewrite || !finding.evidence) {

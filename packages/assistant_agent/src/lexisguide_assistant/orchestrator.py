@@ -97,10 +97,11 @@ class DraftingSpecialist:
     def run(self, request: ChatRequest) -> SpecialistNote:
         return SpecialistNote(
             self.name,
-            "Drafting specialist: provide proposed wording or negotiation points "
-            "only. Label it as a draft, preserve any unknown facts as placeholders, "
-            "and say that it has not changed the "
-            "document. Do not promise legal effect or send/apply anything.",
+            "Drafting specialist: when a finding or exact excerpt is available, work on "
+            "that passage only. Provide a focused proposed replacement or negotiation "
+            "point, label it as a draft, and preserve unknown facts as placeholders. "
+            "The person can choose to apply the draft to their working copy; do not "
+            "rewrite unrelated passages, promise legal effect, or send anything.",
         )
 
 

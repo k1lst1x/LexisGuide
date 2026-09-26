@@ -143,8 +143,23 @@ def test_supervisor_routes_document_research_and_drafting_without_applying_chang
 
     assert reply.agents_used == ["review", "research", "drafting"]
     specialist_notes = client.calls[0]["system"][-1]["text"]
-    assert "not changed the document" in specialist_notes
+    assert "working copy" in specialist_notes
     assert "no official source receipt" in specialist_notes
+
+
+def test_targeted_document_revision_is_allowed_but_limited_to_the_finding():
+    client = ScriptedBedrock(text_response("Here is focused replacement wording."))
+    SupervisorAgent(ConversationAgent(client, "model")).chat(
+        request(
+            ("user", "Fix this highlighted clause."),
+            document_excerpt="Either party may terminate.",
+            current_finding="No notice period: Evidence: Either party may terminate.",
+        )
+    )
+
+    system = " ".join(block["text"] for block in client.calls[0]["system"])
+    assert "specific selected finding or excerpt" in system
+    assert "that passage only" in system
 
 
 class Recording:

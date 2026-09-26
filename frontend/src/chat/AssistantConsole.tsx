@@ -27,7 +27,7 @@ export type AssistantConsoleProps = {
 function actionLabel(action: WorkspaceAction) {
   return action === 'review' ? 'Re-check this document'
     : action === 'negotiate' ? 'Suggest negotiation points'
-      : action === 'rewrite' ? 'Draft clearer wording'
+      : action === 'rewrite' ? 'Draft a revision for this issue'
         : action === 'apply_rewrite' ? 'Apply the current draft'
           : action === 'resolve' ? 'Mark current issue resolved'
             : 'Create follow-up task'
