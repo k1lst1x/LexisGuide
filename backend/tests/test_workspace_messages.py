@@ -26,8 +26,9 @@ def test_members_can_post_and_read_workspace_messages(
         "attachment": "doc-1",
     }
     monkeypatch.setattr(routes, "get_workspace_membership", lambda *_: {"role": "member"})
+    monkeypatch.setattr(routes, "get_workspace_channel", lambda *_: {"id": "general"})
     monkeypatch.setattr(routes, "create_workspace_message", lambda *_: stored)
-    monkeypatch.setattr(routes, "list_workspace_messages", lambda _: [stored])
+    monkeypatch.setattr(routes, "list_workspace_messages", lambda *_: [stored])
 
     created = authenticated_client.post(
         "/api/v1/workspaces/workspace-123/messages",

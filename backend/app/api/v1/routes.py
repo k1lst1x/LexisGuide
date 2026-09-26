@@ -26,14 +26,18 @@ from app.storage import (
     consume_workspace_invite,
     create_record_with_limit,
     create_workspace,
+    create_workspace_channel,
     create_workspace_invite,
     create_workspace_message,
+    delete_workspace_channel,
     get_conversation,
     get_lawyer_verification,
     get_profile,
+    get_workspace_channel,
     get_workspace_membership,
     list_conversations,
     list_records,
+    list_workspace_channels,
     list_workspace_members,
     list_workspace_messages,
     list_workspaces,
@@ -128,6 +132,7 @@ class WorkspaceInvite(BaseModel):
 class WorkspaceMessageCreate(BaseModel):
     text: str = Field(min_length=1, max_length=4_000)
     attachment: str | None = Field(default=None, max_length=160)
+    channel_id: str = Field(default="general", pattern=r"^[A-Za-z0-9-]{1,80}$")
 
     @field_validator("text")
     @classmethod
@@ -145,6 +150,25 @@ class WorkspaceMessage(BaseModel):
     text: str
     created_at: str
     attachment: str | None = None
+    channel_id: str = "general"
+
+
+class WorkspaceChannelCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        value = " ".join(value.strip().split())
+        if not value:
+            raise ValueError("Channel name must not be blank")
+        return value
+
+
+class WorkspaceChannel(BaseModel):
+    id: str
+    name: str
+    created_at: str
 
 
 class WorkspaceLinkedDocument(BaseModel):
@@ -591,13 +615,64 @@ async def read_workspace_members(
     return [WorkspaceMember(**member) for member in list_workspace_members(workspace_id)]
 
 
+@router.get("/workspaces/{workspace_id}/channels", response_model=list[WorkspaceChannel])
+async def read_workspace_channels(
+    workspace_id: str, user: dict[str, str] = Depends(current_user)
+) -> list[WorkspaceChannel]:
+    if not get_workspace_membership(workspace_id, user["sub"]):
+        raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
+    return [WorkspaceChannel(**channel) for channel in list_workspace_channels(workspace_id)]
+
+
+@router.post(
+    "/workspaces/{workspace_id}/channels",
+    response_model=WorkspaceChannel,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_workspace_channel(
+    workspace_id: str,
+    payload: WorkspaceChannelCreate,
+    user: dict[str, str] = Depends(current_user),
+) -> WorkspaceChannel:
+    membership = get_workspace_membership(workspace_id, user["sub"])
+    if not membership or membership.get("role") not in {"owner", "admin"}:
+        raise HTTPException(
+            status_code=403, detail="Only workspace owners or admins can add channels."
+        )
+    return WorkspaceChannel(**create_workspace_channel(workspace_id, payload.name))
+
+
+@router.delete(
+    "/workspaces/{workspace_id}/channels/{channel_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def remove_workspace_channel(
+    workspace_id: str, channel_id: str, user: dict[str, str] = Depends(current_user)
+) -> None:
+    membership = get_workspace_membership(workspace_id, user["sub"])
+    if not membership or membership.get("role") not in {"owner", "admin"}:
+        raise HTTPException(
+            status_code=403, detail="Only workspace owners or admins can delete channels."
+        )
+    if not delete_workspace_channel(workspace_id, channel_id):
+        raise HTTPException(
+            status_code=400, detail="General cannot be deleted, or the channel no longer exists."
+        )
+
+
 @router.get("/workspaces/{workspace_id}/messages", response_model=list[WorkspaceMessage])
 async def read_workspace_messages(
-    workspace_id: str, user: dict[str, str] = Depends(current_user)
+    workspace_id: str,
+    channel_id: str = Query(default="general", alias="channel_id", pattern=r"^[A-Za-z0-9-]{1,80}$"),
+    user: dict[str, str] = Depends(current_user),
 ) -> list[WorkspaceMessage]:
     if not get_workspace_membership(workspace_id, user["sub"]):
         raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
-    return [WorkspaceMessage(**message) for message in list_workspace_messages(workspace_id)]
+    if not get_workspace_channel(workspace_id, channel_id):
+        raise HTTPException(status_code=404, detail="Channel not found.")
+    return [
+        WorkspaceMessage(**message)
+        for message in list_workspace_messages(workspace_id, channel_id)
+    ]
 
 
 @router.post(
@@ -612,9 +687,11 @@ async def post_workspace_message(
 ) -> WorkspaceMessage:
     if not get_workspace_membership(workspace_id, user["sub"]):
         raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
+    if not get_workspace_channel(workspace_id, payload.channel_id):
+        raise HTTPException(status_code=404, detail="Channel not found.")
     attachment = payload.attachment.strip() if payload.attachment else None
     return WorkspaceMessage(
-        **create_workspace_message(workspace_id, user, payload.text, attachment)
+        **create_workspace_message(workspace_id, user, payload.text, attachment, payload.channel_id)
     )
 
 

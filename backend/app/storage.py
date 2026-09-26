@@ -348,6 +348,16 @@ def create_workspace(owner: dict[str, str], name: str) -> dict[str, Any]:
             "joined_at": now,
         }
     )
+    table.put_item(
+        Item={
+            "PK": f"WORKSPACE#{workspace_id}",
+            "SK": "CHANNEL#general",
+            "id": "general",
+            "workspace_id": workspace_id,
+            "name": "General",
+            "created_at": now,
+        }
+    )
     return workspace
 
 
@@ -398,11 +408,71 @@ def list_workspace_members(workspace_id: str) -> list[dict[str, Any]]:
     return response.get("Items", [])
 
 
+def list_workspace_channels(workspace_id: str) -> list[dict[str, Any]]:
+    channels = _table().query(
+        KeyConditionExpression=Key("PK").eq(f"WORKSPACE#{workspace_id}")
+        & Key("SK").begins_with("CHANNEL#")
+    ).get("Items", [])
+    # Workspaces created before channels shipped get General lazily, without
+    # losing any of their existing messages.
+    if not channels:
+        now = datetime.now(UTC).isoformat()
+        general = {
+            "PK": f"WORKSPACE#{workspace_id}",
+            "SK": "CHANNEL#general",
+            "id": "general",
+            "workspace_id": workspace_id,
+            "name": "General",
+            "created_at": now,
+        }
+        _table().put_item(Item=general)
+        channels = [general]
+    return sorted(
+        channels, key=lambda channel: (channel["id"] != "general", channel["name"].lower())
+    )
+
+
+def get_workspace_channel(workspace_id: str, channel_id: str) -> dict[str, Any] | None:
+    channel = _table().get_item(
+        Key={"PK": f"WORKSPACE#{workspace_id}", "SK": f"CHANNEL#{channel_id}"}
+    ).get("Item")
+    if channel is None and channel_id == "general":
+        # Backfill General for a pre-channel workspace before its first read or
+        # write, even when the client has not opened the channel menu yet.
+        list_workspace_channels(workspace_id)
+        channel = _table().get_item(
+            Key={"PK": f"WORKSPACE#{workspace_id}", "SK": "CHANNEL#general"}
+        ).get("Item")
+    return channel
+
+
+def create_workspace_channel(workspace_id: str, name: str) -> dict[str, Any]:
+    channel_id = str(uuid4())
+    channel = {
+        "PK": f"WORKSPACE#{workspace_id}",
+        "SK": f"CHANNEL#{channel_id}",
+        "id": channel_id,
+        "workspace_id": workspace_id,
+        "name": name,
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    _table().put_item(Item=channel)
+    return channel
+
+
+def delete_workspace_channel(workspace_id: str, channel_id: str) -> bool:
+    if channel_id == "general" or not get_workspace_channel(workspace_id, channel_id):
+        return False
+    _table().delete_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": f"CHANNEL#{channel_id}"})
+    return True
+
+
 def create_workspace_message(
     workspace_id: str,
     user: dict[str, str],
     text: str,
     attachment: str | None = None,
+    channel_id: str = "general",
 ) -> dict[str, Any]:
     """Store a message inside one shared workspace's partition.
 
@@ -414,6 +484,7 @@ def create_workspace_message(
     message = {
         "id": message_id,
         "workspace_id": workspace_id,
+        "channel_id": channel_id,
         "user": user.get("name") or user.get("email") or "Workspace member",
         "author_email": user.get("email", ""),
         "text": text,
@@ -432,7 +503,9 @@ def create_workspace_message(
     return message
 
 
-def list_workspace_messages(workspace_id: str, limit: int = 200) -> list[dict[str, Any]]:
+def list_workspace_messages(
+    workspace_id: str, channel_id: str = "general", limit: int = 200
+) -> list[dict[str, Any]]:
     response = _table().query(
         KeyConditionExpression=Key("PK").eq(f"WORKSPACE#{workspace_id}")
         & Key("SK").begins_with("MESSAGE#"),
@@ -441,7 +514,16 @@ def list_workspace_messages(workspace_id: str, limit: int = 200) -> list[dict[st
     )
     # The query reads newest first so a busy workspace stays bounded; the UI
     # receives chronological order.
-    return list(reversed(response.get("Items", [])))
+    return list(
+        reversed(
+            [
+                item
+                for item in response.get("Items", [])
+                # Messages written before channels belong to General.
+                if item.get("channel_id", "general") == channel_id
+            ]
+        )
+    )
 
 
 def consume_review_quota(user_id: str) -> bool:

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { AtSign, Bookmark, Check, Copy, FileText, Hash, Info, KeyRound, LockKeyhole, Paperclip, Plus, Reply, Search, Send, Smile, UsersRound, X } from 'lucide-react'
+import { AtSign, Bookmark, Check, ChevronDown, Copy, FileText, Hash, Info, KeyRound, LockKeyhole, Paperclip, Plus, Reply, Search, Send, Smile, Trash2, UsersRound, X } from 'lucide-react'
 import { useWorkspace } from '../store'
-import { documentDisplayName, documentKind, openFindings, type SampleDoc } from '../data'
+import { documentDisplayName, documentKind, openFindings, type SampleDoc, type WorkspaceChannel } from '../data'
+import { workspaceRequest } from '../api'
 import { Empty } from '../ui'
 
 const EMOJI = ['👍', '✅', '👀', '🙏', '⚠️', '🎉']
@@ -121,6 +122,9 @@ export function MessagesView() {
   const [railWidth, setRailWidth] = useState(240)
   const [detailsWidth, setDetailsWidth] = useState(300)
   const [newTask, setNewTask] = useState('')
+  const [channels, setChannels] = useState<WorkspaceChannel[]>([{ id: 'general', name: 'General', created_at: '' }])
+  const [channelsOpen, setChannelsOpen] = useState(false)
+  const [channelName, setChannelName] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -140,6 +144,21 @@ export function MessagesView() {
   }, [refreshWorkspaces])
   useEffect(() => { endRef.current?.scrollIntoView?.({ block: 'end' }) }, [ws.comments.length])
   useEffect(() => { if (ws.composerFocus) inputRef.current?.focus() }, [ws.composerFocus])
+  useEffect(() => {
+    const workspace = ws.activeWorkspace
+    if (!workspace || workspace.id.startsWith('local-')) {
+      return
+    }
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const next = await workspaceRequest<WorkspaceChannel[]>(`/workspaces/${workspace.id}/channels`)
+        if (!cancelled) setChannels(next)
+      } catch { /* The known General channel remains usable offline. */ }
+    }
+    void refresh()
+    return () => { cancelled = true }
+  }, [ws.activeWorkspace])
 
   const shown = ws.comments.filter((m) => filter === 'all' || (filter === 'mentions' ? m.text.includes('@') : m.saved))
   const results = query.trim()
@@ -152,6 +171,43 @@ export function MessagesView() {
   const linked = ws.linkedDocument ?? ws.selected
   const linkedTitle = ws.activeWorkspace?.linked_document_title || documentDisplayName(linked)
   const workspaceName = ws.activeWorkspace?.name ?? 'Personal workspace'
+  const displayedChannels = !ws.activeWorkspace || ws.activeWorkspace.id.startsWith('local-')
+    ? [{ id: 'general', name: 'General', created_at: '' }]
+    : channels
+  const activeChannel = displayedChannels.find((channel) => channel.id === ws.activeChannelId) ?? displayedChannels[0]
+  const canManageChannels = !ws.activeWorkspace || ws.activeWorkspace.role === 'owner' || ws.activeWorkspace.role === 'admin' || ws.activeWorkspace.role === 'local'
+  const addChannel = async (event: FormEvent) => {
+    event.preventDefault()
+    const name = channelName.trim()
+    if (!name) return
+    const workspace = ws.activeWorkspace
+    if (!workspace || workspace.id.startsWith('local-')) {
+      const channel = { id: `local-${Date.now()}`, name, created_at: '' }
+      setChannels((current) => [...current, channel])
+      ws.setActiveChannelId(channel.id)
+      setChannelName('')
+      return
+    }
+    try {
+      const channel = await workspaceRequest<WorkspaceChannel>(`/workspaces/${workspace.id}/channels`, { method: 'POST', body: JSON.stringify({ name }) })
+      setChannels((current) => [...current, channel])
+      ws.setActiveChannelId(channel.id)
+      setChannelName('')
+    } catch (error) { ws.setNotice(error instanceof Error ? error.message : 'Could not add channel.') }
+  }
+  const deleteChannel = async (channel: WorkspaceChannel) => {
+    if (channel.id === 'general' || !window.confirm(`Delete #${channel.name}?`)) return
+    const workspace = ws.activeWorkspace
+    try {
+      if (!workspace || workspace.id.startsWith('local-')) {
+        setChannels((current) => current.filter((item) => item.id !== channel.id))
+      } else {
+        await workspaceRequest<void>(`/workspaces/${workspace.id}/channels/${channel.id}`, { method: 'DELETE' })
+        setChannels((current) => current.filter((item) => item.id !== channel.id))
+      }
+      if (ws.activeChannelId === channel.id) ws.setActiveChannelId('general')
+    } catch (error) { ws.setNotice(error instanceof Error ? error.message : 'Could not delete channel.') }
+  }
 
   const beginResize = (pane: 'rail' | 'details', event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !gridRef.current) return
@@ -214,10 +270,8 @@ export function MessagesView() {
               })}
             </div>
           </>}
-          <span className="ws-rail-label">Channels</span>
-          <button type="button" className="ws-channel is-active"><Hash size={15} /><span>Review</span><em>{ws.comments.length}</em></button>
-          <button type="button" className="ws-channel" onClick={() => ws.setNotice('Questions is ready for your next discussion.')}><Hash size={15} /><span>Questions</span></button>
-          <button type="button" className="ws-channel" onClick={() => ws.setNotice('Your saved updates will appear here.')}><Hash size={15} /><span>Updates</span></button>
+          <div className="ws-channel-label"><span className="ws-rail-label">Channels</span><div className="ws-menu-anchor"><button type="button" className="ws-icon-btn" aria-label="Manage channels" aria-expanded={channelsOpen} onClick={() => setChannelsOpen((open) => !open)}><ChevronDown size={15} /></button>{channelsOpen && <div className="ws-popover ws-menu" role="menu"><form className="ws-channel-create" onSubmit={addChannel}><input value={channelName} onChange={(event) => setChannelName(event.target.value)} placeholder="New channel" aria-label="New channel name" maxLength={60} /><button type="submit" className="ws-btn ws-btn-sm" disabled={!channelName.trim() || !canManageChannels}><Plus size={13} /> Add</button></form>{channels.filter((channel) => channel.id !== 'general').map((channel) => <button key={channel.id} type="button" role="menuitem" disabled={!canManageChannels} onClick={() => void deleteChannel(channel)}><Trash2 size={13} /> Delete #{channel.name}</button>)}</div>}</div></div>
+          {displayedChannels.map((channel) => <button key={channel.id} type="button" className={`ws-channel ${channel.id === ws.activeChannelId ? 'is-active' : ''}`} onClick={() => ws.setActiveChannelId(channel.id)}><Hash size={15} /><span>{channel.name}</span>{channel.id === ws.activeChannelId && <em>{ws.comments.length}</em>}</button>)}
         </aside>
 
         <div
@@ -233,9 +287,9 @@ export function MessagesView() {
           onKeyDown={(event) => resizeWithKeyboard('rail', event)}
         />
 
-        <section className="ws-thread" aria-label="Review chat">
+        <section className="ws-thread" aria-label={`${activeChannel?.name ?? 'General'} chat`}>
           <header className="ws-thread-head">
-            <div><h2><Hash size={17} /> Review</h2><p>{workspaceName} · {ws.userEmail ? '3 people' : '2 people'} · about {documentDisplayName(linked)}</p></div>
+            <div><h2><Hash size={17} /> {activeChannel?.name ?? 'General'}</h2><p>{workspaceName} · {ws.userEmail ? '3 people' : '2 people'} · about {documentDisplayName(linked)}</p></div>
             <div className="ws-thread-tools">
               <button type="button" className="ws-icon-btn" aria-label="Search this conversation" onClick={() => setSearchOpen(true)}><Search size={16} /></button>
               <button type="button" className="ws-icon-btn" aria-label={detailsOpen ? 'Close details' : 'Open details'} title={detailsOpen ? 'Close details' : 'Open details'} aria-pressed={detailsOpen} onClick={() => setDetailsOpen((v) => !v)}><Info size={16} /></button>
