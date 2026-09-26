@@ -30,6 +30,13 @@ export type AnalyzeResult = {
   sources?: Array<{ title?: string; citation?: string; url?: string | null; support?: string }>
 }
 
+export type TargetedRewrite = {
+  finding_id: string
+  source_text: string
+  replacement_text: string
+  summary: string
+}
+
 type AnalyzeBody = {
   document_text: string
   action?: 'review' | 'negotiate' | 'rewrite'
@@ -66,6 +73,28 @@ export async function analyze(body: AnalyzeBody, options: { requireAuth?: boolea
   } finally {
     if (timer) window.clearTimeout(timer)
   }
+}
+
+/** Create a server-validated replacement for one consented finding. */
+export async function createTargetedRewrite(input: { documentText: string; findingId: string; evidence: string; jurisdiction?: string }): Promise<TargetedRewrite> {
+  let token = await cognitoGetIdToken()
+  if (!token) throw new Error('Sign in to apply an AI document change.')
+  const send = () => fetch(`${apiBase()}/api/v1/agent/targeted-rewrite`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ document_text: input.documentText, finding_id: input.findingId, evidence: input.evidence, jurisdiction: input.jurisdiction?.trim() || undefined }),
+  })
+  let response = await send()
+  if (response.status === 401) {
+    token = await cognitoGetIdToken(true)
+    if (!token) throw new Error('Your AWS session expired. Please sign in again.')
+    response = await send()
+  }
+  if (!response.ok) {
+    const detail = (await response.json().catch(() => null))?.detail
+    throw new Error(typeof detail === 'string' ? detail : 'The AI could not create this document change.')
+  }
+  return response.json() as Promise<TargetedRewrite>
 }
 
 export function mapFindings(findings: AnalyzeFinding[], category: string, prefix: string): Finding[] {

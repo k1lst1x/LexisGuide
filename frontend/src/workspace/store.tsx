@@ -6,7 +6,7 @@ import {
   documentSnapshot, extractDocumentText, fileTitle, normalizeSeverity, openFindings, sampleDocs,
   type Finding, type MessageMention, type MessageReaction, type NavItem, type SampleDoc, type SharedDocumentSnapshot, type WorkspaceMember, type WorkspaceMessage, type WorkspaceSummary, type WorkspaceTask,
 } from './data'
-import { reviewNewDocument, runDocumentAction, workspaceRequest, type SharedWorkspaceMessage } from './api'
+import { createTargetedRewrite, reviewNewDocument, runDocumentAction, workspaceRequest, type SharedWorkspaceMessage } from './api'
 import { recordChange, recordEdit, sha256Hex } from './ledger'
 import { findRewriteRange } from './rewrite'
 import { useSavedWorkspace } from './useSavedWorkspace'
@@ -348,11 +348,12 @@ function useWorkspaceState(userEmail?: string) {
       // A rewrite is intentionally sent as just the selected evidence, never
       // the whole document. Approval can then apply that exact draft directly
       // to the matching passage in the working copy.
-      const actionDocument = targetFinding ? { ...selected, text: targetFinding.evidence, findings: [targetFinding] } : selected
-      const updated = await runDocumentAction(actionDocument, action, jurisdiction)
+      const updated = targetFinding
+        ? null
+        : await runDocumentAction(selected, action, jurisdiction)
       if (targetFinding) {
-        const draft = updated.findings.find((finding) => finding.suggestedRewrite)?.suggestedRewrite
-        if (!draft) throw new Error('The AI did not return replacement wording for this finding. Your document is unchanged.')
+        const proposal = await createTargetedRewrite({ documentText: selected.text, findingId: targetFinding.id, evidence: targetFinding.evidence, jurisdiction })
+        const draft = proposal.replacement_text
         const findings = selected.findings.map((finding) => finding.id === targetFinding.id ? { ...finding, suggestedRewrite: draft } : finding)
         if (applyApprovedRewrite) {
           const range = findRewriteRange(selected.text, targetFinding.evidence)
@@ -368,6 +369,7 @@ function useWorkspaceState(userEmail?: string) {
         setActiveFindingId(targetFinding.id)
         setNotice('A targeted draft is ready. Review it, then choose Apply to working copy when you are ready.')
       } else {
+        if (!updated) throw new Error('The AI could not complete this action.')
         updateDocument(updated)
         void recordChange({ documentId: updated.id, kind: 'reviewed', text: updated.text, title: updated.title })
         setActiveFindingId(updated.findings[0]?.id ?? null)

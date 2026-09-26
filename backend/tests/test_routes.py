@@ -114,6 +114,63 @@ def test_analyze_rejects_requests_without_a_bearer_token(client: TestClient) -> 
     assert response.json() == {"detail": "Missing bearer token."}
 
 
+def test_targeted_rewrite_validates_evidence_before_calling_the_model(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class UnexpectedAgent:
+        def review(self, *_: object, **__: object) -> dict[str, object]:
+            raise AssertionError("The model must not be called for stale evidence.")
+
+    monkeypatch.setattr(routes, "configured_agent", lambda: UnexpectedAgent())
+    response = authenticated_client.post(
+        "/api/v1/agent/targeted-rewrite",
+        json={
+            "document_text": "Current clause.",
+            "finding_id": "finding-1",
+            "evidence": "Old clause.",
+        },
+    )
+
+    assert response.status_code == 409
+
+
+def test_targeted_rewrite_returns_a_structured_replacement(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    replacement = "Either party may terminate with 30 days' written notice."
+
+    class Agent:
+        def review(self, *_: object, **__: object) -> dict[str, object]:
+            return {
+                "findings": [
+                    {
+                        "title": "Clear notice",
+                        "explanation": "Draft",
+                        "severity": "medium",
+                        "suggested_rewrite": replacement,
+                    }
+                ],
+                "disclaimer": "LexisGuide provides general information, not legal advice.",
+                "summary": "Added a written notice period.",
+            }
+
+    monkeypatch.setattr(routes, "configured_agent", lambda: Agent())
+    monkeypatch.setattr(routes, "consume_review_quota", lambda _: True)
+    monkeypatch.setattr(routes, "acquire_remote_operation", lambda _: object())
+    monkeypatch.setattr(routes, "release_remote_operation", lambda _: None)
+    response = authenticated_client.post(
+        "/api/v1/agent/targeted-rewrite",
+        json={
+            "document_text": "Either party may terminate.",
+            "finding_id": "finding-1",
+            "evidence": "Either party may terminate.",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["replacement_text"] == replacement
+
+
 def test_local_frontend_origin_receives_cors_headers(client: TestClient) -> None:
     response = client.options(
         "/api/v1/analyze",

@@ -94,6 +94,26 @@ class AnalyzeRequest(BaseModel):
 AnalyzeResponse = ReviewResult
 
 
+class TargetedRewriteRequest(BaseModel):
+    """A consented edit for one exact passage in a working copy.
+
+    The API receives the complete current text solely to verify that the
+    requested evidence still exists. Only the evidence is sent to the model.
+    """
+
+    document_text: str = Field(min_length=1, max_length=250_000)
+    finding_id: str = Field(min_length=1, max_length=200)
+    evidence: str = Field(min_length=1, max_length=10_000)
+    jurisdiction: str | None = Field(default=None, max_length=200)
+
+
+class TargetedRewriteResponse(BaseModel):
+    finding_id: str
+    source_text: str
+    replacement_text: str
+    summary: str = ""
+
+
 class ProfileUpdate(BaseModel):
     display_name: str = Field(min_length=1, max_length=120)
 
@@ -421,6 +441,68 @@ async def analyze_document(
     finally:
         release_remote_operation(lease)
     return AnalyzeResponse(**result)
+
+
+@router.post("/agent/targeted-rewrite", response_model=TargetedRewriteResponse)
+async def create_targeted_rewrite(
+    payload: TargetedRewriteRequest, user: dict[str, str] = Depends(current_user)
+) -> TargetedRewriteResponse:
+    """Draft one validated replacement after the user has approved an edit.
+
+    This endpoint never writes a document by itself. It validates that the
+    selected evidence belongs to the supplied current working copy, and the
+    browser then applies exactly this returned replacement as one versioned
+    edit. That keeps model scope, user approval, and the final write separate.
+    """
+    if payload.evidence not in payload.document_text:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The selected text changed before approval. Re-open the finding and try again.",
+        )
+    agent = configured_agent()
+    if agent is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The AI service is not configured.",
+        )
+    if not consume_review_quota(user["sub"]):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Review limit reached. Please try again shortly.",
+            headers={"Retry-After": "60"},
+        )
+    lease = acquire_remote_operation(user["sub"])
+    if lease is None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="The AI service is busy. Please try again shortly.",
+            headers={"Retry-After": "60"},
+        )
+    try:
+        result = agent.review(
+            payload.evidence,
+            action="rewrite",
+            jurisdiction=payload.jurisdiction,
+            goals="Draft replacement wording for this exact selected passage only.",
+        )
+    finally:
+        release_remote_operation(lease)
+    review = ReviewResult(**result)
+    replacement = next(
+        (finding.suggested_rewrite for finding in review.findings if finding.suggested_rewrite),
+        None,
+    )
+    if not replacement:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The AI did not return replacement wording for the selected passage.",
+        )
+    return TargetedRewriteResponse(
+        finding_id=payload.finding_id,
+        source_text=payload.evidence,
+        replacement_text=replacement,
+        summary=review.summary or "Updated the selected passage in the working copy.",
+    )
 
 
 @router.post("/chat", response_model=ChatReply, response_model_exclude_defaults=True)
