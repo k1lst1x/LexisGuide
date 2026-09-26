@@ -56,13 +56,19 @@ describe('ledger client', () => {
     expect(sent).toEqual([])
   })
 
-  it('sends a fingerprint, never the text', async () => {
+  it('sends the fingerprint for the chain and the version for private history', async () => {
     const { recordChange, sha256Hex } = await load()
     await recordChange({ documentId: 'upload-lease', kind: 'created', text: 'Confidential terms', title: 'Lease' })
 
     const [body] = posts()
-    expect(body).toMatchObject({ document_id: 'upload-lease', kind: 'created', content_hash: await sha256Hex('Confidential terms') })
-    expect(JSON.stringify(body)).not.toContain('Confidential terms')
+    // The API writes only content_hash to the chain; the text is kept in the
+    // person's own storage so the History tab can restore this version.
+    expect(body).toMatchObject({
+      document_id: 'upload-lease',
+      kind: 'created',
+      content_hash: await sha256Hex('Confidential terms'),
+      text: 'Confidential terms',
+    })
   })
 
   it('records a burst of typing as one edit once it pauses', async () => {

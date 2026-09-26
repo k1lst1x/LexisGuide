@@ -139,7 +139,7 @@ def test_parse_reply_unwraps_runtime_envelope():
 
 def test_supervisor_routes_document_research_and_drafting_without_applying_changes():
     client = ScriptedBedrock(text_response("Here is a draft; nothing was changed."))
-    reply = SupervisorAgent(ConversationAgent(client, "model")).chat(
+    reply = SupervisorAgent(ConversationAgent(client, "model"), team=False).chat(
         request(
             ("user", "Draft clearer wording for section 768.28."),
             document_excerpt="Either party may terminate.",
@@ -155,7 +155,7 @@ def test_supervisor_routes_document_research_and_drafting_without_applying_chang
 
 def test_targeted_document_revision_is_allowed_but_limited_to_the_finding():
     client = ScriptedBedrock(text_response("Here is focused replacement wording."))
-    SupervisorAgent(ConversationAgent(client, "model")).chat(
+    SupervisorAgent(ConversationAgent(client, "model"), team=False).chat(
         request(
             ("user", "Fix this highlighted clause."),
             document_excerpt="Either party may terminate.",
@@ -222,7 +222,7 @@ def test_an_attached_file_arrives_inside_the_persons_message() -> None:
         },
     )
 
-    SupervisorAgent(ConversationAgent(client=bedrock)).chat(request)
+    SupervisorAgent(ConversationAgent(client=bedrock), team=False).chat(request)
 
     sent = bedrock.calls[0]
     latest = sent["messages"][-1]
@@ -251,7 +251,7 @@ def test_the_review_specialist_reviews_the_attached_file() -> None:
         },
     )
 
-    reply = SupervisorAgent(ConversationAgent(client=bedrock)).chat(request)
+    reply = SupervisorAgent(ConversationAgent(client=bedrock), team=False).chat(request)
 
     assert "review" in reply.agents_used
     notes = bedrock.calls[0]["system"][-1]["text"]

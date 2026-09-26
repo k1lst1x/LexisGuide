@@ -456,3 +456,56 @@ def test_outsiders_cannot_react_or_read_shared_files(api: TestClient, workspace:
         == 403
     )
     assert api.get(f"/api/v1/workspaces/{workspace}/files").status_code == 403
+
+
+# ── The assistant's inbox agent reads only what the person can read ────────
+
+
+def test_the_assistant_sees_the_persons_messages_but_not_other_channels(
+    api: TestClient, workspace: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from lexisguide_assistant import ChatReply
+
+    from app.api.v1 import routes
+
+    seen: list = []
+
+    class Assistant:
+        def chat(self, request, session_id):
+            seen.append(request)
+            return ChatReply(reply="Here is your summary.")
+
+    monkeypatch.setattr(routes, "configured_assistant", lambda: Assistant())
+    as_user(ADA)
+    api.post(
+        f"/api/v1/workspaces/{workspace}/messages",
+        json={
+            "text": "@Bob can you confirm the October 14 deadline?",
+            "channel_id": "general",
+            "mentions": [{"type": "user", "id": BOB["sub"], "label": "Bob"}],
+        },
+    )
+    secret = create(api, workspace, "partners-only")
+    api.post(
+        f"/api/v1/workspaces/{workspace}/messages",
+        json={"text": "Private planning", "channel_id": secret["id"]},
+    )
+
+    as_user(BOB)
+    chat = {"conversation_id": "conv-0001", "context": {"page": "Home"}}
+    api.post(
+        "/api/v1/chat",
+        json={**chat, "messages": [{"role": "user", "content": "Summarize my messages"}]},
+    )
+    api.post(
+        "/api/v1/chat",
+        json={**chat, "messages": [{"role": "user", "content": "What is a lien?"}]},
+    )
+
+    inbox = seen[0].context.inbox
+    assert [(item.channel, item.author, item.mentions_me) for item in inbox] == [
+        ("General", "Ada", True)
+    ]
+    assert inbox[0].workspace == "Lease review"
+    # A question that is not about messages does not read them.
+    assert seen[1].context.inbox == []

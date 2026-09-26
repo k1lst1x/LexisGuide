@@ -6,6 +6,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .knowledge import SITE_GUIDE, SUPPORT, US_LAW, best_law_topics
+
 HELP_TOPICS: dict[str, str] = {
     "getting_started": (
         "LexisGuide reads a legal or government document, highlights unclear or risky "
@@ -203,6 +205,89 @@ TOOL_SPECS: list[dict[str, Any]] = [
 ]
 
 
+TOOL_SPECS.extend(
+    [
+        {
+            "toolSpec": {
+                "name": "site_guide",
+                "description": "How any part of the LexisGuide website works: pages, "
+                "features, and where to find things.",
+                "inputSchema": {
+                    "json": {
+                        "type": "object",
+                        "properties": {"topic": {"type": "string", "enum": sorted(SITE_GUIDE)}},
+                        "required": ["topic"],
+                    }
+                },
+            }
+        },
+        {
+            "toolSpec": {
+                "name": "support_help",
+                "description": "Troubleshooting steps for a problem someone has with "
+                "LexisGuide, and how to contact support.",
+                "inputSchema": {
+                    "json": {
+                        "type": "object",
+                        "properties": {"issue": {"type": "string", "enum": sorted(SUPPORT)}},
+                        "required": ["issue"],
+                    }
+                },
+            }
+        },
+        {
+            "toolSpec": {
+                "name": "us_law",
+                "description": "A careful plain-language primer on an area of US law. Pass a "
+                "topic, or the person's question to pick the closest topics.",
+                "inputSchema": {
+                    "json": {
+                        "type": "object",
+                        "properties": {
+                            "topic": {
+                                "type": "string",
+                                "description": "One of: "
+                                + ", ".join(sorted(US_LAW))
+                                + "; or the question itself.",
+                            }
+                        },
+                        "required": ["topic"],
+                    }
+                },
+            }
+        },
+    ]
+)
+
+
+def site_guide(topic: str) -> dict[str, Any]:
+    key = topic.strip().lower().replace(" ", "_")
+    if key in SITE_GUIDE:
+        return {"topic": key, "guidance": SITE_GUIDE[key]}
+    return {"topic": key, "guidance": SITE_GUIDE["overview"], "topics": sorted(SITE_GUIDE)}
+
+
+def support_help(issue: str) -> dict[str, Any]:
+    key = issue.strip().lower().replace(" ", "_")
+    steps = SUPPORT.get(key)
+    return {
+        "issue": key,
+        "steps": steps or "No specific steps for that issue.",
+        "contact": SUPPORT["contact"],
+    }
+
+
+def us_law(topic: str) -> dict[str, Any]:
+    key = topic.strip().lower().replace(" ", "_")
+    topics = [key] if key in US_LAW else best_law_topics(topic) or ["legal_system"]
+    return {
+        "topics": {name: US_LAW[name] for name in topics},
+        "caution": "General information about US law, not legal advice. Rules differ by "
+        "state and change; verify with the official source or a legal aid office.",
+        "help": US_LAW["legal_help"],
+    }
+
+
 def lexisguide_help(topic: str) -> dict[str, Any]:
     key = topic.strip().lower().replace(" ", "_")
     if key in HELP_TOPICS:
@@ -242,7 +327,15 @@ TOOLS = {
     "lexisguide_help": lexisguide_help,
     "check_clause": check_clause,
     "explain_term": explain_term,
+    "site_guide": site_guide,
+    "support_help": support_help,
+    "us_law": us_law,
 }
+
+
+def tool_specs(*names: str) -> list[dict[str, Any]]:
+    """The specs for a subset of tools, for a specialist that needs only those."""
+    return [spec for spec in TOOL_SPECS if spec["toolSpec"]["name"] in names]
 
 
 def run_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:

@@ -1275,12 +1275,19 @@ def _ledger_view(item: dict[str, Any]) -> dict[str, Any]:
             int(value) if key in {"block_number", "block_time", "sequence", "attempts"} else value
         )
         for key, value in item.items()
-        if key not in {"PK", "SK"}
-    } | {"sort_key": item["SK"]}
+        if key not in {"PK", "SK", "snapshot"}
+    } | {"sort_key": item["SK"], "has_version": "snapshot" in item}
 
 
 def create_ledger_change(user_id: str, document_key: str, change: dict[str, Any]) -> dict[str, Any]:
-    """Store a new pending change. Resubmitting the same change id is a no-op."""
+    """Store a new pending change. Resubmitting the same change id is a no-op.
+
+    When the change carries the document's text, that version is kept with it,
+    compressed, so the history can bring it back. Only its fingerprint goes on
+    chain; the text stays in the owner's partition.
+    """
+    change = dict(change)
+    text = change.pop("text", None)
     now = datetime.now(UTC).isoformat()
     item = {
         "PK": f"USER#{user_id}",
@@ -1292,11 +1299,39 @@ def create_ledger_change(user_id: str, document_key: str, change: dict[str, Any]
         "attempts": 0,
         "tx_hashes": [],
     }
+    if text is not None:
+        item["snapshot"] = _pack_version(text)
     existing = find_ledger_change(user_id, document_key, change["change_id"])
     if existing:
         return existing
     _table().put_item(Item=item)
     return _ledger_view(item)
+
+
+def _pack_version(text: str) -> bytes:
+    body = gzip.compress(text.encode("utf-8"))
+    if len(body) > MAX_DOCUMENT_BYTES:
+        raise DocumentTooLargeError("This version is too large to keep.")
+    return body
+
+
+def get_ledger_version(
+    user_id: str, document_key: str, change_id: str
+) -> tuple[dict[str, Any], str] | None:
+    """One change and the text of the document at that change, if it was kept."""
+    response = _table().query(
+        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
+        & Key("SK").begins_with(_ledger_prefix(document_key))
+    )
+    for item in response.get("Items", []):
+        if item.get("change_id") != change_id:
+            continue
+        packed = item.get("snapshot")
+        if packed is None:
+            return None
+        raw = getattr(packed, "value", packed)  # boto3 returns a Binary wrapper.
+        return _ledger_view(item), gzip.decompress(bytes(raw)).decode("utf-8")
+    return None
 
 
 def find_ledger_change(user_id: str, document_key: str, change_id: str) -> dict[str, Any] | None:

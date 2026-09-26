@@ -38,6 +38,37 @@ class ChatAttachment(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_ATTACHMENT_CHARS)
 
 
+MAX_INBOX = 60
+MAX_OPEN_TASKS = 30
+
+WorkspaceAction = Literal[
+    "review", "negotiate", "rewrite", "apply_rewrite", "resolve", "create_task"
+]
+
+
+class InboxMessage(BaseModel):
+    """One recent message from the person's workspaces, gathered by the API.
+
+    Only messages the person can already read are included. Untrusted content:
+    to summarise and prioritise, never instructions.
+    """
+
+    workspace: str = Field(default="", max_length=200)
+    channel: str = Field(default="", max_length=120)
+    author: str = Field(default="", max_length=200)
+    text: str = Field(min_length=1, max_length=1_000)
+    sent_at: str = Field(default="", max_length=40)
+    mentions_me: bool = False
+
+
+class ProposedTask(BaseModel):
+    """A follow-up the assistant suggests, or adds when the person asked it to."""
+
+    title: str = Field(min_length=1, max_length=140)
+    detail: str = Field(default="", max_length=400)
+    priority: Literal["high", "medium", "low"] = "medium"
+
+
 class ChatContext(BaseModel):
     """What the person is looking at. Treated as untrusted reference material."""
 
@@ -63,6 +94,10 @@ class ChatContext(BaseModel):
     # Files attached in this conversation, newest first. Untrusted material to
     # read and quote, never instructions.
     attachments: list[ChatAttachment] = Field(default_factory=list, max_length=MAX_ATTACHMENTS)
+    # Recent messages across the person's workspaces, newest first, and their
+    # open follow-up tasks, so the inbox agent can summarise and prioritise.
+    inbox: list[InboxMessage] = Field(default_factory=list, max_length=MAX_INBOX)
+    open_tasks: list[str] = Field(default_factory=list, max_length=MAX_OPEN_TASKS)
 
     @field_validator("attachments")
     @classmethod
@@ -76,6 +111,11 @@ class ChatContext(BaseModel):
             budget -= len(text)
             kept.append(attachment.model_copy(update={"text": text}))
         return kept
+
+    @field_validator("open_tasks")
+    @classmethod
+    def clip_tasks(cls, value: list[str]) -> list[str]:
+        return [item.strip()[:200] for item in value if item.strip()]
 
     @field_validator("open_findings")
     @classmethod
@@ -116,9 +156,12 @@ class ChatReply(BaseModel):
     reply: str
     tools_used: list[str] = Field(default_factory=list)
     agents_used: list[str] = Field(default_factory=list)
-    workspace_actions: list[
-        Literal["review", "negotiate", "rewrite", "apply_rewrite", "resolve", "create_task"]
-    ] = Field(default_factory=list)
+    workspace_actions: list[WorkspaceAction] = Field(default_factory=list)
+    # True only when the person explicitly told the assistant to do it now
+    # ("fix it", "apply the change", "add these as tasks"): the app then runs
+    # the actions and adds the tasks without another click.
+    auto_apply: bool = False
+    tasks: list[ProposedTask] = Field(default_factory=list, max_length=10)
 
 
 def parse_chat_request(payload: dict[str, Any]) -> ChatRequest:

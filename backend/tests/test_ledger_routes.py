@@ -208,3 +208,112 @@ def test_without_a_contract_the_ledger_reports_itself_off(
         },
     )
     assert response.status_code == 503
+
+
+# ── Versions: the text at each change, proved against its block ─────────────
+
+
+def record_version(api: TestClient, change_id: str, text: str, kind: str = "edited"):
+    response = api.post(
+        "/api/v1/ledger/changes",
+        json={
+            "change_id": change_id,
+            "document_id": "lease",
+            "kind": kind,
+            "content_hash": fingerprint(text),
+            "title": "Lease.pdf",
+            "text": text,
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def version(api: TestClient, change_id: str, **params: str):
+    return api.get(
+        f"/api/v1/ledger/changes/{change_id}/version", params={"document_id": "lease", **params}
+    )
+
+
+def test_an_earlier_version_comes_back_verified_by_its_block(api: TestClient) -> None:
+    record_version(api, "change-0001", "Rent is due on the 1st.", "created")
+    record_version(api, "change-0002", "Rent is due on the 5th.")
+
+    [first, second] = api.get("/api/v1/ledger/changes", params={"document_id": "lease"}).json()
+    assert first["has_version"] and second["has_version"]
+
+    body = version(api, "change-0001").json()
+    assert body["text"] == "Rent is due on the 1st."
+    assert body["matches_fingerprint"] is True
+    assert body["on_chain"] == "verified"
+    assert body["block_number"] == first["block_number"]
+
+
+def test_text_that_does_not_match_its_fingerprint_is_refused(api: TestClient) -> None:
+    response = api.post(
+        "/api/v1/ledger/changes",
+        json={
+            "change_id": "change-0001",
+            "document_id": "lease",
+            "kind": "edited",
+            "content_hash": fingerprint("What the chain will say"),
+            "text": "Something else",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_a_tampered_version_is_reported_as_a_mismatch(api: TestClient) -> None:
+    record_version(api, "change-0001", "Rent is due on the 1st.", "created")
+    table = storage._table()
+    [item] = [row for row in table.items.values() if row.get("change_id") == "change-0001"]
+    item["snapshot"] = storage._pack_version("Rent is due on the 30th.")
+
+    body = version(api, "change-0001").json()
+    assert body["matches_fingerprint"] is False
+    assert body["on_chain"] == "mismatch"
+
+
+def test_a_change_without_text_has_no_version(api: TestClient) -> None:
+    record(api, "change-0001", "Draft", "created")
+    assert version(api, "change-0001").status_code == 404
+
+
+def test_another_persons_versions_are_out_of_reach(api: TestClient) -> None:
+    record_version(api, "change-0001", "Private draft", "created")
+    app.dependency_overrides[current_user] = lambda: {"sub": "bob", "email": "bob@example.com"}
+    assert version(api, "change-0001").status_code == 404
+
+
+def test_a_shared_document_has_one_history_for_its_workspace(
+    api: TestClient, chain_ledger, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app import ledger_service
+
+    monkeypatch.setattr(ledger_service, "configured_ledger", lambda: chain_ledger)
+    monkeypatch.setattr(ledger_service, "consume_ledger_quota", lambda user_id: True)
+    members = {"ada", "bob"}
+    monkeypatch.setattr(
+        ledger_routes,
+        "get_workspace_membership",
+        lambda workspace_id, user_id: {"role": "member"} if user_id in members else None,
+    )
+    ada = {"sub": "ada", "email": "ada@example.com", "name": "Ada"}
+    bob = {"sub": "bob", "email": "bob@example.com", "name": "Bob"}
+    ledger_service.record_shared_version("ws-1", ada, "lease", "Version one", "Lease.pdf")
+    ledger_service.record_shared_version("ws-1", bob, "lease", "Version two", "Lease.pdf")
+    # Sharing the same text again adds nothing.
+    ledger_service.record_shared_version("ws-1", bob, "lease", "Version two", "Lease.pdf")
+
+    app.dependency_overrides[current_user] = lambda: bob
+    params = {"document_id": "lease", "workspace_id": "ws-1"}
+    history = api.get("/api/v1/ledger/changes", params=params).json()
+    assert [(row["kind"], row["changed_by"], row["status"]) for row in history] == [
+        ("created", "Ada", "confirmed"),
+        ("edited", "Bob", "confirmed"),
+    ]
+    first = version(api, history[0]["change_id"], workspace_id="ws-1").json()
+    assert (first["text"], first["on_chain"]) == ("Version one", "verified")
+
+    app.dependency_overrides[current_user] = lambda: {"sub": "eve", "email": "eve@example.com"}
+    assert api.get("/api/v1/ledger/changes", params=params).status_code == 403

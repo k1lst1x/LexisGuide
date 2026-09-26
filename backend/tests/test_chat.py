@@ -147,3 +147,12 @@ def test_session_ids_differ_per_user_and_meet_agentcore_length() -> None:
     first = runtime_session_id("user-a", "conv-12345678")
     assert first != runtime_session_id("user-b", "conv-12345678")
     assert len(first) >= 33
+
+
+def test_the_runtime_is_called_in_the_region_its_arn_names(monkeypatch) -> None:
+    from app.chat_agent import runtime_region
+
+    monkeypatch.setenv("AWS_REGION", "us-west-2")
+    arn = "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/LexisGuideAssistant-abc"
+    assert runtime_region(arn) == "us-east-1"
+    assert runtime_region("") == "us-west-2"

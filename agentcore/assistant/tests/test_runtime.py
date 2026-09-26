@@ -17,9 +17,10 @@ class AssistantRuntimeTests(unittest.TestCase):
         # The supervisor routes to specialists; Bedrock sits on its conversation agent.
         with patch.object(main.agent.agent, "_client", FakeBedrock()):
             result = main.invoke({"messages": [{"role": "user", "content": "What is a lien?"}]})
-        self.assertEqual(
-            result, {"reply": "A lien is a claim.", "tools_used": [], "agents_used": [], "workspace_actions": []}
-        )
+        self.assertEqual(result["reply"], "A lien is a claim.")
+        self.assertEqual(result["workspace_actions"], [])
+        self.assertEqual(result["tasks"], [])
+        self.assertFalse(result["auto_apply"])
 
     def test_rejects_an_invalid_request(self) -> None:
         result = main.invoke({"messages": []})

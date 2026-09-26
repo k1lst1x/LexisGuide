@@ -319,14 +319,14 @@ wheels = [
 
 [[package]]
 name = "lexisguide-assistant"
-version = "0.1.0"
-source = { path = "vendor/lexisguide_assistant-0.1.0-py3-none-any.whl" }
+version = "0.2.0"
+source = { path = "vendor/lexisguide_assistant-0.2.0-py3-none-any.whl" }
 dependencies = [
     { name = "boto3" },
     { name = "pydantic" },
 ]
 wheels = [
-    { filename = "lexisguide_assistant-0.1.0-py3-none-any.whl", hash = "sha256:f770057ce7a8f5e4e1dfd1161b1bca39bc44124bb40c012096c1b9e4423855f7" },
+    { filename = "lexisguide_assistant-0.2.0-py3-none-any.whl", hash = "sha256:959f7783175b107befd8b94d1f14a32a2275fd00a004c92f06d917f7b5a61f77" },
 ]
 
 [package.metadata]
@@ -351,7 +351,7 @@ requires-dist = [
     { name = "aws-opentelemetry-distro", specifier = "~=0.18.0" },
     { name = "bedrock-agentcore", specifier = ">=1.0,<2.0" },
     { name = "boto3", specifier = ">=1.42,<2.0" },
-    { name = "lexisguide-assistant", path = "vendor/lexisguide_assistant-0.1.0-py3-none-any.whl" },
+    { name = "lexisguide-assistant", path = "vendor/lexisguide_assistant-0.2.0-py3-none-any.whl" },
 ]
 
 [[package]]

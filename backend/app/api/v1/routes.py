@@ -10,6 +10,7 @@ from lexisguide_assistant.models import MAX_TURN_CHARS
 from pydantic import BaseModel, Field, field_validator
 from review_contract import ReviewResult
 
+from app.assistant_inbox import add_inbox
 from app.assistant_research import add_official_source
 from app.auth import current_user
 from app.chat_agent import AssistantUnavailableError, configured_assistant, runtime_session_id
@@ -18,6 +19,7 @@ from app.lawfirm import (
     LawFirmUnavailableError,
     configured_lawfirm_client,
 )
+from app.ledger_service import record_shared_version
 from app.legal_agent import configured_agent
 from app.storage import (
     DocumentTooLargeError,
@@ -510,6 +512,7 @@ async def chat(payload: ChatPayload, user: dict[str, str] = Depends(current_user
     if workspace_id and not get_workspace_membership(workspace_id, user["sub"]):
         raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
     request = add_official_source(request)
+    request = add_inbox(request, user)
     try:
         return assistant.chat(
             request, runtime_session_id(user["sub"], payload.conversation_id, workspace_id)
@@ -970,6 +973,7 @@ async def post_workspace_message(
             share_workspace_file(
                 workspace_id, _document_key(document.id), document.model_dump(), user
             )
+            record_shared_version(workspace_id, user, document.id, document.text, document.title)
         except DocumentTooLargeError as error:
             raise HTTPException(
                 status_code=status.HTTP_413_CONTENT_TOO_LARGE,
@@ -1076,6 +1080,7 @@ async def update_workspace_file(
         raise HTTPException(status_code=422, detail="The key does not match the document.")
     try:
         meta = share_workspace_file(workspace_id, document_key, payload.model_dump(), user)
+        record_shared_version(workspace_id, user, payload.id, payload.text, payload.title)
     except DocumentTooLargeError as error:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="This document is too large."

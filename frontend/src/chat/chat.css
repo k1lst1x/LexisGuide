@@ -349,6 +349,17 @@
 }
 .ac-workspace-action, .cw-workspace-action { display: inline-flex; margin-top: 10px; padding: 7px 10px; border: 1px solid rgba(0,103,79,.28); border-radius: 9px; background: var(--cw-green-soft); color: var(--cw-green) !important; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .ac-workspace-action:hover, .cw-workspace-action:hover { border-color: var(--cw-green); background: #e0f0e8; }
+.ac-workspace-action, .cw-workspace-action { align-items: center; gap: 5px; margin-right: 6px; }
+.ac-workspace-action:disabled, .cw-workspace-action:disabled { cursor: default; opacity: .75; }
+/* What the assistant already did because the person asked. */
+.ac-done, .cw-done { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; padding: 6px 10px; border-radius: 9px; background: var(--cw-green-soft); color: var(--cw-green); font-size: 12.5px; font-weight: 600; }
+/* Tasks the assistant suggests from the person's messages. */
+.ac-tasks, .cw-tasks { margin-top: 10px; }
+.ac-tasks ul, .cw-tasks ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.ac-tasks li, .cw-tasks li { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.ac-tasks em, .cw-tasks em { flex: none; padding: 1px 7px; border-radius: 999px; background: rgba(27, 28, 20, .06); font-size: 10.5px; font-style: normal; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.ac-tasks em.is-high, .cw-tasks em.is-high { background: #fbe3dc; color: #b4412f; }
+.ac-tasks em.is-medium, .cw-tasks em.is-medium { background: #fdf0c7; color: #8a6210; }
 .ac-msg-user .ac-bubble {
   border-radius: 18px 18px 6px 18px;
   background: var(--cw-ink);

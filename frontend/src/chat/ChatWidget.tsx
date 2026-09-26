@@ -9,7 +9,9 @@ import { AttachButton, DropOverlay, MessageFiles, SentText, StagedFiles, type At
 import { CopyAnswer, RegenerateAnswer } from './MessageActions'
 import { PromptComposer } from './PromptComposer'
 import { RichText } from './RichText'
-import { MAX_MESSAGE_CHARS, useAssistantChat, type ChatContext, type WorkspaceAction } from './useAssistantChat'
+import { MAX_MESSAGE_CHARS, useAssistantChat, type ChatContext, type ProposedTask, type WorkspaceAction } from './useAssistantChat'
+import { useAutoActions } from './useAutoActions'
+import { TurnActions } from './TurnActions'
 import { useFileDrop } from './useFileDrop'
 
 export type { ChatContext }
@@ -38,10 +40,12 @@ type Props = {
   activeDocumentId?: string
   onDocumentContextChange?: (documentId: string) => void
   onWorkspaceAction?: (action: WorkspaceAction) => void
+  /** Add tasks the assistant suggested, or added because the person asked. */
+  onTasks?: (tasks: ProposedTask[]) => void
 }
 
 
-export function ChatWidget({ storageKey, context, suggestions = [], fallback = defaultGuide, greeting, open: controlledOpen, onOpenChange, pendingQuestion, onSignIn, className = '', footer, embedded = false, expandingComposer = false, documents = [], activeDocumentId, onDocumentContextChange, onWorkspaceAction }: Props) {
+export function ChatWidget({ storageKey, context, suggestions = [], fallback = defaultGuide, greeting, open: controlledOpen, onOpenChange, pendingQuestion, onSignIn, className = '', footer, embedded = false, expandingComposer = false, documents = [], activeDocumentId, onDocumentContextChange, onWorkspaceAction, onTasks }: Props) {
   const chat = useAssistantChat({ storageKey, context, greeting, fallback })
   const { turns, input, setInput, busy, mode, notice, ask, reset, status } = chat
   const [localOpen, setLocalOpen] = useState(false)
@@ -52,6 +56,8 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
   const lastPending = useRef<number | null>(null)
   const { dragging, dropProps } = useFileDrop((files) => void chat.attachFiles(files))
   const started = turns.some((turn) => turn.id !== 'welcome')
+  // What the person told the assistant to do runs once; the rest is offered.
+  useAutoActions(turns, onWorkspaceAction, onTasks)
   const canSend = Boolean(input.trim() || chat.staged.length)
   const lastAnswer = [...turns].reverse().find((turn) => turn.role === 'assistant' && turn.id !== 'welcome')
 
@@ -108,16 +114,7 @@ export function ChatWidget({ storageKey, context, suggestions = [], fallback = d
               <article key={turn.id} className={`cw-msg cw-msg-${turn.role}`}>
                 {turn.role === 'assistant' ? <RichText text={turn.content} /> : <SentText text={turn.content} />}
                 <MessageFiles files={turn.attachments} />
-                {turn.role === 'assistant' && turn.workspaceActions?.map((action) => (
-                  <button key={action} type="button" className="cw-workspace-action" onClick={() => onWorkspaceAction?.(action)}>
-                    {action === 'review' ? 'Re-check this document'
-                      : action === 'negotiate' ? 'Suggest negotiation points'
-                        : action === 'rewrite' ? 'Draft a revision for this issue'
-                          : action === 'apply_rewrite' ? 'Apply the current draft'
-                            : action === 'resolve' ? 'Mark current issue resolved'
-                              : 'Create follow-up task'}
-                  </button>
-                ))}
+                <TurnActions turn={turn} prefix="cw" onWorkspaceAction={onWorkspaceAction} onTasks={onTasks} />
                 {turn.role === 'assistant' && turn.id !== 'welcome' && (
                   <div className="cw-msg-actions">
                     <CopyAnswer text={turn.content} className="cw-msg-action" />

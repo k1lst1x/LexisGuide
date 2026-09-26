@@ -2,10 +2,11 @@
    as every member sees it. Kept up to date while open, editable in place,
    and one click from a full review. */
 import { useCallback, useEffect, useState } from 'react'
-import { ExternalLink, FileText, PencilLine, RefreshCw, Share2, X } from 'lucide-react'
+import { ExternalLink, FileText, History, PencilLine, RefreshCw, Share2, X } from 'lucide-react'
 import { useWorkspace } from '../store'
 import { workspaceRequest } from '../api'
-import { sha256Hex } from '../ledger'
+import { isRecordable, sha256Hex } from '../ledger'
+import { DocumentHistory } from './DocumentHistory'
 import { SEVERITY, documentSnapshot, normalizeSeverity, type SharedDocumentSnapshot } from '../data'
 
 type SharedFile = {
@@ -32,7 +33,7 @@ export function DocumentPanel({ documentId, fallbackTitle, onClose }: { document
   const [remote, setRemote] = useState<{ id: string; file: SharedFile | null; error: string } | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [tab, setTab] = useState<'text' | 'findings'>('text')
+  const [tab, setTab] = useState<'text' | 'findings' | 'history'>('text')
 
   const load = useCallback(async () => {
     if (!workspace || !shared) return
@@ -90,6 +91,17 @@ export function DocumentPanel({ documentId, fallbackTitle, onClose }: { document
       setBusy(false)
     }
   }
+  // Restoring shares the earlier text again, which the history records as a new version.
+  const restoreVersion = async (text: string) => {
+    if (!snapshot) return
+    try {
+      if (local) ws.editDocumentText(local.id, text)
+      if (shared) await share({ ...snapshot, text })
+      ws.setNotice(shared ? 'Earlier version restored and shared with the channel.' : 'Earlier version restored.')
+    } catch (error) {
+      ws.setNotice(error instanceof Error ? error.message : 'The version could not be restored.')
+    }
+  }
   const openInReview = () => {
     if (local) ws.openInReview(local)
     else if (snapshot) ws.importSharedDocument(snapshot)
@@ -135,11 +147,21 @@ export function DocumentPanel({ documentId, fallbackTitle, onClose }: { document
         <div className="ws-segment ws-segment-full" role="tablist" aria-label="Document sections">
           <button type="button" role="tab" aria-selected={tab === 'text'} className={tab === 'text' ? 'is-active' : ''} onClick={() => setTab('text')}>Text</button>
           <button type="button" role="tab" aria-selected={tab === 'findings'} className={tab === 'findings' ? 'is-active' : ''} onClick={() => setTab('findings')} disabled={editing !== null}>Findings <em>{snapshot.findings.length}</em></button>
+          <button type="button" role="tab" aria-selected={tab === 'history'} className={tab === 'history' ? 'is-active' : ''} onClick={() => setTab('history')} disabled={editing !== null}><History size={12} aria-hidden="true" /> History</button>
         </div>
         <div className="ws-doc-panel-body">
           {tab === 'text' && (editing !== null
             ? <textarea className="ws-doc-editor" value={editing} onChange={(event) => setEditing(event.target.value)} aria-label="Document text" autoFocus />
             : <pre className="ws-doc-text">{snapshot.text || 'No text in this document.'}</pre>)}
+          {tab === 'history' && (
+            <DocumentHistory
+              documentId={documentId}
+              currentText={snapshot.text}
+              workspaceId={shared ? workspace?.id : undefined}
+              recorded={shared || isRecordable(documentId)}
+              onRestore={restoreVersion}
+            />
+          )}
           {tab === 'findings' && (
             <ul className="ws-doc-findings">
               {snapshot.findings.map((finding, index) => {

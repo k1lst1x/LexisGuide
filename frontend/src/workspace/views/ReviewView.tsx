@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, ChevronDown, ListTodo, MessageSquare, PencilLine, RotateCcw, Sparkles, Wand2, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronDown, History, ListTodo, MessageSquare, PencilLine, RotateCcw, Sparkles, Wand2, X } from 'lucide-react'
 import { MessageLoading } from '../../components/ui/message-loading'
 import { useWorkspace } from '../store'
 import { bySeverity, documentDisplayName, documentKind, openFindings, type Finding, type SampleDoc } from '../data'
 import { ProgressLine, ScoreMeter } from '../charts'
 import { Empty, SeverityChip } from '../ui'
+import { isRecordable } from '../ledger'
+import { DocumentHistory } from './DocumentHistory'
 
 function DocumentSwitcher() {
   const ws = useWorkspace()
@@ -218,7 +220,7 @@ export function ReviewView() {
   const ws = useWorkspace()
   const doc = ws.selected
   const [queue, setQueue] = useState<'open' | 'resolved' | 'all'>('open')
-  const [mode, setMode] = useState<'read' | 'edit'>('read')
+  const [mode, setMode] = useState<'read' | 'edit' | 'history'>('read')
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleState, setTitleState] = useState({ documentId: doc.id, draft: doc.title })
   const [actionsOpen, setActionsOpen] = useState(false)
@@ -325,12 +327,21 @@ export function ReviewView() {
             <div className="ws-segment" role="group" aria-label="Reader mode">
               <button type="button" className={mode === 'read' ? 'is-active' : ''} aria-pressed={mode === 'read'} onClick={() => setMode('read')}>Read</button>
               <button type="button" className={mode === 'edit' ? 'is-active' : ''} aria-pressed={mode === 'edit'} onClick={() => setMode('edit')}>Edit</button>
+              <button type="button" className={mode === 'history' ? 'is-active' : ''} aria-pressed={mode === 'history'} onClick={() => setMode('history')}><History size={13} aria-hidden="true" /> History</button>
             </div>
           </div>
           {doc.summary && <div className="ws-summary"><Sparkles size={14} /><p>{doc.summary}</p></div>}
-          {mode === 'read'
-            ? <DocumentText doc={doc} activeId={finding?.id ?? null} resolved={resolved} onSelect={ws.setActiveFindingId} />
-            : <textarea className="ws-editor" value={doc.text} onChange={(event) => ws.editText(event.target.value)} aria-label="Edit document text" spellCheck />}
+          {mode === 'read' && <DocumentText doc={doc} activeId={finding?.id ?? null} resolved={resolved} onSelect={ws.setActiveFindingId} />}
+          {mode === 'edit' && <textarea className="ws-editor" value={doc.text} onChange={(event) => ws.editText(event.target.value)} aria-label="Edit document text" spellCheck />}
+          {mode === 'history' && (
+            <DocumentHistory
+              key={doc.id}
+              documentId={doc.id}
+              currentText={doc.text}
+              recorded={isRecordable(doc.id)}
+              onRestore={(text) => { ws.editDocumentText(doc.id, text); ws.setNotice('Earlier version restored. The restore is recorded as a new change.') }}
+            />
+          )}
           {doc.nextSteps?.length ? (
             <div className="ws-next-steps"><strong>Suggested next steps</strong><ol>{doc.nextSteps.map((step) => <li key={step}>{step}</li>)}</ol></div>
           ) : null}

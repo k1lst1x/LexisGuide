@@ -21,10 +21,22 @@ def runtime_session_id(user_id: str, conversation_id: str, workspace_id: str = "
     return sha256(f"{user_id}:{workspace_id}:{conversation_id}".encode()).hexdigest()
 
 
+def runtime_region(runtime_arn: str) -> str:
+    """The region an AgentCore runtime lives in, from its ARN.
+
+    The runtime may be deployed in a different region from the API; calling it
+    through a client for the API's own region would not find it.
+    """
+    parts = runtime_arn.split(":")
+    if len(parts) > 3 and parts[0] == "arn" and parts[3]:
+        return parts[3]
+    return os.getenv("AWS_REGION", "us-east-1")
+
+
 class AssistantClient:
     def __init__(self, runtime_client: Any | None = None, agent: Any | None = None) -> None:
-        region = os.getenv("AWS_REGION", "us-east-1")
         self.runtime_arn = os.getenv("AGENTCORE_ASSISTANT_RUNTIME_ARN", "")
+        region = runtime_region(self.runtime_arn)
         self.runtime_client = runtime_client or (
             boto3.client("bedrock-agentcore", region_name=region) if self.runtime_arn else None
         )

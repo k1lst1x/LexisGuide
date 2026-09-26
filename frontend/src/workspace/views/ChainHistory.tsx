@@ -1,73 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowUpRight, Blocks, ChevronDown, ChevronUp, CircleAlert, CircleCheck, Fingerprint, Link2, LoaderCircle, Search, ShieldCheck } from 'lucide-react'
 import { useWorkspace } from '../store'
 import { documentDisplayName, type SampleDoc } from '../data'
 import {
   KIND_LABELS,
-  fetchHistory,
   isRecordable,
-  ledgerInfo,
-  onLedgerChange,
   sha256Hex,
   type ChangeKind,
   type LedgerChange,
-  type LedgerInfo,
-} from '../ledger'
+  } from '../ledger'
 import { Card, Empty } from '../ui'
-
-// Base makes a block about every two seconds; poll a little slower than that
-// while anything is waiting for one, and not at all once everything is in.
-const PENDING_POLL_MS = 2500
+import { useDocumentChain, useLedgerInfo } from '../useChain'
 
 const short = (hex: string, head = 6, tail = 4) => {
   const value = hex.startsWith('0x') ? hex : `0x${hex}`
   return value.length > head + tail + 2 ? `${value.slice(0, head + 2)}…${value.slice(-tail)}` : value
-}
-
-function useLedgerInfo() {
-  const [info, setInfo] = useState<LedgerInfo | null | undefined>(undefined)
-  useEffect(() => {
-    let live = true
-    void ledgerInfo().then((value) => { if (live) setInfo(value) })
-    return () => { live = false }
-  }, [])
-  return info
-}
-
-/** One document's on-chain history, kept current as changes are sent and mined. */
-function useDocumentChain(documentId: string | null, enabled: boolean) {
-  const [server, setServer] = useState<{ id: string | null; changes: LedgerChange[] | null }>({ id: null, changes: null })
-  const [inFlight, setInFlight] = useState<LedgerChange[]>([])
-  const [tick, setTick] = useState(0)
-
-  useEffect(() => {
-    if (!documentId || !enabled) return
-    let live = true
-    void fetchHistory(documentId).then((changes) => { if (live) setServer({ id: documentId, changes: changes ?? [] }) })
-    return () => { live = false }
-  }, [documentId, enabled, tick])
-
-  useEffect(() => onLedgerChange((event) => {
-    if (event.documentId !== documentId) return
-    if (event.type === 'sending') setInFlight((current) => [...current, event.change])
-    else setInFlight((current) => current.filter((change) => change.change_id !== event.changeId))
-    setTick((value) => value + 1)
-  }), [documentId])
-
-  const fetched = server.id === documentId ? server.changes : null
-  const changes = useMemo(() => fetched && [
-    ...fetched,
-    ...inFlight.filter((change) => change.document_id === documentId && !fetched.some((row) => row.change_id === change.change_id)),
-  ], [fetched, inFlight, documentId])
-  const waiting = Boolean(changes?.some((change) => change.status === 'pending'))
-
-  useEffect(() => {
-    if (!waiting) return
-    const timer = window.setInterval(() => setTick((value) => value + 1), PENDING_POLL_MS)
-    return () => window.clearInterval(timer)
-  }, [waiting])
-
-  return { changes, waiting }
 }
 
 /** Whether the text on screen is the text last written to the chain. */
