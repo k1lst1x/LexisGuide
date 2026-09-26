@@ -9,6 +9,7 @@ from .models import (
     parse_chat_reply,
     parse_chat_request,
 )
+from .orchestrator import SupervisorAgent
 from .tools import TOOL_SPECS, check_clause, explain_term, lexisguide_help, run_tool
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "ChatRequest",
     "ChatTurn",
     "ConversationAgent",
+    "SupervisorAgent",
     "check_clause",
     "explain_term",
     "lexisguide_help",

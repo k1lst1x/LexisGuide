@@ -15,6 +15,8 @@ export type ChatContext = {
   open_findings?: string[]
   current_finding?: string
   jurisdiction?: string
+  /** An API-verified workspace boundary for a shared conversation. */
+  workspace_id?: string
 }
 
 export type Turn = { id: string; role: 'user' | 'assistant'; content: string; local?: boolean }
