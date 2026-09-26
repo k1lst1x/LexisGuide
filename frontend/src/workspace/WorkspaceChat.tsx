@@ -29,7 +29,8 @@ export function WorkspaceChat({ userEmail }: { userEmail?: string }) {
 
   return (
     <ChatWidget
-      className="cw-in-workspace"
+      // In Messages the launcher shrinks to an icon beside the conversation, so it never covers Send.
+      className={`cw-in-workspace ${ws.nav === 'team' ? 'cw-compact' : ''}`}
       storageKey={userEmail ? `lexisguide:chat-workspace:${userEmail.toLowerCase()}` : 'lexisguide:chat-guest'}
       open={ws.assistantOpen}
       onOpenChange={ws.setAssistantOpen}

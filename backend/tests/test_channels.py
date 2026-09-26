@@ -326,3 +326,133 @@ def test_only_admins_can_delete_the_workspace(api: TestClient, workspace: str) -
     as_user(BOB)
     assert api.get("/api/v1/workspaces").json() == []
     assert api.get(f"/api/v1/workspaces/{workspace}/channels").status_code == 403
+
+
+# ── Reactions, mentions, saved messages, and shared files ───────────────────
+
+
+def post(api: TestClient, workspace_id: str, text: str, **extra: object) -> dict:
+    response = api.post(f"/api/v1/workspaces/{workspace_id}/messages", json={"text": text, **extra})
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def messages(api: TestClient, workspace_id: str) -> list[dict]:
+    return api.get(f"/api/v1/workspaces/{workspace_id}/messages").json()
+
+
+def react(api: TestClient, workspace_id: str, message_id: str, emoji: str) -> dict:
+    response = api.post(
+        f"/api/v1/workspaces/{workspace_id}/messages/{message_id}/reactions", json={"emoji": emoji}
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_emoji_reactions_are_saved_and_seen_by_everyone(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    message = post(api, workspace, "Filed today.")
+    react(api, workspace, message["id"], "🎉")
+    as_user(ADA)
+    react(api, workspace, message["id"], "🎉")
+    react(api, workspace, message["id"], "👍🏽")
+
+    [seen] = messages(api, workspace)
+    by_emoji = {item["emoji"]: item for item in seen["reactions"]}
+
+    assert by_emoji["🎉"]["count"] == 2 and by_emoji["🎉"]["names"] == ["Bob", "Ada"]
+    assert by_emoji["🎉"]["mine"] is True
+    assert by_emoji["👍🏽"]["count"] == 1
+
+
+def test_reacting_again_takes_the_reaction_back(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    message = post(api, workspace, "Filed today.")
+    react(api, workspace, message["id"], "👍")
+
+    after = react(api, workspace, message["id"], "👍")
+
+    assert after["reactions"] == []
+
+
+def test_mentions_are_stored_with_the_message(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    mentions = [
+        {"type": "user", "id": ADA["sub"], "label": "Ada"},
+        {"type": "channel", "id": "general", "label": "General"},
+    ]
+    post(api, workspace, "@Ada see #General", mentions=mentions)
+
+    assert messages(api, workspace)[0]["mentions"] == mentions
+
+
+def test_saved_messages_are_kept_per_person(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    message = post(api, workspace, "Remember this.")
+    path = f"/api/v1/workspaces/{workspace}/messages/{message['id']}/saved"
+    assert api.put(path).status_code == 204
+
+    assert messages(api, workspace)[0]["saved"] is True
+    as_user(ADA)
+    assert messages(api, workspace)[0]["saved"] is False
+    as_user(BOB)
+    api.delete(path)
+    assert messages(api, workspace)[0]["saved"] is False
+
+
+def test_a_shared_document_can_be_opened_by_every_member(api: TestClient, workspace: str) -> None:
+    from hashlib import sha256
+
+    as_user(BOB)
+    document = {
+        "id": "upload-lease.pdf-1-2",
+        "title": "Oak Street lease",
+        "type": "Lease",
+        "text": "Rent is due on the first.",
+        "score": 62,
+        "findings": [{"title": "Late fee", "severity": "warning", "evidence": "fee"}],
+    }
+    sent = post(api, workspace, "Please look", attachment=document["id"], documents=[document])
+    assert sent["attachment_title"] == "Oak Street lease"
+    key = sha256(document["id"].encode()).hexdigest()
+
+    as_user(ADA)
+    [listed] = api.get(f"/api/v1/workspaces/{workspace}/files").json()
+    assert listed["title"] == "Oak Street lease" and listed["shared_by_name"] == "Bob"
+    opened = api.get(f"/api/v1/workspaces/{workspace}/files/{key}").json()
+    assert opened["document"]["text"] == "Rent is due on the first."
+
+    # Ada edits it in Review and shares the new version.
+    updated = api.put(
+        f"/api/v1/workspaces/{workspace}/files/{key}",
+        json={**document, "text": "Rent is due on the fifth."},
+    )
+    assert updated.status_code == 200
+    as_user(BOB)
+    latest = api.get(f"/api/v1/workspaces/{workspace}/files/{key}").json()
+    assert latest["document"]["text"] == "Rent is due on the fifth."
+    assert latest["shared_by_name"] == "Ada"
+
+
+def test_deleting_a_message_removes_its_reactions(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    message = post(api, workspace, "Oops")
+    react(api, workspace, message["id"], "😅")
+
+    api.delete(f"/api/v1/workspaces/{workspace}/messages/{message['id']}")
+
+    assert storage.channel_reactions(workspace, "general") == {}
+
+
+def test_outsiders_cannot_react_or_read_shared_files(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    message = post(api, workspace, "Private")
+    as_user(CY)
+    assert (
+        api.post(
+            f"/api/v1/workspaces/{workspace}/messages/{message['id']}/reactions",
+            json={"emoji": "👍"},
+        ).status_code
+        == 403
+    )
+    assert api.get(f"/api/v1/workspaces/{workspace}/files").status_code == 403

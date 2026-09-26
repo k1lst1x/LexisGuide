@@ -651,6 +651,10 @@ def delete_workspace_channel(workspace_id: str, channel_id: str) -> bool:
         for item in _legacy_messages(workspace_id)
         if item.get("channel_id") == channel_id
     ]
+    keys += [
+        {"PK": item["PK"], "SK": item["SK"]}
+        for item in _query_prefix(workspace_id, f"REACT#{channel_id}#")
+    ]
     keys.append(_channel_key(workspace_id, channel_id))
     with _table().batch_writer() as batch:
         for key in keys:
@@ -723,6 +727,8 @@ def create_workspace_message(
     text: str,
     attachment: str | None = None,
     channel_id: str = GENERAL,
+    mentions: list[dict[str, str]] | None = None,
+    attachment_title: str = "",
 ) -> dict[str, Any]:
     """Store a message inside one shared workspace's partition.
 
@@ -743,6 +749,8 @@ def create_workspace_message(
         "text": text,
         "created_at": now,
         "attachment": attachment or "",
+        "attachment_title": attachment_title,
+        "mentions": mentions or [],
     }
     _table().put_item(
         Item={
@@ -810,7 +818,15 @@ def get_workspace_message(
 
 
 def delete_workspace_message(workspace_id: str, message: dict[str, Any]) -> None:
-    _table().delete_item(Key={"PK": message["PK"], "SK": message["SK"]})
+    channel_id = message.get("channel_id", GENERAL)
+    keys = [{"PK": message["PK"], "SK": message["SK"]}]
+    keys += [
+        {"PK": item["PK"], "SK": item["SK"]}
+        for item in _query_prefix(workspace_id, f"REACT#{channel_id}#{message['id']}#")
+    ]
+    with _table().batch_writer() as batch:
+        for key in keys:
+            batch.delete_item(Key=key)
 
 
 def consume_review_quota(user_id: str) -> bool:
@@ -1598,3 +1614,133 @@ def put_workspace_state(user_id: str, state: dict[str, Any]) -> dict[str, Any]:
         }
     )
     return state
+
+
+# ── Messaging: reactions, saved messages, and shared files ──────────────────
+# Reactions are one row per person, per emoji, per message, so two people
+# reacting at once can never overwrite each other. Saved messages live in the
+# person's own partition. A shared file is a document snapshot any workspace
+# member can open, compressed like saved documents.
+
+
+def _reaction_key(
+    workspace_id: str, channel_id: str, message_id: str, emoji: str, user_id: str
+) -> dict[str, str]:
+    return {
+        "PK": f"WORKSPACE#{workspace_id}",
+        "SK": f"REACT#{channel_id}#{message_id}#{emoji}#{user_id}",
+    }
+
+
+def toggle_message_reaction(
+    workspace_id: str, channel_id: str, message_id: str, emoji: str, user: dict[str, str]
+) -> bool:
+    """Add this person's reaction, or take it back. Returns True when added."""
+    key = _reaction_key(workspace_id, channel_id, message_id, emoji, user["sub"])
+    if _table().get_item(Key=key).get("Item"):
+        _table().delete_item(Key=key)
+        return False
+    _table().put_item(
+        Item={
+            **key,
+            "message_id": message_id,
+            "channel_id": channel_id,
+            "emoji": emoji,
+            "user_id": user["sub"],
+            "name": user.get("name") or user.get("email") or "Workspace member",
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+    )
+    return True
+
+
+def channel_reactions(workspace_id: str, channel_id: str) -> dict[str, list[dict[str, Any]]]:
+    """Every reaction in a channel, grouped by message, oldest first."""
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for item in _query_prefix(workspace_id, f"REACT#{channel_id}#"):
+        grouped.setdefault(item["message_id"], []).append(item)
+    for rows in grouped.values():
+        rows.sort(key=lambda row: row.get("created_at", ""))
+    return grouped
+
+
+def set_message_saved(
+    user_id: str, workspace_id: str, channel_id: str, message_id: str, saved: bool
+) -> None:
+    key = {"PK": f"USER#{user_id}", "SK": f"SAVED#{workspace_id}#{message_id}"}
+    if saved:
+        _table().put_item(
+            Item={
+                **key,
+                "workspace_id": workspace_id,
+                "channel_id": channel_id,
+                "message_id": message_id,
+                "saved_at": datetime.now(UTC).isoformat(),
+            }
+        )
+    else:
+        _table().delete_item(Key=key)
+
+
+def saved_message_ids(user_id: str, workspace_id: str) -> set[str]:
+    response = _table().query(
+        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
+        & Key("SK").begins_with(f"SAVED#{workspace_id}#")
+    )
+    return {item["message_id"] for item in response.get("Items", [])}
+
+
+def _file_key(workspace_id: str, document_key: str) -> dict[str, str]:
+    return {"PK": f"WORKSPACE#{workspace_id}", "SK": f"FILE#{document_key}"}
+
+
+def share_workspace_file(
+    workspace_id: str, document_key: str, document: dict[str, Any], user: dict[str, str]
+) -> dict[str, Any]:
+    """Store (or replace) a document snapshot every member of the workspace can open."""
+    now = datetime.now(UTC).isoformat()
+    meta = {
+        "document_key": document_key,
+        "document_id": document["id"],
+        "title": document.get("title", ""),
+        "type": document.get("type", ""),
+        "shared_by_id": user["sub"],
+        "shared_by_name": user.get("name") or user.get("email") or "Workspace member",
+        "updated_at": now,
+    }
+    _table().put_item(
+        Item={**_file_key(workspace_id, document_key), **meta, "body": _pack(document)}
+    )
+    return meta
+
+
+def get_workspace_file(workspace_id: str, document_key: str) -> dict[str, Any] | None:
+    item = _table().get_item(Key=_file_key(workspace_id, document_key)).get("Item")
+    if not item:
+        return None
+    body = _unpack(item)["document"]
+    return {
+        key: item.get(key, "")
+        for key in (
+            "document_key",
+            "document_id",
+            "title",
+            "type",
+            "shared_by_id",
+            "shared_by_name",
+            "updated_at",
+        )
+    } | {"document": body}
+
+
+def list_workspace_files(workspace_id: str) -> list[dict[str, Any]]:
+    """Shared files without their bodies, most recently updated first."""
+    items = _query_prefix(
+        workspace_id,
+        "FILE#",
+        ProjectionExpression="document_key, document_id, title, #type, shared_by_id, "
+        "shared_by_name, updated_at",
+        ExpressionAttributeNames={"#type": "type"},
+    )
+    items.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    return items

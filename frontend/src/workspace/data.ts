@@ -60,7 +60,49 @@ export type WorkspaceChannel = {
   can_manage?: boolean
   can_delete?: boolean
 }
-export type WorkspaceMessage = { id: string; user: string; authorId?: string; authorEmail?: string; text: string; time: string; saved?: boolean; attachment?: string }
+export type MessageMention = { type: 'user' | 'channel' | 'document'; id: string; label: string }
+export type MessageReaction = { emoji: string; count: number; names: string[]; mine: boolean }
+export type WorkspaceMessage = {
+  id: string
+  user: string
+  authorId?: string
+  authorEmail?: string
+  text: string
+  time: string
+  createdAt?: string
+  saved?: boolean
+  attachment?: string
+  attachmentTitle?: string
+  mentions?: MessageMention[]
+  reactions?: MessageReaction[]
+}
+/** A document as shared into a workspace, so every member can open it. */
+export type SharedDocumentSnapshot = {
+  id: string
+  title: string
+  type: string
+  text: string
+  score?: number | null
+  findings: Array<{ title: string; severity: string; category: string; explanation: string; evidence: string }>
+}
+
+/** A document's shareable snapshot: its text and review, not the person's private state. */
+export function documentSnapshot(doc: SampleDoc): SharedDocumentSnapshot {
+  return {
+    id: doc.id,
+    title: doc.title,
+    type: doc.type,
+    text: doc.text,
+    score: doc.score,
+    findings: doc.findings.slice(0, 60).map((finding) => ({
+      title: finding.title,
+      severity: finding.severity,
+      category: finding.category,
+      explanation: finding.explanation.slice(0, 3000),
+      evidence: finding.evidence.slice(0, 3000),
+    })),
+  }
+}
 export type WorkspaceTask = { id: string; title: string; detail: string; completed: boolean }
 export type AssistantAction = 'evidence' | 'revision' | 'task' | 'message' | 'assign' | 'due-date' | 'policy'
 export type AssistantApprovalAction = Exclude<AssistantAction, 'evidence' | 'policy'>

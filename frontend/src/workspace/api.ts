@@ -179,6 +179,10 @@ export type SharedWorkspaceMessage = {
   id: string
   user: string
   author_id?: string
+  attachment_title?: string
+  mentions?: Array<{ type: 'user' | 'channel' | 'document'; id: string; label: string }>
+  reactions?: Array<{ emoji: string; count: number; names: string[]; mine: boolean }>
+  saved?: boolean
   author_email: string
   text: string
   created_at: string

@@ -65,7 +65,7 @@ function ChannelLink({ channel, active, unread, preview, onSelect }: { channel: 
 
 /* ─── Dialog shell ─── */
 
-function Dialog({ title, subtitle, onClose, children, labelledBy, wide }: { title: ReactNode; subtitle?: ReactNode; onClose: () => void; children: ReactNode; labelledBy: string; wide?: boolean }) {
+export function Dialog({ title, subtitle, onClose, children, labelledBy, wide }: { title: ReactNode; subtitle?: ReactNode; onClose: () => void; children: ReactNode; labelledBy: string; wide?: boolean }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -171,7 +171,7 @@ export function BrowseChannelsDialog({ channels, onClose, onOpen, onCreate }: { 
 
 export type DetailsTab = 'about' | 'members' | 'settings'
 
-export function ChannelDetailsDialog({ channels, tab: initialTab, canManage, canDelete, onClose }: { channels: Channels; tab: DetailsTab; canManage: boolean; canDelete: boolean; onClose: () => void }) {
+export function ChannelDetailsDialog({ channels, tab: initialTab, canManage, canDelete, onClose, about }: { channels: Channels; tab: DetailsTab; canManage: boolean; canDelete: boolean; onClose: () => void; about?: ReactNode }) {
   const channel = channels.active
   const [tab, setTab] = useState<DetailsTab>(initialTab)
   const [editing, setEditing] = useState<'name' | 'description' | null>(null)
@@ -237,6 +237,7 @@ export function ChannelDetailsDialog({ channels, tab: initialTab, canManage, can
             <header><strong>Created</strong></header>
             <p>{general ? 'Created with the workspace. Everyone is a member.' : `${channel.created_by_name ? `By ${channel.created_by_name}` : 'Created'}${formatDate(channel.created_at) ? ` on ${formatDate(channel.created_at)}` : ''}`}</p>
           </section>
+          {about}
         </div>
       )}
 

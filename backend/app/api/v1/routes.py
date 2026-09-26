@@ -1,5 +1,7 @@
 import json
 from datetime import date
+from hashlib import sha256
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
@@ -20,9 +22,11 @@ from app.lawfirm import (
 )
 from app.legal_agent import configured_agent
 from app.storage import (
+    DocumentTooLargeError,
     acquire_remote_operation,
     add_channel_member,
     channel_name_taken,
+    channel_reactions,
     consume_chat_quota,
     consume_review_quota,
     consume_statute_quota,
@@ -39,6 +43,7 @@ from app.storage import (
     get_lawyer_verification,
     get_profile,
     get_workspace_channel,
+    get_workspace_file,
     get_workspace_membership,
     get_workspace_message,
     is_channel_member,
@@ -46,6 +51,7 @@ from app.storage import (
     list_conversations,
     list_records,
     list_workspace_channels,
+    list_workspace_files,
     list_workspace_members,
     list_workspace_messages,
     list_workspaces,
@@ -57,8 +63,12 @@ from app.storage import (
     reserve_lawyer_attempt,
     save_conversation_with_limit,
     save_lawyer_verification,
+    saved_message_ids,
+    set_message_saved,
     set_workspace_linked_document,
     set_workspace_member_role,
+    share_workspace_file,
+    toggle_message_reaction,
     update_workspace_channel,
 )
 
@@ -141,10 +151,40 @@ class WorkspaceInvite(BaseModel):
     invite_code: str
 
 
+class MessageMention(BaseModel):
+    """Someone, a channel, or a document named in a message."""
+
+    type: Literal["user", "channel", "document"]
+    id: str = Field(min_length=1, max_length=400)
+    label: str = Field(min_length=1, max_length=160)
+
+
+class SharedFinding(BaseModel):
+    title: str = Field(default="", max_length=300)
+    severity: str = Field(default="", max_length=20)
+    category: str = Field(default="", max_length=120)
+    explanation: str = Field(default="", max_length=3_000)
+    evidence: str = Field(default="", max_length=3_000)
+
+
+class SharedDocument(BaseModel):
+    """A document shared into a workspace, so every member can open it."""
+
+    id: str = Field(min_length=1, max_length=400)
+    title: str = Field(min_length=1, max_length=300)
+    type: str = Field(default="", max_length=120)
+    text: str = Field(default="", max_length=250_000)
+    score: int | None = Field(default=None, ge=0, le=100)
+    findings: list[SharedFinding] = Field(default_factory=list, max_length=60)
+
+
 class WorkspaceMessageCreate(BaseModel):
-    text: str = Field(min_length=1, max_length=4_000)
-    attachment: str | None = Field(default=None, max_length=160)
+    text: str = Field(min_length=1, max_length=8_000)
+    attachment: str | None = Field(default=None, max_length=400)
     channel_id: str = Field(default="general", pattern=r"^[A-Za-z0-9-]{1,80}$")
+    mentions: list[MessageMention] = Field(default_factory=list, max_length=20)
+    # Documents attached or mentioned, shared into the workspace with the message.
+    documents: list[SharedDocument] = Field(default_factory=list, max_length=3)
 
     @field_validator("text")
     @classmethod
@@ -155,6 +195,13 @@ class WorkspaceMessageCreate(BaseModel):
         return value
 
 
+class ReactionSummary(BaseModel):
+    emoji: str
+    count: int
+    names: list[str]
+    mine: bool
+
+
 class WorkspaceMessage(BaseModel):
     id: str
     user: str
@@ -163,7 +210,53 @@ class WorkspaceMessage(BaseModel):
     text: str
     created_at: str
     attachment: str | None = None
+    attachment_title: str = ""
     channel_id: str = "general"
+    mentions: list[MessageMention] = Field(default_factory=list)
+    reactions: list[ReactionSummary] = Field(default_factory=list)
+    saved: bool = False
+
+
+class ReactionToggle(BaseModel):
+    # One emoji, possibly with skin-tone or joiner sequences.
+    emoji: str = Field(min_length=1, max_length=16, pattern=r"^[^#\s]+$")
+    channel_id: str = Field(default="general", pattern=r"^[A-Za-z0-9-]{1,80}$")
+
+
+class SharedFileMeta(BaseModel):
+    document_key: str
+    document_id: str
+    title: str = ""
+    type: str = ""
+    shared_by_id: str = ""
+    shared_by_name: str = ""
+    updated_at: str = ""
+
+
+class SharedFile(SharedFileMeta):
+    document: dict
+
+
+def _message_view(
+    message: dict, reactions: list[dict], saved: set[str], user: dict[str, str]
+) -> WorkspaceMessage:
+    grouped: dict[str, list[dict]] = {}
+    for row in reactions:
+        grouped.setdefault(row["emoji"], []).append(row)
+    summaries = [
+        ReactionSummary(
+            emoji=emoji,
+            count=len(rows),
+            names=[row.get("name", "") for row in rows],
+            mine=any(row.get("user_id") == user["sub"] for row in rows),
+        )
+        for emoji, rows in grouped.items()
+    ]
+    return WorkspaceMessage(
+        **{key: value for key, value in message.items() if key in WorkspaceMessage.model_fields},
+        reactions=summaries,
+        saved=message["id"] in saved,
+    )
 
 
 def _clean_channel_name(value: str) -> str:
@@ -910,8 +1003,11 @@ async def read_workspace_messages(
     """Any workspace member can read a channel, so they can look before joining."""
     _workspace_member(workspace_id, user)
     _channel_or_404(workspace_id, channel_id)
+    reactions = channel_reactions(workspace_id, channel_id)
+    saved = saved_message_ids(user["sub"], workspace_id)
     return [
-        WorkspaceMessage(**message) for message in list_workspace_messages(workspace_id, channel_id)
+        _message_view(message, reactions.get(message["id"], []), saved, user)
+        for message in list_workspace_messages(workspace_id, channel_id)
     ]
 
 
@@ -930,9 +1026,123 @@ async def post_workspace_message(
     if not is_channel_member(workspace_id, payload.channel_id, user["sub"]):
         raise HTTPException(status_code=403, detail=f"Join #{channel['name']} to post in it.")
     attachment = payload.attachment.strip() if payload.attachment else None
-    return WorkspaceMessage(
-        **create_workspace_message(workspace_id, user, payload.text, attachment, payload.channel_id)
+    attachment_title = ""
+    for document in payload.documents:
+        try:
+            share_workspace_file(
+                workspace_id, _document_key(document.id), document.model_dump(), user
+            )
+        except DocumentTooLargeError as error:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=f"{document.title} is too large to share.",
+            ) from error
+        if document.id == attachment:
+            attachment_title = document.title
+    message = create_workspace_message(
+        workspace_id,
+        user,
+        payload.text,
+        attachment,
+        payload.channel_id,
+        mentions=[mention.model_dump() for mention in payload.mentions],
+        attachment_title=attachment_title,
     )
+    return _message_view(message, [], set(), user)
+
+
+@router.post(
+    "/workspaces/{workspace_id}/messages/{message_id}/reactions", response_model=WorkspaceMessage
+)
+async def react_to_message(
+    workspace_id: str,
+    payload: ReactionToggle,
+    message_id: str = Path(pattern=CHANNEL_ID),
+    user: dict[str, str] = Depends(current_user),
+) -> WorkspaceMessage:
+    """Add your reaction, or take it back if you already reacted with that emoji."""
+    _workspace_member(workspace_id, user)
+    message = get_workspace_message(workspace_id, payload.channel_id, message_id)
+    if message is None:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    toggle_message_reaction(workspace_id, payload.channel_id, message_id, payload.emoji, user)
+    reactions = channel_reactions(workspace_id, payload.channel_id).get(message_id, [])
+    return _message_view(message, reactions, saved_message_ids(user["sub"], workspace_id), user)
+
+
+@router.put(
+    "/workspaces/{workspace_id}/messages/{message_id}/saved",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def save_message(
+    workspace_id: str,
+    message_id: str = Path(pattern=CHANNEL_ID),
+    channel_id: str = Query(default="general", pattern=CHANNEL_ID),
+    user: dict[str, str] = Depends(current_user),
+) -> None:
+    _workspace_member(workspace_id, user)
+    if get_workspace_message(workspace_id, channel_id, message_id) is None:
+        raise HTTPException(status_code=404, detail="Message not found.")
+    set_message_saved(user["sub"], workspace_id, channel_id, message_id, True)
+
+
+@router.delete(
+    "/workspaces/{workspace_id}/messages/{message_id}/saved",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def unsave_message(
+    workspace_id: str,
+    message_id: str = Path(pattern=CHANNEL_ID),
+    channel_id: str = Query(default="general", pattern=CHANNEL_ID),
+    user: dict[str, str] = Depends(current_user),
+) -> None:
+    _workspace_member(workspace_id, user)
+    set_message_saved(user["sub"], workspace_id, channel_id, message_id, False)
+
+
+def _document_key(document_id: str) -> str:
+    return sha256(document_id.encode("utf-8")).hexdigest()
+
+
+@router.get("/workspaces/{workspace_id}/files", response_model=list[SharedFileMeta])
+async def read_workspace_files(
+    workspace_id: str, user: dict[str, str] = Depends(current_user)
+) -> list[SharedFileMeta]:
+    _workspace_member(workspace_id, user)
+    return [SharedFileMeta(**item) for item in list_workspace_files(workspace_id)]
+
+
+@router.get("/workspaces/{workspace_id}/files/{document_key}", response_model=SharedFile)
+async def read_workspace_file(
+    workspace_id: str,
+    document_key: str = Path(pattern=r"^[0-9a-f]{64}$"),
+    user: dict[str, str] = Depends(current_user),
+) -> SharedFile:
+    _workspace_member(workspace_id, user)
+    shared = get_workspace_file(workspace_id, document_key)
+    if shared is None:
+        raise HTTPException(status_code=404, detail="That document is not shared here.")
+    return SharedFile(**shared)
+
+
+@router.put("/workspaces/{workspace_id}/files/{document_key}", response_model=SharedFileMeta)
+async def update_workspace_file(
+    workspace_id: str,
+    payload: SharedDocument,
+    document_key: str = Path(pattern=r"^[0-9a-f]{64}$"),
+    user: dict[str, str] = Depends(current_user),
+) -> SharedFileMeta:
+    """Share a newer version of a document, e.g. after editing it in Review."""
+    _workspace_member(workspace_id, user)
+    if document_key != _document_key(payload.id):
+        raise HTTPException(status_code=422, detail="The key does not match the document.")
+    try:
+        meta = share_workspace_file(workspace_id, document_key, payload.model_dump(), user)
+    except DocumentTooLargeError as error:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="This document is too large."
+        ) from error
+    return SharedFileMeta(**meta)
 
 
 @router.delete(

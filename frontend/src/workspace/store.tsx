@@ -3,8 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   LAST_SECTION_KEY, MESSAGE_STORAGE_KEY, cleanExtractedText, defaultTasks, defaultWorkspaceMessages, documentDisplayName,
-  extractDocumentText, fileTitle, openFindings, sampleDocs,
-  type Finding, type NavItem, type SampleDoc, type WorkspaceMember, type WorkspaceMessage, type WorkspaceSummary, type WorkspaceTask,
+  documentSnapshot, extractDocumentText, fileTitle, normalizeSeverity, openFindings, sampleDocs,
+  type Finding, type MessageMention, type MessageReaction, type NavItem, type SampleDoc, type SharedDocumentSnapshot, type WorkspaceMember, type WorkspaceMessage, type WorkspaceSummary, type WorkspaceTask,
 } from './data'
 import { reviewNewDocument, runDocumentAction, workspaceRequest, type SharedWorkspaceMessage } from './api'
 import { recordChange, recordEdit, sha256Hex } from './ledger'
@@ -61,8 +61,25 @@ function sharedMessage(message: SharedWorkspaceMessage): WorkspaceMessage {
     authorEmail: message.author_email,
     text: message.text,
     time: displayMessageTime(message.created_at),
+    createdAt: message.created_at,
     attachment: message.attachment || undefined,
+    attachmentTitle: message.attachment_title || undefined,
+    mentions: message.mentions ?? [],
+    reactions: message.reactions ?? [],
+    saved: Boolean(message.saved),
   }
+}
+
+/** Toggle this person's emoji on a message's reaction list. */
+function toggledReactions(reactions: MessageReaction[] = [], emoji: string, name: string): MessageReaction[] {
+  const existing = reactions.find((item) => item.emoji === emoji)
+  if (!existing) return [...reactions, { emoji, count: 1, names: [name], mine: true }]
+  if (existing.mine) {
+    return reactions
+      .map((item) => (item.emoji === emoji ? { ...item, count: item.count - 1, mine: false, names: item.names.filter((person) => person !== name) } : item))
+      .filter((item) => item.count > 0)
+  }
+  return reactions.map((item) => (item.emoji === emoji ? { ...item, count: item.count + 1, mine: true, names: [...item.names, name] } : item))
 }
 
 function messageGroups() {
@@ -100,7 +117,6 @@ function useWorkspaceState(userEmail?: string) {
   // message, while continuing to retain an existing conversation on reload.
   const messagesWereStored = useRef(window.localStorage.getItem(MESSAGE_STORAGE_KEY) !== null)
   const messagesChanged = useRef(false)
-  const [reactionsByWorkspace, setReactionsByWorkspace] = useState<Record<string, Record<string, string[]>>>({})
   const [tasks, setTasks] = useState<WorkspaceTask[]>(defaultTasks)
   // Documents and where the person left off live on the server, so a refresh
   // or another device opens the workspace as it was.
@@ -136,7 +152,6 @@ function useWorkspaceState(userEmail?: string) {
     ? `${activeWorkspace.id}:${activeChannelId}`
     : PERSONAL_WORKSPACE_ID
   const comments = messagesByWorkspace[activeMessageWorkspace] ?? []
-  const reactions = reactionsByWorkspace[activeMessageWorkspace] ?? {}
   const activeFinding = selected.findings.find((finding) => finding.id === activeFindingId) ?? null
   const isDemo = !documents.some((doc) => doc.id.startsWith('upload-'))
 
@@ -377,6 +392,14 @@ function useWorkspaceState(userEmail?: string) {
     recordEdit({ documentId: selected.id, text, title: selected.title })
   }, [selected, updateDocument])
 
+  /** Edit any document's text, e.g. from the shared-document panel in Messages. */
+  const editDocumentText = useCallback((documentId: string, text: string) => {
+    const target = documents.find((doc) => doc.id === documentId)
+    if (!target || target.text === text) return
+    updateDocument({ ...target, text, version: 'Working copy · edited' })
+    recordEdit({ documentId: target.id, text, title: target.title })
+  }, [documents, updateDocument])
+
   const renameDocument = useCallback((title: string) => {
     const nextTitle = title.trim().replace(/\s+/g, ' ')
     if (!nextTitle) {
@@ -390,9 +413,14 @@ function useWorkspaceState(userEmail?: string) {
     return true
   }, [selected, updateDocument])
 
-  const sendMessage = useCallback(async (text: string, attachment?: string | null) => {
+  const sendMessage = useCallback(async (text: string, attachment?: string | null, mentions: MessageMention[] = []) => {
     const trimmed = text.trim()
     if (!trimmed) return
+    // Documents attached or mentioned are shared with the message, so every
+    // member can open them, not only the sender.
+    const sharedIds = [...new Set([attachment, ...mentions.filter((item) => item.type === 'document').map((item) => item.id)].filter(Boolean))] as string[]
+    const documentsToShare = sharedIds.map((id) => documents.find((doc) => doc.id === id)).filter((doc): doc is SampleDoc => Boolean(doc)).slice(0, 3).map(documentSnapshot)
+    const attachmentTitle = attachment ? documents.find((doc) => doc.id === attachment)?.title : undefined
     const now = Date.now()
     const key = `${activeMessageWorkspace}:${trimmed}:${attachment ?? ''}`
     if (lastMessageSend.current?.key === key && now - lastMessageSend.current.at < 1_000) return
@@ -404,8 +432,12 @@ function useWorkspaceState(userEmail?: string) {
       authorEmail: userEmail?.toLowerCase(),
       text: trimmed,
       time: 'Just now',
+      createdAt: new Date(now).toISOString(),
       saved: false,
       attachment: attachment || undefined,
+      attachmentTitle,
+      mentions,
+      reactions: [],
     }
     messagesChanged.current = true
     setMessagesByWorkspace((current) => ({
@@ -417,7 +449,7 @@ function useWorkspaceState(userEmail?: string) {
     try {
       const created = await workspaceRequest<SharedWorkspaceMessage>(`/workspaces/${workspace.id}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ text: trimmed, attachment: attachment || undefined, channel_id: activeChannelId }),
+        body: JSON.stringify({ text: trimmed, attachment: attachment || undefined, channel_id: activeChannelId, mentions, documents: documentsToShare }),
       })
       const persisted = sharedMessage(created)
       setMessagesByWorkspace((current) => ({
@@ -431,15 +463,35 @@ function useWorkspaceState(userEmail?: string) {
       }))
       setWorkspaceNotice(error instanceof Error ? error.message : 'Message could not be sent.')
     }
-  }, [activeChannelId, activeMessageWorkspace, userEmail])
+  }, [activeChannelId, activeMessageWorkspace, documents, userEmail])
 
-  const toggleReaction = useCallback((messageId: string, emoji: string) => {
-    setReactionsByWorkspace((current) => {
-      const group = current[activeMessageWorkspace] ?? {}
-      const list = group[messageId] ?? []
-      return { ...current, [activeMessageWorkspace]: { ...group, [messageId]: list.includes(emoji) ? list.filter((item) => item !== emoji) : [...list, emoji] } }
-    })
+  /** Replace one message in the open conversation. */
+  const patchMessage = useCallback((messageId: string, change: (message: WorkspaceMessage) => WorkspaceMessage) => {
+    messagesChanged.current = true
+    setMessagesByWorkspace((current) => ({
+      ...current,
+      [activeMessageWorkspace]: (current[activeMessageWorkspace] ?? []).map((message) => (message.id === messageId ? change(message) : message)),
+    }))
   }, [activeMessageWorkspace])
+
+  /** React with any emoji, or take the reaction back. Shown at once, then saved. */
+  const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
+    const name = userEmail ? userEmail.split('@')[0] : 'You'
+    patchMessage(messageId, (message) => ({ ...message, reactions: toggledReactions(message.reactions, emoji, name) }))
+    const workspace = activeWorkspaceRef.current
+    if (!workspace || workspace.id.startsWith('local-') || messageId.startsWith('local-message-')) return
+    try {
+      const updated = await workspaceRequest<SharedWorkspaceMessage>(`/workspaces/${workspace.id}/messages/${encodeURIComponent(messageId)}/reactions`, {
+        method: 'POST',
+        body: JSON.stringify({ emoji, channel_id: activeChannelId }),
+      })
+      patchMessage(messageId, (message) => ({ ...message, reactions: updated.reactions ?? [] }))
+    } catch (error) {
+      // Undo the optimistic change.
+      patchMessage(messageId, (message) => ({ ...message, reactions: toggledReactions(message.reactions, emoji, name) }))
+      setWorkspaceNotice(error instanceof Error ? error.message : 'The reaction could not be saved.')
+    }
+  }, [activeChannelId, patchMessage, userEmail])
 
   /** Delete a message: the author's own, or any message for a workspace admin. */
   const deleteMessage = useCallback(async (messageId: string) => {
@@ -462,13 +514,59 @@ function useWorkspaceState(userEmail?: string) {
     }))
   }, [activeChannelId, activeMessageWorkspace])
 
-  const toggleSaved = useCallback((messageId: string) => {
-    messagesChanged.current = true
-    setMessagesByWorkspace((current) => ({
-      ...current,
-      [activeMessageWorkspace]: (current[activeMessageWorkspace] ?? []).map((message) => message.id === messageId ? { ...message, saved: !message.saved } : message),
-    }))
-  }, [activeMessageWorkspace])
+  /** Save a message to find it later; kept per person in the database. */
+  const toggleSaved = useCallback(async (messageId: string) => {
+    const current = (messagesByWorkspace[activeMessageWorkspace] ?? []).find((message) => message.id === messageId)
+    const next = !current?.saved
+    patchMessage(messageId, (message) => ({ ...message, saved: next }))
+    const workspace = activeWorkspaceRef.current
+    if (!workspace || workspace.id.startsWith('local-') || messageId.startsWith('local-message-')) return
+    try {
+      await workspaceRequest<void>(`/workspaces/${workspace.id}/messages/${encodeURIComponent(messageId)}/saved?channel_id=${encodeURIComponent(activeChannelId)}`, { method: next ? 'PUT' : 'DELETE' })
+    } catch (error) {
+      patchMessage(messageId, (message) => ({ ...message, saved: !next }))
+      setWorkspaceNotice(error instanceof Error ? error.message : 'The message could not be saved.')
+    }
+  }, [activeChannelId, activeMessageWorkspace, messagesByWorkspace, patchMessage])
+
+  /** Add a shared document to this person's workspace, or refresh their copy, and open it in Review. */
+  const importSharedDocument = useCallback((shared: SharedDocumentSnapshot, replace = false) => {
+    const existing = documents.find((doc) => doc.id === shared.id)
+    if (existing && !replace) {
+      openInReview(existing)
+      return
+    }
+    const base = existing ?? sampleDocs[0]
+    const imported: SampleDoc = {
+      ...base,
+      id: shared.id,
+      title: shared.title,
+      type: shared.type || base.type,
+      agency: shared.type || base.agency,
+      text: shared.text,
+      score: shared.score ?? base.score,
+      version: 'Shared in Messages',
+      status: 'Shared for review',
+      date: new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }),
+      hash: existing?.hash ?? '',
+      findings: shared.findings.map((finding, index) => ({
+        id: `shared-${index}`,
+        title: finding.title,
+        severity: normalizeSeverity(finding.severity),
+        category: finding.category || 'Shared review',
+        explanation: finding.explanation,
+        evidence: finding.evidence,
+        rule: finding.explanation,
+      })),
+      summary: undefined,
+      nextSteps: undefined,
+      sources: undefined,
+    }
+    setDocuments((current) => (current.some((doc) => doc.id === imported.id) ? current.map((doc) => (doc.id === imported.id ? imported : doc)) : [imported, ...current]))
+    setSelectedId(imported.id)
+    setActiveFindingId(imported.findings[0]?.id ?? null)
+    setNavState('linter')
+  }, [documents, openInReview])
 
   const addTask = useCallback((title: string, detail: string) => {
     setTasks((current) => [...current, { id: `task-${Date.now()}-${current.length}`, title, detail, completed: false }])
@@ -634,9 +732,9 @@ function useWorkspaceState(userEmail?: string) {
   return {
     userEmail, nav, go, documents, selected, selectDocument, openInReview, activeFinding, setActiveFindingId, linkedDocument, canManageLinkedDocument, setLinkedDocument,
     restoring, saveStatus,
-    resolved, toggleResolved, resolveAndNext, jurisdiction, setJurisdiction, busyAction, runAction, applyRewrite, editText, renameDocument, removeDocuments,
+    resolved, toggleResolved, resolveAndNext, jurisdiction, setJurisdiction, busyAction, runAction, applyRewrite, editText, editDocumentText, renameDocument, removeDocuments,
     notice, setNotice, addOpen, setAddOpen, addStage, setAddStage, addMessage, addDocument, isDemo, stats,
-    comments, reactions, toggleReaction, toggleSaved, deleteMessage, sendMessage, draft, setDraft, composerFocus, focusComposer, tasks, addTask, toggleTask,
+    comments, toggleReaction, toggleSaved, deleteMessage, sendMessage, importSharedDocument, draft, setDraft, composerFocus, focusComposer, tasks, addTask, toggleTask,
     messageTab, setMessageTab, discuss,
     workspaces, activeWorkspace, activeChannelId, setActiveChannelId, members, refreshMembers, forgetWorkspace, workspaceNotice, refreshWorkspaces, createWorkspace, createInvite, joinWorkspace, selectWorkspace,
     assistantOpen, setAssistantOpen, assistantQuestion, askAssistant,
