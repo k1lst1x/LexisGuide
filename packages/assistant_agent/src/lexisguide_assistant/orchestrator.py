@@ -27,18 +27,33 @@ class ReviewSpecialist:
     name = "review"
 
     def run(self, request: ChatRequest) -> SpecialistNote:
-        excerpt = request.context.document_excerpt or ""
-        findings = check_clause(excerpt)["findings"] if excerpt else []
+        attached = request.context.attachments
+        # A file the person attached is what they are asking about; the
+        # document open in the workspace is only background.
+        excerpt = (
+            "\n\n".join(item.text for item in attached)
+            if attached
+            else request.context.document_excerpt or ""
+        )
         if not excerpt:
             return SpecialistNote(self.name, "Review specialist: no document excerpt is available.")
+        findings = check_clause(excerpt)["findings"]
         evidence = "; ".join(
             f"{item['title']} — evidence: {item['evidence']}" for item in findings[:4]
         )
+        source = (
+            "the attached file"
+            + ("s" if len(attached) > 1 else "")
+            + f" ({', '.join(item.name for item in attached)}), whose text is in the "
+            "person's message"
+            if attached
+            else "the supplied document excerpt"
+        )
         return SpecialistNote(
             self.name,
-            "Review specialist: use only the supplied document excerpt for "
-            "document-specific claims. Pattern findings: "
-            f"{evidence or 'none'}. Include exact evidence where relevant.",
+            f"Review specialist: review {source}, and use only it for document-specific "
+            f"claims. Pattern findings: {evidence or 'none'}. Include exact evidence where "
+            "relevant.",
         )
 
 
@@ -104,7 +119,11 @@ class SupervisorAgent:
     def plan(request: ChatRequest) -> list[str]:
         question = request.messages[-1].content.lower()
         roles: list[str] = []
-        has_document = bool(request.context.document_excerpt or request.context.current_finding)
+        has_document = bool(
+            request.context.attachments
+            or request.context.document_excerpt
+            or request.context.current_finding
+        )
         review_query = r"\b(clause|finding|risk|deadline|notice|document)\b"
         if has_document or re.search(review_query, question):
             roles.append("review")
