@@ -306,6 +306,65 @@ def test_members_can_leave_and_admins_can_remove_them(api: TestClient, workspace
     assert channel["id"]
 
 
+def test_admin_removal_clears_channel_access_before_a_member_is_reinvited(
+    api: TestClient, workspace: str
+) -> None:
+    as_user(BOB)
+    channel = create(api, workspace, "private-notes")
+
+    storage.admin_remove_workspace_member(workspace, BOB["sub"])
+
+    as_user(ADA)
+    invite = api.post(f"/api/v1/workspaces/{workspace}/invites").json()["invite_code"]
+    as_user(BOB)
+    assert api.post("/api/v1/workspaces/join", json={"invite_code": invite}).status_code == 200
+
+    assert channels(api, workspace)["private-notes"]["is_member"] is False
+    blocked = api.post(
+        f"/api/v1/workspaces/{workspace}/messages",
+        json={"text": "I should rejoin first.", "channel_id": channel["id"]},
+    )
+    assert blocked.status_code == 403
+
+
+def test_workspace_limit_is_enforced_and_a_deleted_workspace_frees_capacity(
+    api: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(storage, "MAX_WORKSPACES_PER_USER", 1)
+    as_user(ADA)
+    first = api.post("/api/v1/workspaces", json={"name": "First"})
+    assert first.status_code == 201
+    assert api.post("/api/v1/workspaces", json={"name": "Second"}).status_code == 429
+
+    assert api.delete(f"/api/v1/workspaces/{first.json()['id']}").status_code == 204
+    assert api.post("/api/v1/workspaces", json={"name": "Replacement"}).status_code == 201
+
+
+def test_channel_and_message_limits_are_enforced_and_deletion_releases_capacity(
+    api: TestClient, workspace: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(storage, "MAX_CHANNELS_PER_WORKSPACE", 2)
+    as_user(ADA)
+    channel = create(api, workspace, "deadlines")
+    assert (
+        api.post(f"/api/v1/workspaces/{workspace}/channels", json={"name": "notices"}).status_code
+        == 429
+    )
+
+    assert api.delete(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}").status_code == 204
+    assert create(api, workspace, "notices")["name"] == "notices"
+
+    monkeypatch.setattr(storage, "MAX_MESSAGES_PER_WORKSPACE", 1)
+    first = post(api, workspace, "First")
+    assert (
+        api.post(f"/api/v1/workspaces/{workspace}/messages", json={"text": "Second"}).status_code
+        == 429
+    )
+
+    assert api.delete(f"/api/v1/workspaces/{workspace}/messages/{first['id']}").status_code == 204
+    assert post(api, workspace, "Replacement")["text"] == "Replacement"
+
+
 def test_a_member_cannot_remove_others_and_nobody_removes_the_owner(
     api: TestClient, workspace: str
 ) -> None:
