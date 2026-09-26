@@ -31,6 +31,7 @@ from app.storage import (
     create_workspace_channel,
     create_workspace_invite,
     create_workspace_message,
+    delete_workspace,
     delete_workspace_channel,
     delete_workspace_message,
     get_conversation,
@@ -51,10 +52,12 @@ from app.storage import (
     release_lawyer_attempt,
     release_remote_operation,
     remove_channel_member,
+    remove_workspace_member,
     reserve_lawyer_attempt,
     save_conversation_with_limit,
     save_lawyer_verification,
     set_workspace_linked_document,
+    set_workspace_member_role,
     update_workspace_channel,
 )
 
@@ -199,8 +202,9 @@ class WorkspaceChannel(BaseModel):
     last_message_at: str = ""
     member_count: int = 0
     is_member: bool = False
-    # Whether the caller may edit or delete it: its creator, or a workspace admin.
+    # Its creator or a workspace admin may edit it; only admins may delete it.
     can_manage: bool = False
+    can_delete: bool = False
 
 
 class WorkspaceLinkedDocument(BaseModel):
@@ -647,6 +651,13 @@ async def read_workspace_members(
     return [WorkspaceMember(**member) for member in list_workspace_members(workspace_id)]
 
 
+class MemberRoleUpdate(BaseModel):
+    role: str = Field(pattern="^(admin|member)$")
+
+
+USER_ID = r"^[A-Za-z0-9_.@+-]{1,128}$"
+
+
 CHANNEL_ID = r"^[A-Za-z0-9-]{1,80}$"
 
 
@@ -664,13 +675,24 @@ def _channel_or_404(workspace_id: str, channel_id: str) -> dict:
     return channel
 
 
+ADMIN_ROLES = {"owner", "admin"}
+
+
+def _is_admin(membership: dict) -> bool:
+    return membership.get("role") in ADMIN_ROLES
+
+
 def _can_manage(membership: dict, channel: dict, user: dict[str, str]) -> bool:
-    """A channel's creator, or a workspace owner or admin, may change it."""
-    return membership.get("role") in {"owner", "admin"} or channel.get("created_by") == user["sub"]
+    """A channel's creator, or a workspace owner or admin, may edit it."""
+    return _is_admin(membership) or channel.get("created_by") == user["sub"]
 
 
 def _as_view(channel: dict, membership: dict, user: dict[str, str]) -> WorkspaceChannel:
-    return WorkspaceChannel(**channel, can_manage=_can_manage(membership, channel, user))
+    return WorkspaceChannel(
+        **channel,
+        can_manage=_can_manage(membership, channel, user),
+        can_delete=_is_admin(membership) and channel["id"] != "general",
+    )
 
 
 def _channel_view(workspace_id: str, channel_id: str, user: dict[str, str]) -> WorkspaceChannel:
@@ -680,6 +702,72 @@ def _channel_view(workspace_id: str, channel_id: str, user: dict[str, str]) -> W
     if channel is None:
         raise HTTPException(status_code=404, detail="Channel not found.")
     return _as_view(channel, membership, user)
+
+
+@router.put("/workspaces/{workspace_id}/members/{member_id}/role", response_model=WorkspaceMember)
+async def change_member_role(
+    workspace_id: str,
+    payload: MemberRoleUpdate,
+    member_id: str = Path(pattern=USER_ID),
+    user: dict[str, str] = Depends(current_user),
+) -> WorkspaceMember:
+    """Only the workspace owner hands out or takes back admin rights."""
+    membership = _workspace_member(workspace_id, user)
+    if membership.get("role") != "owner":
+        raise HTTPException(
+            status_code=403, detail="Only the workspace owner can change admin rights."
+        )
+    target = get_workspace_membership(workspace_id, member_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="That person is not in this workspace.")
+    if target.get("role") == "owner":
+        raise HTTPException(status_code=400, detail="The owner's role cannot be changed.")
+    set_workspace_member_role(workspace_id, member_id, payload.role)
+    return WorkspaceMember(**{**target, "role": payload.role})
+
+
+@router.delete(
+    "/workspaces/{workspace_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def remove_member(
+    workspace_id: str,
+    member_id: str = Path(pattern=USER_ID),
+    user: dict[str, str] = Depends(current_user),
+) -> None:
+    """Leave a workspace yourself, or, as an admin, remove someone from it.
+
+    The owner can remove anyone but cannot leave; admins can remove members
+    but not other admins.
+    """
+    membership = _workspace_member(workspace_id, user)
+    target = get_workspace_membership(workspace_id, member_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="That person is not in this workspace.")
+    if target.get("role") == "owner":
+        raise HTTPException(
+            status_code=400,
+            detail="The owner cannot leave or be removed. Delete the workspace instead.",
+        )
+    leaving = member_id == user["sub"]
+    if not leaving:
+        if not _is_admin(membership):
+            raise HTTPException(status_code=403, detail="Only workspace admins can remove people.")
+        if target.get("role") == "admin" and membership.get("role") != "owner":
+            raise HTTPException(
+                status_code=403, detail="Only the workspace owner can remove an admin."
+            )
+    remove_workspace_member(workspace_id, member_id)
+
+
+@router.delete("/workspaces/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_workspace(workspace_id: str, user: dict[str, str] = Depends(current_user)) -> None:
+    """Delete the workspace for everyone: channels, messages, and memberships."""
+    membership = _workspace_member(workspace_id, user)
+    if not _is_admin(membership):
+        raise HTTPException(
+            status_code=403, detail="Only workspace admins can delete the workspace."
+        )
+    delete_workspace(workspace_id)
 
 
 @router.get("/workspaces/{workspace_id}/channels", response_model=list[WorkspaceChannel])
@@ -750,14 +838,11 @@ async def remove_workspace_channel(
     user: dict[str, str] = Depends(current_user),
 ) -> None:
     membership = _workspace_member(workspace_id, user)
-    channel = _channel_or_404(workspace_id, channel_id)
+    _channel_or_404(workspace_id, channel_id)
     if channel_id == "general":
         raise HTTPException(status_code=400, detail="General cannot be deleted.")
-    if not _can_manage(membership, channel, user):
-        raise HTTPException(
-            status_code=403,
-            detail="Only the channel's creator or a workspace admin can delete it.",
-        )
+    if not _is_admin(membership):
+        raise HTTPException(status_code=403, detail="Only workspace admins can delete channels.")
     delete_workspace_channel(workspace_id, channel_id)
 
 

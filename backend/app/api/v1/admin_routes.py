@@ -6,11 +6,14 @@ refused at once rather than when their token expires. Each change is written to
 the audit log with the admin who made it.
 """
 
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field
 
-from app import admin
+from app import admin, lawfirm
 from app.auth import current_admin
+from app.ledger import configured_ledger
 from app.storage import (
     admin_data_totals,
     admin_delete_user_data,
@@ -377,3 +380,68 @@ def read_audit_log(
     _actor: dict[str, str] = Depends(admin_actor),
 ) -> list[AuditEntry]:
     return [AuditEntry(**entry) for entry in list_admin_actions(limit=limit)]
+
+
+class IntegrationStatus(BaseModel):
+    configured: bool
+    ready: bool
+    detail: str = ""
+
+
+class Integrations(BaseModel):
+    bar_verification: IntegrationStatus
+    document_ledger: IntegrationStatus
+
+
+def _bar_verification_status() -> IntegrationStatus:
+    """Whether the lawfirm.dev key is set up and readable.
+
+    Loads the key from Secrets Manager but never calls lawfirm.dev, so the
+    check spends none of the plan's daily lookups.
+    """
+    if not (os.getenv("LAWFIRM_API_KEY") or os.getenv("LAWFIRM_API_KEY_SECRET_ARN")):
+        return IntegrationStatus(
+            configured=False,
+            ready=False,
+            detail="No key is configured. Set LAWFIRM_API_KEY_SECRET_ARN and redeploy.",
+        )
+    try:
+        loaded = bool(lawfirm.configured_api_key())
+    except lawfirm.LawFirmUnavailableError:
+        return IntegrationStatus(
+            configured=True,
+            ready=False,
+            detail="The key's secret could not be read. Check the ARN and the API's access to it.",
+        )
+    return IntegrationStatus(
+        configured=True,
+        ready=loaded,
+        detail="Key loaded. Bar numbers are checked live against lawfirm.dev."
+        if loaded
+        else "The secret is empty or has no api_key field.",
+    )
+
+
+def _ledger_status() -> IntegrationStatus:
+    if not os.getenv("LEDGER_CONTRACT_ADDRESS"):
+        return IntegrationStatus(configured=False, ready=False, detail="No contract address set.")
+    try:
+        ledger = configured_ledger()
+    except Exception:  # noqa: BLE001 - reported to the admin, not raised
+        return IntegrationStatus(
+            configured=True, ready=False, detail="The recorder key could not be loaded."
+        )
+    network = ledger.network if ledger else {}
+    return IntegrationStatus(
+        configured=True,
+        ready=ledger is not None,
+        detail=f"{network.get('network', '')} · {network.get('contract_address', '')}",
+    )
+
+
+@router.get("/integrations", response_model=Integrations)
+def read_integrations(_actor: dict[str, str] = Depends(admin_actor)) -> Integrations:
+    """Configuration health for the outside services, without using their quotas."""
+    return Integrations(
+        bar_verification=_bar_verification_status(), document_ledger=_ledger_status()
+    )

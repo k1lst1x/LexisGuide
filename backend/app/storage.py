@@ -400,6 +400,42 @@ def get_workspace_membership(workspace_id: str, user_id: str) -> dict[str, Any] 
     )
 
 
+def set_workspace_member_role(workspace_id: str, user_id: str, role: str) -> None:
+    """Change a member's role, on both the roster row and their own pointer."""
+    for key in (
+        {"PK": f"WORKSPACE#{workspace_id}", "SK": f"MEMBER#{user_id}"},
+        {"PK": f"USER#{user_id}", "SK": f"WORKSPACE#{workspace_id}"},
+    ):
+        _table().update_item(
+            Key=key,
+            UpdateExpression="SET #role = :role",
+            ConditionExpression=Attr("PK").exists(),
+            ExpressionAttributeNames={"#role": "role"},
+            ExpressionAttributeValues={":role": role},
+        )
+
+
+def remove_workspace_member(workspace_id: str, user_id: str) -> None:
+    """Take someone out of a workspace, including every channel they joined."""
+    keys = [
+        {"PK": f"WORKSPACE#{workspace_id}", "SK": f"MEMBER#{user_id}"},
+        {"PK": f"USER#{user_id}", "SK": f"WORKSPACE#{workspace_id}"},
+    ]
+    keys += [
+        {"PK": item["PK"], "SK": item["SK"]}
+        for item in _query_prefix(workspace_id, "CHANMEM#")
+        if item.get("user_id") == user_id
+    ]
+    with _table().batch_writer() as batch:
+        for key in keys:
+            batch.delete_item(Key=key)
+
+
+def delete_workspace(workspace_id: str) -> None:
+    """Delete a workspace with its channels, messages, and every membership."""
+    admin_delete_workspace(workspace_id)
+
+
 def list_workspace_members(workspace_id: str) -> list[dict[str, Any]]:
     response = _table().query(
         KeyConditionExpression=Key("PK").eq(f"WORKSPACE#{workspace_id}")

@@ -240,3 +240,89 @@ def test_outsiders_see_nothing(api: TestClient, workspace: str) -> None:
         api.post(f"/api/v1/workspaces/{workspace}/channels", json={"name": "x"}).status_code == 403
     )
     assert api.get(f"/api/v1/workspaces/{workspace}/channels/general/members").status_code == 403
+
+
+# ── Admin rights and the workspace itself ───────────────────────────────────
+
+
+def roster(api: TestClient, workspace_id: str) -> dict[str, str]:
+    members = api.get(f"/api/v1/workspaces/{workspace_id}/members").json()
+    return {member["name"]: member["role"] for member in members}
+
+
+def test_only_admins_can_delete_a_channel_even_its_creator(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    channel = create(api, workspace, "bobs-channel")
+    assert channel["can_manage"] is True and channel["can_delete"] is False
+
+    assert api.delete(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}").status_code == 403
+
+    as_user(ADA)
+    assert channels(api, workspace)["bobs-channel"]["can_delete"] is True
+    assert api.delete(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}").status_code == 204
+
+
+def test_the_owner_grants_and_removes_admin_rights(api: TestClient, workspace: str) -> None:
+    as_user(ADA)
+    granted = api.put(
+        f"/api/v1/workspaces/{workspace}/members/{BOB['sub']}/role", json={"role": "admin"}
+    )
+    assert granted.status_code == 200
+    assert roster(api, workspace) == {"Ada": "owner", "Bob": "admin"}
+
+    # Bob, now an admin, can delete channels and sees himself as an admin.
+    as_user(BOB)
+    assert api.get("/api/v1/workspaces").json()[0]["role"] == "admin"
+    channel = create(api, workspace, "temporary")
+    assert api.delete(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}").status_code == 204
+
+    as_user(ADA)
+    api.put(f"/api/v1/workspaces/{workspace}/members/{BOB['sub']}/role", json={"role": "member"})
+    assert roster(api, workspace) == {"Ada": "owner", "Bob": "member"}
+
+
+def test_only_the_owner_hands_out_admin_rights(api: TestClient, workspace: str) -> None:
+    as_user(ADA)
+    api.put(f"/api/v1/workspaces/{workspace}/members/{BOB['sub']}/role", json={"role": "admin"})
+
+    as_user(BOB)
+    # An admin cannot promote others or demote the owner.
+    demote = api.put(
+        f"/api/v1/workspaces/{workspace}/members/{ADA['sub']}/role", json={"role": "member"}
+    )
+    assert demote.status_code == 403
+    assert roster(api, workspace)["Ada"] == "owner"
+
+
+def test_members_can_leave_and_admins_can_remove_them(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    channel = create(api, workspace, "bobs-notes")
+    assert api.delete(f"/api/v1/workspaces/{workspace}/members/{BOB['sub']}").status_code == 204
+
+    as_user(ADA)
+    assert roster(api, workspace) == {"Ada": "owner"}
+    # Leaving also took Bob out of every channel he had joined.
+    assert channels(api, workspace)["bobs-notes"]["member_count"] == 0
+    assert channel["id"]
+
+
+def test_a_member_cannot_remove_others_and_nobody_removes_the_owner(
+    api: TestClient, workspace: str
+) -> None:
+    as_user(BOB)
+    assert api.delete(f"/api/v1/workspaces/{workspace}/members/{ADA['sub']}").status_code == 400
+    as_user(ADA)
+    assert api.delete(f"/api/v1/workspaces/{workspace}/members/{ADA['sub']}").status_code == 400
+
+
+def test_only_admins_can_delete_the_workspace(api: TestClient, workspace: str) -> None:
+    as_user(BOB)
+    assert api.delete(f"/api/v1/workspaces/{workspace}").status_code == 403
+
+    as_user(ADA)
+    assert api.delete(f"/api/v1/workspaces/{workspace}").status_code == 204
+
+    assert api.get("/api/v1/workspaces").json() == []
+    as_user(BOB)
+    assert api.get("/api/v1/workspaces").json() == []
+    assert api.get(f"/api/v1/workspaces/{workspace}/channels").status_code == 403

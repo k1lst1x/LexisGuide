@@ -61,8 +61,11 @@ def configured_api_key() -> str:
     if not secret_arn:
         return ""
     try:
+        # The key may live in another region than the API; an ARN names its own.
+        parts = secret_arn.split(":")
+        region = parts[3] if len(parts) > 3 and parts[2] == "secretsmanager" and parts[3] else None
         secret = boto3.client(
-            "secretsmanager", region_name=os.getenv("AWS_REGION", "us-east-1")
+            "secretsmanager", region_name=region or os.getenv("AWS_REGION", "us-east-1")
         ).get_secret_value(SecretId=secret_arn)
     except Exception as error:
         raise LawFirmUnavailableError("The statute source is temporarily unavailable.") from error
