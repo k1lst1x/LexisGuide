@@ -18,7 +18,7 @@ dependencies = [
   "PyJWT[crypto]>=2.10,<3.0",
   "python-dotenv>=1.1,<2.0",
   "uvicorn[standard]>=0.38,<0.54",
-  "web3>=7.6,<8",
+  "web3>=7.6,<9",
 ]
 
 [project.optional-dependencies]
