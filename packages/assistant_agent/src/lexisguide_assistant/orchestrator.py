@@ -132,7 +132,9 @@ class SupervisorAgent:
             question,
         ):
             roles.append("research")
-        if re.search(r"\b(draft|rewrite|clearer wording|reword|negotiate|negotiation|fix|change)\b", question):
+        if re.search(
+            r"\b(draft|rewrite|clearer wording|reword|negotiate|negotiation|fix|change)\b", question
+        ):
             roles.append("drafting")
         return roles
 
@@ -154,4 +156,9 @@ class SupervisorAgent:
         notes = [self.specialists[role](request) for role in roles]
         specialist_context = "\n\n".join(f"[{note.name}]\n{note.text}" for note in notes)
         reply = self.agent.chat(request, specialist_context=specialist_context)
-        return reply.model_copy(update={"agents_used": roles, "workspace_actions": self.proposed_workspace_actions(request)})
+        return reply.model_copy(
+            update={
+                "agents_used": roles,
+                "workspace_actions": self.proposed_workspace_actions(request),
+            }
+        )

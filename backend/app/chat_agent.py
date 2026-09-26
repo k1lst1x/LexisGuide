@@ -48,7 +48,9 @@ class AssistantClient:
             # same deterministic, confirmation-based actions the local supervisor uses.
             if not reply.workspace_actions:
                 reply = reply.model_copy(
-                    update={"workspace_actions": SupervisorAgent.proposed_workspace_actions(request)}
+                    update={
+                        "workspace_actions": SupervisorAgent.proposed_workspace_actions(request)
+                    }
                 )
             return reply
         return self.agent.chat(request)

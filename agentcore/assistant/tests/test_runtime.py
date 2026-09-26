@@ -18,7 +18,7 @@ class AssistantRuntimeTests(unittest.TestCase):
         with patch.object(main.agent.agent, "_client", FakeBedrock()):
             result = main.invoke({"messages": [{"role": "user", "content": "What is a lien?"}]})
         self.assertEqual(
-            result, {"reply": "A lien is a claim.", "tools_used": [], "agents_used": []}
+            result, {"reply": "A lien is a claim.", "tools_used": [], "agents_used": [], "workspace_actions": []}
         )
 
     def test_rejects_an_invalid_request(self) -> None:
