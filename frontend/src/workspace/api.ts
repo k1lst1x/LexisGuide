@@ -173,6 +173,15 @@ export async function workspaceRequest<T>(path: string, init: RequestInit = {}):
   return response.json() as Promise<T>
 }
 
+export type SharedWorkspaceMessage = {
+  id: string
+  user: string
+  author_email: string
+  text: string
+  created_at: string
+  attachment?: string | null
+}
+
 export type StoredTurn = { id: string; role: 'user' | 'assistant'; content: string; local?: boolean }
 
 /** Read a saved conversation from the signed-in user's own history. */
