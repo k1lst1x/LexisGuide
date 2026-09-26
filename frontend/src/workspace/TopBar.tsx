@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, LogOut, Search, Settings, Sparkles, X } from 'lucide-react'
+import { Bell, CloudAlert, CloudCheck, LoaderCircle, LogOut, Search, Settings, Sparkles, X } from 'lucide-react'
 import { useWorkspace } from './store'
 import { aiSearch, type AiSearchResult } from './api'
 import { documentDisplayName, documentKind, openFindings } from './data'
@@ -159,4 +159,14 @@ export function AccountMenu({ onSignOut, onClose }: { onSignOut?: () => void; on
       )}
     </div>
   )
+}
+
+/** Whether the workspace is safely on the server. Silent until something has been saved. */
+export function SaveStatus() {
+  const ws = useWorkspace()
+  if (ws.restoring) return <span className="ws-save is-saving" role="status"><LoaderCircle size={14} className="ws-spin" aria-hidden="true" /> Restoring…</span>
+  if (ws.saveStatus === 'saving') return <span className="ws-save is-saving" role="status"><LoaderCircle size={14} className="ws-spin" aria-hidden="true" /> Saving…</span>
+  if (ws.saveStatus === 'saved') return <span className="ws-save is-saved" role="status"><CloudCheck size={14} aria-hidden="true" /> All changes saved</span>
+  if (ws.saveStatus === 'error') return <span className="ws-save is-error" role="status"><CloudAlert size={14} aria-hidden="true" /> Not saved yet · retrying</span>
+  return null
 }
