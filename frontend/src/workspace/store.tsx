@@ -8,6 +8,7 @@ import {
 } from './data'
 import { reviewNewDocument, runDocumentAction, workspaceRequest, type SharedWorkspaceMessage } from './api'
 import { recordChange, recordEdit, sha256Hex } from './ledger'
+import { findRewriteRange } from './rewrite'
 import { useSavedWorkspace } from './useSavedWorkspace'
 
 const RESOLVED_KEY = 'lexisguide:resolved-findings'
@@ -334,11 +335,16 @@ function useWorkspaceState(userEmail?: string) {
   }, [selected, jurisdiction, updateDocument])
 
   const applyRewrite = useCallback((finding: Finding) => {
-    if (!finding.suggestedRewrite || !finding.evidence || !selected.text.includes(finding.evidence)) {
-      setNotice('This suggestion could not be matched to the exact text, so nothing was changed.')
+    if (!finding.suggestedRewrite || !finding.evidence) {
+      setNotice('This suggestion is missing the original text needed to apply it.')
       return
     }
-    const text = selected.text.replace(finding.evidence, finding.suggestedRewrite)
+    const range = findRewriteRange(selected.text, finding.evidence)
+    if (!range) {
+      setNotice('This suggestion could not be matched to the document text, so nothing was changed.')
+      return
+    }
+    const text = `${selected.text.slice(0, range.start)}${finding.suggestedRewrite}${selected.text.slice(range.end)}`
     updateDocument({ ...selected, text, version: 'Working copy · edit applied' })
     void recordChange({ documentId: selected.id, kind: 'rewrite_applied', text, title: selected.title })
     setResolved((current) => ({ ...current, [selected.id]: [...new Set([...(current[selected.id] ?? []), finding.id])] }))
