@@ -48,11 +48,9 @@ class FakeStore:
         return outcome, self.save(user_id, conversation_id, turns, title)
 
     def list(self, user_id: str, limit: int = 30) -> list[dict[str, Any]]:
-        return [
-            {**row, "turns": []}
-            for (owner, _), row in self.rows.items()
-            if owner == user_id
-        ][:limit]
+        return [{**row, "turns": []} for (owner, _), row in self.rows.items() if owner == user_id][
+            :limit
+        ]
 
 
 TURNS = [
@@ -120,9 +118,10 @@ def test_conversations_are_listed_for_their_owner_only(
 
 
 def test_saving_requires_a_signed_in_person(client: TestClient) -> None:
-    assert client.put(
-        f"/api/v1/me/conversations/{CONVERSATION}", json={"turns": TURNS}
-    ).status_code == 401
+    assert (
+        client.put(f"/api/v1/me/conversations/{CONVERSATION}", json={"turns": TURNS}).status_code
+        == 401
+    )
 
 
 @pytest.mark.parametrize("conversation_id", ["short", "has spaces", "../escape", "x" * 65])

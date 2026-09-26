@@ -218,9 +218,7 @@ def test_create_record_generates_id_and_validates_type(
 ) -> None:
     captured: dict[str, Any] = {}
 
-    def fake_create_record(
-        user_id: str, record_id: str, record: dict[str, Any]
-    ) -> dict[str, Any]:
+    def fake_create_record(user_id: str, record_id: str, record: dict[str, Any]) -> dict[str, Any]:
         captured.update(user_id=user_id, record_id=record_id, record=record)
         return record
 
