@@ -34,6 +34,7 @@ export function WorkspaceChat({ userEmail }: { userEmail?: string }) {
       open={ws.assistantOpen}
       onOpenChange={ws.setAssistantOpen}
       pendingQuestion={ws.assistantQuestion}
+      documents={ws.documents.map((item) => ({ id: item.id, title: item.title, type: item.type, text: item.text }))}
       suggestions={assistantQuickPrompts[ws.nav]}
       fallback={fallback}
       greeting={`Hi! I can explain ${documentDisplayName(doc)}, a legal term, or how to use LexisGuide. What would you like to know?`}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { ArrowUp, Mic, Square } from 'lucide-react'
 import { useVoiceInput } from './useVoiceInput'
+import { MAX_MESSAGE_CHARS } from './useAssistantChat'
 
 /* The collapsed pill springs open on focus and settles back when left empty.
    Two timings, as in the reference: the open and close overshoot on a spring,
@@ -23,6 +24,12 @@ export type PromptComposerProps = {
   maxLength?: number
   /** Offer dictation. Ignored where the browser cannot transcribe. */
   voice?: boolean
+  /** While an answer is being written, the send button stops it. */
+  onStop?: () => void
+  /** Files pasted into the box, rather than text. */
+  onPasteFiles?: (files: File[]) => void
+  /** Allow sending with no text, e.g. when files are attached. */
+  canSendEmpty?: boolean
 }
 
 /** The assistant composer: a pill that opens into a card while it is in use. */
@@ -33,8 +40,11 @@ export function PromptComposer({
   busy = false,
   placeholder = 'Ask anything…',
   label = 'Ask LexisGuide',
-  maxLength = 4000,
+  maxLength = MAX_MESSAGE_CHARS,
   voice = false,
+  onStop,
+  onPasteFiles,
+  canSendEmpty = false,
 }: PromptComposerProps) {
   const [expanded, setExpanded] = useState(false)
   // Typing resizes; opening and closing spring. Keeping them apart is what
@@ -102,17 +112,19 @@ export function PromptComposer({
   const submit = (event?: FormEvent) => {
     event?.preventDefault()
     const text = value.trim()
-    if (!text || busy || sentValueRef.current !== null) return
-    sentValueRef.current = text
+    if ((!text && !canSendEmpty) || busy || sentValueRef.current !== null) return
+    sentValueRef.current = text || ' '
     if (mic.recording) mic.stop()
     setTyping(false)
     onSubmit(text)
     setExpanded(false)
   }
 
-  // One button, three jobs: send what is written, stop dictating, or start.
-  const action = mic.recording ? 'stop' : hasValue ? 'send' : voice && mic.supported ? 'mic' : 'send'
-  const actionLabel = { send: 'Send question', stop: 'Stop dictation', mic: 'Dictate your question' }[action]
+  // One button, four jobs: stop an answer, send what is written, stop
+  // dictating, or start.
+  const action = busy && onStop ? 'halt' : mic.recording ? 'stop' : hasValue || canSendEmpty ? 'send' : voice && mic.supported ? 'mic' : 'send'
+  const actionLabel = { halt: 'Stop answer', send: 'Send question', stop: 'Stop dictation', mic: 'Dictate your question' }[action]
+  const nearLimit = value.length > maxLength * 0.8
 
   return (
     <form
@@ -165,6 +177,10 @@ export function PromptComposer({
           ref={textareaRef}
           value={value}
           onChange={(event) => { setTyping(true); onChange(event.target.value) }}
+          onPaste={(event) => {
+            const files = [...event.clipboardData.files]
+            if (files.length && onPasteFiles) { event.preventDefault(); onPasteFiles(files) }
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
@@ -205,23 +221,24 @@ export function PromptComposer({
         <button
           type={action === 'send' ? 'submit' : 'button'}
           className={`cw-prompt-send ${mic.recording ? 'is-recording' : ''}`}
-          disabled={action === 'send' && (!hasValue || busy)}
+          disabled={action === 'send' && ((!hasValue && !canSendEmpty) || busy)}
           aria-label={actionLabel}
           title={actionLabel}
           onClick={(event) => {
             if (action === 'send') return
             event.preventDefault()
-            if (mic.recording) mic.stop()
+            if (action === 'halt') onStop?.()
+            else if (mic.recording) mic.stop()
             else void mic.start()
           }}
         >
-          {action === 'send' ? <ArrowUp size={16} /> : action === 'stop' ? <Square size={13} /> : <Mic size={15} />}
+          {action === 'send' ? <ArrowUp size={16} /> : action === 'stop' || action === 'halt' ? <Square size={13} /> : <Mic size={15} />}
         </button>
 
         {isOpen && (
           <div className="cw-prompt-meta" aria-hidden="true">
             <span>LexisGuide AI</span>
-            <span>{mic.recording ? 'Listening…' : 'Shift + Enter for a new line'}</span>
+            <span className={nearLimit ? 'is-near-limit' : ''}>{mic.recording ? 'Listening…' : nearLimit ? `${value.length.toLocaleString()} / ${maxLength.toLocaleString()} characters` : 'Shift + Enter for a new line'}</span>
           </div>
         )}
       </div>

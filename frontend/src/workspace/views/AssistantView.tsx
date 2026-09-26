@@ -32,6 +32,7 @@ export function AssistantView() {
         storageKey="lexisguide:chat-assistant-page"
         suggestions={assistantQuickPrompts.assistant}
         fallback={fallback}
+        documents={ws.documents.map((item) => ({ id: item.id, title: item.title, type: item.type, text: item.text }))}
         greeting={`Hi, I’m LexisGuide. I have ${documentDisplayName(document)} in context. What would you like to understand?`}
         context={{
           page: 'AI Assistant',
