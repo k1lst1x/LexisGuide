@@ -160,6 +160,7 @@ def test_targeted_document_revision_is_allowed_but_limited_to_the_finding():
     system = " ".join(block["text"] for block in client.calls[0]["system"])
     assert "specific selected finding or excerpt" in system
     assert "that passage only" in system
+    assert "not a detailed work log" in system
 
 
 def test_affirmative_applies_only_after_the_assistant_asks_for_consent():
