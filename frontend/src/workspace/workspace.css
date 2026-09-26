@@ -959,3 +959,10 @@
 @media (prefers-reduced-motion: reduce) {
   .ws-chain li, .ws-chain-live::after, .ws-spin { animation: none; }
 }
+
+/* ───── Saved workspace ───── */
+.ws-save { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; font-size: 12.5px; color: var(--ink-45); white-space: nowrap; }
+.ws-save.is-saved svg { color: var(--green); }
+.ws-save.is-error { color: #9c3726; }
+.ws-restoring { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; padding: 10px 14px; border-radius: 12px; background: var(--sand); box-shadow: inset 0 0 0 1px var(--line); font-size: 13px; color: var(--ink-60); }
+@media (max-width: 640px) { .ws-save { display: none; } }

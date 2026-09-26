@@ -8,6 +8,7 @@ import {
 } from './data'
 import { reviewNewDocument, runDocumentAction, workspaceRequest, type SharedWorkspaceMessage } from './api'
 import { recordChange, recordEdit, sha256Hex } from './ledger'
+import { useSavedWorkspace } from './useSavedWorkspace'
 
 const RESOLVED_KEY = 'lexisguide:resolved-findings'
 const LOCAL_WORKSPACES_KEY = 'lexisguide:local-workspaces'
@@ -99,6 +100,13 @@ function useWorkspaceState(userEmail?: string) {
   const messagesChanged = useRef(false)
   const [reactionsByWorkspace, setReactionsByWorkspace] = useState<Record<string, Record<string, string[]>>>({})
   const [tasks, setTasks] = useState<WorkspaceTask[]>(defaultTasks)
+  // Documents and where the person left off live on the server, so a refresh
+  // or another device opens the workspace as it was.
+  const { restoring, saveStatus } = useSavedWorkspace({
+    enabled: Boolean(userEmail),
+    documents, setDocuments, resolved, setResolved, selectedId, setSelectedId,
+    jurisdiction, setJurisdiction, tasks, setTasks,
+  })
   const [draft, setDraft] = useState('')
   const [messageTab, setMessageTab] = useState<'chat' | 'files' | 'tasks'>('chat')
   // Prevent a double click or overlapping Enter/submit event from creating
@@ -541,6 +549,7 @@ function useWorkspaceState(userEmail?: string) {
 
   return {
     userEmail, nav, go, documents, selected, selectDocument, openInReview, activeFinding, setActiveFindingId, linkedDocument, canManageLinkedDocument, setLinkedDocument,
+    restoring, saveStatus,
     resolved, toggleResolved, resolveAndNext, jurisdiction, setJurisdiction, busyAction, runAction, applyRewrite, editText, renameDocument, removeDocuments,
     notice, setNotice, addOpen, setAddOpen, addStage, setAddStage, addMessage, addDocument, isDemo, stats,
     comments, reactions, toggleReaction, toggleSaved, sendMessage, draft, setDraft, composerFocus, focusComposer, tasks, addTask, toggleTask,
