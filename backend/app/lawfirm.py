@@ -179,6 +179,13 @@ def read_bar_status(payload: dict[str, Any]) -> dict[str, Any]:
     a live response, so each value is read from the plausible spellings and an
     unrecognised status is treated as not verified rather than as verified.
     """
+    # Some provider endpoints wrap their entire response under ``result``.
+    # Unwrap once before reading *every* verification field. Previously only
+    # the attorney name was unwrapped, leaving a valid nested admission/status
+    # looking like a missing or inactive record.
+    inner = payload.get("result")
+    if isinstance(inner, dict):
+        payload = inner
     record = attorney_record(payload)
     admission = _admission_record(payload)
     status = _first(admission, "status", "barStatus", "licenseStatus", "standing") or _first(

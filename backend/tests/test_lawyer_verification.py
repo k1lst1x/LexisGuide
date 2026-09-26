@@ -280,6 +280,17 @@ def test_status_reading_treats_anything_unrecognised_as_unverified() -> None:
         )
 
 
+def test_status_reading_accepts_a_provider_result_envelope() -> None:
+    nested = {"result": ACTIVE_RECORD}
+
+    record = lawfirm.read_bar_status(nested)
+
+    assert record["found"] is True
+    assert record["active"] is True
+    assert record["name"] == "Dana Okafor"
+    assert record["bar_number"] == "1234567"
+
+
 def test_provider_no_record_response_is_not_misread_as_an_inactive_lawyer() -> None:
     record = lawfirm.read_bar_status({"verified": False, "admission": None, "attorney": None})
 
