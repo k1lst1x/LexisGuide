@@ -643,7 +643,16 @@ def consume_workspace_invite(token: str, user: dict[str, str]) -> dict[str, Any]
 
     now_timestamp = int(time.time())
     expires_at = invite.get("expires_at")
-    if not isinstance(expires_at, int) or expires_at <= now_timestamp:
+    # DynamoDB deserializes Number attributes as Decimal, not int. Reject only
+    # values that cannot represent an epoch timestamp; otherwise real invites
+    # would always appear invalid while in-memory tests still passed.
+    if isinstance(expires_at, bool):
+        return None
+    try:
+        expires_timestamp = int(expires_at)
+    except (TypeError, ValueError):
+        return None
+    if expires_timestamp <= now_timestamp:
         return None
 
     try:

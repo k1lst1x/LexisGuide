@@ -1,3 +1,4 @@
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
 
@@ -237,6 +238,32 @@ def test_expired_workspace_invites_cannot_be_redeemed(table: FakeTable) -> None:
     assert storage.consume_workspace_invite("expired-token", {"sub": "member-123"}) is None
     assert table.delete_requests == []
     assert table.put_requests == []
+
+
+def test_workspace_invites_accept_dynamodb_decimal_timestamps(table: FakeTable) -> None:
+    table.get_responses = [
+        {
+            "Item": {
+                "PK": "INVITE#valid-token",
+                "SK": "META",
+                "workspace_id": "workspace-123",
+                "expires_at": Decimal(str(int(storage.time.time()) + 600)),
+            }
+        },
+        {
+            "Item": {
+                "id": "workspace-123",
+                "name": "Shared review",
+                "owner_id": "owner-123",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            }
+        },
+    ]
+
+    workspace = storage.consume_workspace_invite("valid-token", {"sub": "member-123"})
+
+    assert workspace is not None
+    assert table.delete_requests[0]["Key"] == {"PK": "INVITE#valid-token", "SK": "META"}
 
 
 def test_review_quota_uses_an_atomic_expiring_counter(table: FakeTable) -> None:
