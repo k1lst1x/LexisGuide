@@ -32,7 +32,7 @@ const PERSON = {
 }
 const OVERVIEW = {
   users: { total: 12, enabled: 11, disabled: 1, federated: 4, admins: 2 },
-  data: { workspaces: 3, documents: 40, conversations: 9, lawyers_verified: 2, lawyers_locked: 1 },
+  data: { workspaces: 3, documents: 40, conversations: 9 },
   recent_actions: [],
 }
 
@@ -128,7 +128,6 @@ describe('AdminPortal', () => {
         documents: 2,
         conversations: 1,
         workspaces: [],
-        lawyer_verification: { verified: false, attempts_used: 0, attempts_remaining: 3, max_attempts: 3, bar_number: '', jurisdiction: '', name: '', status: '', admitted_on: '', verified_at: '' },
       },
     })
     routes['POST /users/person-user/disable'] = () => { enabled = false; return { body: { ok: true } } }
@@ -160,7 +159,6 @@ describe('AdminPortal', () => {
         documents: 0,
         conversations: 0,
         workspaces: [],
-        lawyer_verification: { verified: false, attempts_used: 0, attempts_remaining: 3, max_attempts: 3, bar_number: '', jurisdiction: '', name: '', status: '', admitted_on: '', verified_at: '' },
       },
     }
     routes['DELETE /users/person-user'] = { body: { ok: true } }

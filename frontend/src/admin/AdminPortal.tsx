@@ -15,7 +15,7 @@ type Section = 'overview' | 'users' | 'workspaces' | 'audit'
 
 const SECTIONS: Array<{ id: Section; label: string; icon: typeof Users; blurb: string }> = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard, blurb: 'Accounts, data, and recent admin activity at a glance.' },
-  { id: 'users', label: 'Accounts', icon: Users, blurb: 'Find a person, change their access, or resolve a bar verification.' },
+  { id: 'users', label: 'Accounts', icon: Users, blurb: 'Find a person or change their access.' },
   { id: 'workspaces', label: 'Workspaces', icon: Building2, blurb: 'Every shared workspace, its host, and its members.' },
   { id: 'audit', label: 'Audit log', icon: ScrollText, blurb: 'Who changed what, and when.' },
 ]

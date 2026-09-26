@@ -291,28 +291,6 @@ def test_a_malformed_username_never_reaches_cognito(
     assert directory.calls == []
 
 
-def test_manual_bar_verification_records_the_admin_and_note(
-    admin_client: TestClient, directory: FakeDirectory, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    saved: dict[str, Any] = {}
-
-    def save(sub: str, record: dict[str, Any]) -> dict[str, Any]:
-        saved.update(record, sub=sub)
-        return {"verified": True, "attempts_used": 3, "attempts_remaining": 0, "max_attempts": 3}
-
-    monkeypatch.setattr(admin_routes, "save_lawyer_verification", save)
-
-    response = admin_client.post(
-        "/api/v1/admin/users/person-user/lawyer-verification",
-        json={"bar_number": "12345", "jurisdiction": "fl", "note": "Checked by phone"},
-    )
-
-    assert response.status_code == 200
-    assert saved["sub"] == "person-sub-0002"
-    assert saved["jurisdiction"] == "FL"
-    assert directory.audit[0]["detail"] == "FL 12345 — Checked by phone"
-
-
 # ── Managing workspaces ──────────────────────────────────────────────────────
 
 
@@ -343,7 +321,7 @@ def test_the_audit_log_is_readable(admin_client: TestClient, directory: FakeDire
 # ── Integrations health, without spending provider quota ────────────────────
 
 
-def test_bar_verification_health_loads_the_key_without_calling_lawfirm(
+def test_statute_lookup_health_loads_the_key_without_calling_lawfirm(
     admin_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app import lawfirm
@@ -358,11 +336,11 @@ def test_bar_verification_health_loads_the_key_without_calling_lawfirm(
 
     body = admin_client.get("/api/v1/admin/integrations").json()
 
-    assert body["bar_verification"]["configured"] is True
-    assert body["bar_verification"]["ready"] is True
+    assert body["statute_lookup"]["configured"] is True
+    assert body["statute_lookup"]["ready"] is True
 
 
-def test_bar_verification_health_says_when_no_key_is_set(
+def test_statute_lookup_health_says_when_no_key_is_set(
     admin_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("LAWFIRM_API_KEY", raising=False)
@@ -370,7 +348,7 @@ def test_bar_verification_health_says_when_no_key_is_set(
 
     body = admin_client.get("/api/v1/admin/integrations").json()
 
-    assert body["bar_verification"] == {
+    assert body["statute_lookup"] == {
         "configured": False,
         "ready": False,
         "detail": "No key is configured. Set LAWFIRM_API_KEY_SECRET_ARN and redeploy.",

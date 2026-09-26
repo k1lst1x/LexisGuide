@@ -252,62 +252,6 @@ export async function saveConversation(conversationId: string, turns: StoredTurn
   }
 }
 
-export type LawyerVerification = {
-  verified: boolean
-  attempts_used: number
-  attempts_remaining: number
-  max_attempts: number
-  bar_number: string
-  jurisdiction: string
-  name: string
-  status: string
-  admitted_on: string
-  verified_at: string
-}
-
-/** Thrown when the bar check returns an answer we must show the person verbatim. */
-export class VerificationError extends Error {
-  /** True once the attempts are gone and only support can help. */
-  readonly locked: boolean
-  /** True when the provider, not the person, was the problem: no attempt was spent. */
-  readonly providerFault: boolean
-
-  constructor(message: string, status: number) {
-    super(message)
-    this.name = 'VerificationError'
-    this.locked = status === 429
-    this.providerFault = status === 503 || status === 502
-  }
-}
-
-/** GET the caller's bar-verification state. */
-export function getLawyerVerification(): Promise<LawyerVerification> {
-  return workspaceRequest<LawyerVerification>('/me/lawyer-verification')
-}
-
-/** POST one bar number for checking. Throws VerificationError with the API's wording. */
-export async function verifyLawyer(barNumber: string, jurisdiction: string): Promise<LawyerVerification> {
-  let token = await cognitoGetIdToken()
-  if (!token) throw new VerificationError('Sign in to verify your bar record.', 401)
-  const send = () => fetch(`${apiBase()}/api/v1/me/lawyer-verification`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ bar_number: barNumber.trim(), jurisdiction: jurisdiction.trim().toUpperCase() }),
-  })
-  let response = await send()
-  if (response.status === 401) {
-    token = await cognitoGetIdToken(true)
-    if (!token) throw new VerificationError('Your session expired. Please sign in again.', 401)
-    response = await send()
-  }
-  const body = await response.json().catch(() => null)
-  if (response.ok) return body as LawyerVerification
-  const detail = typeof body?.detail === 'string'
-    ? body.detail
-    : 'That bar record could not be checked right now.'
-  throw new VerificationError(detail, response.status)
-}
-
 export type AiSearchResult = {
   answer: string
   confidence?: string

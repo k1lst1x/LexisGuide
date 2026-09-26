@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { ChevronRight, LogOut, Search, ShieldCheck, ShieldOff, Trash2, UserCheck, UserX, X } from 'lucide-react'
-import { adminApi, formatDate, type AdminSession, type AdminUser, type UserDetail } from '../api'
+import { adminApi, formatDate, type AdminSession, type AdminUser } from '../api'
 import { useAdminData } from '../hooks'
 import { Badge, ConfirmDialog, Empty, ErrorNote, Spinner } from '../ui'
 
@@ -154,7 +154,6 @@ function UserPanel({ username, session, notify, onClose, onChanged }: PanelProps
   const fetchUser = useCallback(() => adminApi.user(username), [username])
   const { data: detail, error, reload, setData } = useAdminData(fetchUser)
   const [pending, setPending] = useState<Pending | null>(null)
-  const [verifying, setVerifying] = useState(false)
 
   /** Re-read the account after a change, and carry it into the list row too. */
   const load = async () => {
@@ -217,21 +216,6 @@ function UserPanel({ username, session, notify, onClose, onChanged }: PanelProps
               ))}</ul>
             : <Empty>Not in any shared workspace.</Empty>}
 
-          <h3>Lawyer verification</h3>
-          <LawyerSection
-            detail={detail}
-            verifying={verifying}
-            setVerifying={setVerifying}
-            onReset={() => act({
-              title: 'Reset bar verification?',
-              body: <p>This clears {label}’s verification and gives back all {detail.lawyer_verification.max_attempts} attempts, so they can check their bar number again.</p>,
-              confirmLabel: 'Reset verification',
-              run: () => adminApi.resetLawyer(username),
-              done: `Bar verification reset for ${label}.`,
-            })}
-            onVerified={async (message) => { notify(message); setVerifying(false); await load() }}
-          />
-
           <h3>Account actions</h3>
           <div className="adm-actions">
             {detail.enabled ? (
@@ -283,7 +267,7 @@ function UserPanel({ username, session, notify, onClose, onChanged }: PanelProps
           <div className="adm-danger-zone">
             <div>
               <h3>Delete account</h3>
-              <p className="adm-muted">Removes the sign-in, saved documents, conversations, bar verification, and any workspace this person hosts. This cannot be undone.</p>
+              <p className="adm-muted">Removes the sign-in, saved documents, conversations, and any workspace this person hosts. This cannot be undone.</p>
             </div>
             <button type="button" className="adm-btn is-danger" disabled={isSelf} onClick={() => act({
               title: 'Delete this account permanently?',
@@ -317,87 +301,5 @@ function UserPanel({ username, session, notify, onClose, onChanged }: PanelProps
         />
       )}
     </aside>
-  )
-}
-
-type LawyerProps = {
-  detail: UserDetail
-  verifying: boolean
-  setVerifying: (open: boolean) => void
-  onReset: () => void
-  onVerified: (message: string) => Promise<void>
-}
-
-function LawyerSection({ detail, verifying, setVerifying, onReset, onVerified }: LawyerProps) {
-  const lawyer = detail.lawyer_verification
-  const [barNumber, setBarNumber] = useState('')
-  const [jurisdiction, setJurisdiction] = useState('')
-  const [name, setName] = useState('')
-  const [note, setNote] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    setBusy(true)
-    setError('')
-    try {
-      await adminApi.verifyLawyer(detail.username, { bar_number: barNumber.trim(), jurisdiction: jurisdiction.trim().toUpperCase(), name: name.trim(), note: note.trim() })
-      await onVerified(`Bar record recorded as verified for ${detail.email || detail.username}.`)
-    } catch (caught) {
-      setError((caught as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const locked = !lawyer.verified && lawyer.attempts_remaining === 0 && lawyer.attempts_used > 0
-
-  return (
-    <div className="adm-card">
-      <div className="adm-card-row">
-        <div>
-          {lawyer.verified
-            ? <p><Badge tone="green">Verified</Badge> {lawyer.jurisdiction} {lawyer.bar_number}{lawyer.name ? ` · ${lawyer.name}` : ''}</p>
-            : locked
-              ? <p><Badge tone="red">Locked</Badge> All {lawyer.max_attempts} attempts used. This person is waiting on support.</p>
-              : <p className="adm-muted">{lawyer.attempts_used ? `Not verified · ${lawyer.attempts_used} of ${lawyer.max_attempts} attempts used` : 'Has not tried to verify.'}</p>}
-          {lawyer.verified && lawyer.verified_at && <p className="adm-muted">{lawyer.status ? `${lawyer.status} · ` : ''}{formatDate(lawyer.verified_at, true)}</p>}
-        </div>
-        <div className="adm-card-actions">
-          {(lawyer.verified || lawyer.attempts_used > 0) && <button type="button" className="adm-btn is-small" onClick={onReset}>Reset</button>}
-          {!lawyer.verified && !verifying && <button type="button" className="adm-btn is-small" onClick={() => setVerifying(true)}>Verify by hand</button>}
-        </div>
-      </div>
-
-      {verifying && !lawyer.verified && (
-        <form className="adm-form adm-inline-form" onSubmit={submit}>
-          <p className="adm-muted">Only after checking the record with the state bar yourself.</p>
-          <div className="adm-form-row">
-            <label className="adm-field">
-              <span>State</span>
-              <input value={jurisdiction} onChange={(event) => setJurisdiction(event.target.value.replace(/[^A-Za-z]/g, '').slice(0, 2))} placeholder="FL" required minLength={2} maxLength={2} />
-            </label>
-            <label className="adm-field adm-grow">
-              <span>Bar number</span>
-              <input value={barNumber} onChange={(event) => setBarNumber(event.target.value.replace(/[^A-Za-z0-9-]/g, ''))} required maxLength={40} />
-            </label>
-          </div>
-          <label className="adm-field">
-            <span>Name on the bar record</span>
-            <input value={name} onChange={(event) => setName(event.target.value)} maxLength={200} />
-          </label>
-          <label className="adm-field">
-            <span>Note for the audit log</span>
-            <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={500} placeholder="How you confirmed it" />
-          </label>
-          {error && <ErrorNote message={error} />}
-          <div className="adm-actions">
-            <button type="button" className="adm-btn" onClick={() => setVerifying(false)} disabled={busy}>Cancel</button>
-            <button type="submit" className="adm-btn is-primary" disabled={busy}>{busy ? 'Saving…' : 'Mark verified'}</button>
-          </div>
-        </form>
-      )}
-    </div>
   )
 }

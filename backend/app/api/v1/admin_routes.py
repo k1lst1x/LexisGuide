@@ -9,7 +9,7 @@ the audit log with the admin who made it.
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app import admin, lawfirm
 from app.auth import current_admin
@@ -21,12 +21,10 @@ from app.storage import (
     admin_get_workspace,
     admin_list_workspaces,
     admin_remove_workspace_member,
-    admin_reset_lawyer_verification,
     admin_user_data,
     list_admin_actions,
     list_workspace_members,
     record_admin_action,
-    save_lawyer_verification,
 )
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
@@ -66,8 +64,6 @@ class DataTotals(BaseModel):
     workspaces: int
     documents: int
     conversations: int
-    lawyers_verified: int
-    lawyers_locked: int
 
 
 class AuditEntry(BaseModel):
@@ -109,36 +105,15 @@ class UserWorkspace(BaseModel):
     role: str
 
 
-class LawyerStatus(BaseModel):
-    verified: bool
-    attempts_used: int
-    attempts_remaining: int
-    max_attempts: int
-    bar_number: str = ""
-    jurisdiction: str = ""
-    name: str = ""
-    status: str = ""
-    admitted_on: str = ""
-    verified_at: str = ""
-
-
 class UserDetail(AdminUser):
     display_name: str = ""
     documents: int
     conversations: int
     workspaces: list[UserWorkspace]
-    lawyer_verification: LawyerStatus
 
 
 class AdminFlag(BaseModel):
     admin: bool
-
-
-class ManualLawyerVerification(BaseModel):
-    bar_number: str = Field(min_length=1, max_length=40, pattern=r"^[A-Za-z0-9-]+$")
-    jurisdiction: str = Field(min_length=2, max_length=2, pattern=r"^[A-Za-z]{2}$")
-    name: str = Field(default="", max_length=200)
-    note: str = Field(default="", max_length=500)
 
 
 class AdminWorkspace(BaseModel):
@@ -219,8 +194,6 @@ def read_user(
         documents=data.get("documents", 0),
         conversations=data.get("conversations", 0),
         workspaces=data.get("workspaces", []),
-        lawyer_verification=data.get("lawyer_verification")
-        or {"verified": False, "attempts_used": 0, "attempts_remaining": 0, "max_attempts": 0},
     )
 
 
@@ -287,44 +260,6 @@ def delete_user(
     return Done()
 
 
-@router.delete("/users/{username}/lawyer-verification", response_model=LawyerStatus)
-def reset_lawyer_verification(
-    username: str = Path(pattern=USERNAME), actor: dict[str, str] = Depends(admin_actor)
-) -> LawyerStatus:
-    """Clear a verification and its spent attempts so the person can check again."""
-    user = _target_user(username)
-    result = admin_reset_lawyer_verification(user["sub"])
-    record_admin_action(actor, "lawyer.reset", _label(user))
-    return LawyerStatus(**result)
-
-
-@router.post("/users/{username}/lawyer-verification", response_model=LawyerStatus)
-def verify_lawyer_manually(
-    payload: ManualLawyerVerification,
-    username: str = Path(pattern=USERNAME),
-    actor: dict[str, str] = Depends(admin_actor),
-) -> LawyerStatus:
-    """Record a bar membership that support has checked by hand."""
-    user = _target_user(username)
-    result = save_lawyer_verification(
-        user["sub"],
-        {
-            "bar_number": payload.bar_number,
-            "jurisdiction": payload.jurisdiction.upper(),
-            "name": payload.name.strip(),
-            "status": "Verified by support",
-        },
-    )
-    record_admin_action(
-        actor,
-        "lawyer.verify",
-        _label(user),
-        f"{payload.jurisdiction.upper()} {payload.bar_number}"
-        + (f" — {payload.note.strip()}" if payload.note.strip() else ""),
-    )
-    return LawyerStatus(**result)
-
-
 @router.get("/workspaces", response_model=list[AdminWorkspace])
 def read_workspaces(_actor: dict[str, str] = Depends(admin_actor)) -> list[AdminWorkspace]:
     return [AdminWorkspace(**workspace) for workspace in admin_list_workspaces()]
@@ -389,11 +324,11 @@ class IntegrationStatus(BaseModel):
 
 
 class Integrations(BaseModel):
-    bar_verification: IntegrationStatus
+    statute_lookup: IntegrationStatus
     document_ledger: IntegrationStatus
 
 
-def _bar_verification_status() -> IntegrationStatus:
+def _statute_lookup_status() -> IntegrationStatus:
     """Whether the lawfirm.dev key is set up and readable.
 
     Loads the key from Secrets Manager but never calls lawfirm.dev, so the
@@ -416,7 +351,7 @@ def _bar_verification_status() -> IntegrationStatus:
     return IntegrationStatus(
         configured=True,
         ready=loaded,
-        detail="Key loaded. Bar numbers are checked live against lawfirm.dev."
+        detail="Key loaded. Statutes are looked up live on lawfirm.dev."
         if loaded
         else "The secret is empty or has no api_key field.",
     )
@@ -442,6 +377,4 @@ def _ledger_status() -> IntegrationStatus:
 @router.get("/integrations", response_model=Integrations)
 def read_integrations(_actor: dict[str, str] = Depends(admin_actor)) -> Integrations:
     """Configuration health for the outside services, without using their quotas."""
-    return Integrations(
-        bar_verification=_bar_verification_status(), document_ledger=_ledger_status()
-    )
+    return Integrations(statute_lookup=_statute_lookup_status(), document_ledger=_ledger_status())

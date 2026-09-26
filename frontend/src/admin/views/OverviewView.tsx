@@ -19,8 +19,6 @@ export function OverviewView({ onOpen }: Props) {
     { label: 'Workspaces', value: data.workspaces, note: 'Shared spaces', open: 'workspaces' as const },
     { label: 'Saved documents', value: data.documents, note: 'Across all accounts' },
     { label: 'Conversations', value: data.conversations, note: 'Assistant chats kept' },
-    { label: 'Verified lawyers', value: data.lawyers_verified, note: 'Bar record confirmed' },
-    { label: 'Locked verifications', value: data.lawyers_locked, note: 'Out of attempts; need support', open: 'users' as const, tone: data.lawyers_locked ? 'red' : undefined },
   ]
 
   return (
@@ -73,12 +71,12 @@ function Integrations() {
       <div className="adm-panel-head">
         <div>
           <h2>Integrations</h2>
-          <p className="adm-muted">Checked without calling the providers, so no bar-verification lookups are used.</p>
+          <p className="adm-muted">Checked without calling the providers, so no provider lookups are used.</p>
         </div>
       </div>
       {error ? <ErrorNote message={error} onRetry={reload} /> : !data ? <Spinner /> : (
         <ul className="adm-list">
-          <IntegrationRow name="Bar license verification (lawfirm.dev)" status={data.bar_verification} />
+          <IntegrationRow name="Statute lookup (lawfirm.dev)" status={data.statute_lookup} />
           <IntegrationRow name="Document ledger (blockchain)" status={data.document_ledger} />
         </ul>
       )}

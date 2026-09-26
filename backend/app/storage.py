@@ -18,7 +18,6 @@ from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 
 INVITE_TTL_SECONDS = 24 * 60 * 60
-LAWYER_VERIFICATION_MAX_ATTEMPTS = 3
 REVIEW_RATE_LIMIT_WINDOW_SECONDS = 60
 REVIEW_RATE_LIMIT_PER_WINDOW = 10
 CHAT_RATE_LIMIT_WINDOW_SECONDS = 60
@@ -961,95 +960,6 @@ def _consume_quota(kind: str, user_id: str, window_seconds: int, request_limit: 
     return True
 
 
-def get_lawyer_verification(user_id: str) -> dict[str, Any]:
-    """Return this user's bar-verification record, defaulted for a first-time caller."""
-    item = _table().get_item(Key={"PK": f"USER#{user_id}", "SK": "LAWYER"}).get("Item") or {}
-    attempts = int(item.get("attempts", 0))
-    return {
-        "verified": bool(item.get("verified", False)),
-        "attempts_used": attempts,
-        "attempts_remaining": max(LAWYER_VERIFICATION_MAX_ATTEMPTS - attempts, 0),
-        "max_attempts": LAWYER_VERIFICATION_MAX_ATTEMPTS,
-        "bar_number": item.get("bar_number", ""),
-        "jurisdiction": item.get("jurisdiction", ""),
-        "name": item.get("name", ""),
-        "status": item.get("status", ""),
-        "admitted_on": item.get("admitted_on", ""),
-        "verified_at": item.get("verified_at", ""),
-    }
-
-
-def reserve_lawyer_attempt(user_id: str) -> bool:
-    """Claim one of the attempts before calling the provider.
-
-    Reserving first is what actually enforces the cap: two requests in flight
-    together cannot both pass a read-then-write check. The provider is metered
-    and the allowance is shared by every user, so an over-run costs everyone.
-    A reservation that never reaches a verdict is returned by
-    ``release_lawyer_attempt``.
-    """
-    try:
-        _table().update_item(
-            Key={"PK": f"USER#{user_id}", "SK": "LAWYER"},
-            UpdateExpression="ADD attempts :increment",
-            ConditionExpression=(
-                "(attribute_not_exists(attempts) OR attempts < :limit) "
-                "AND (attribute_not_exists(verified) OR verified = :false)"
-            ),
-            ExpressionAttributeValues={
-                ":increment": 1,
-                ":limit": LAWYER_VERIFICATION_MAX_ATTEMPTS,
-                ":false": False,
-            },
-        )
-    except ClientError as error:
-        if error.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
-            return False
-        raise
-    return True
-
-
-def release_lawyer_attempt(user_id: str) -> None:
-    """Give back a reserved attempt when the provider never returned a verdict.
-
-    Only an answer about the person spends an attempt. A spent allowance, a
-    timeout, or an outage must not count against them.
-    """
-    try:
-        _table().update_item(
-            Key={"PK": f"USER#{user_id}", "SK": "LAWYER"},
-            UpdateExpression="ADD attempts :decrement",
-            ConditionExpression="attempts > :zero AND (attribute_not_exists(verified) "
-            "OR verified = :false)",
-            ExpressionAttributeValues={":decrement": -1, ":zero": 0, ":false": False},
-        )
-    except ClientError as error:
-        if error.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
-            raise
-
-
-def save_lawyer_verification(user_id: str, record: dict[str, Any]) -> dict[str, Any]:
-    """Record a successful verification. Attempts are left as they stand."""
-    _table().update_item(
-        Key={"PK": f"USER#{user_id}", "SK": "LAWYER"},
-        UpdateExpression=(
-            "SET verified = :true, bar_number = :bar, jurisdiction = :jurisdiction, "
-            "#name = :name, #status = :status, admitted_on = :admitted, verified_at = :at"
-        ),
-        ExpressionAttributeNames={"#name": "name", "#status": "status"},
-        ExpressionAttributeValues={
-            ":true": True,
-            ":bar": record.get("bar_number", ""),
-            ":jurisdiction": record.get("jurisdiction", ""),
-            ":name": record.get("name", ""),
-            ":status": record.get("status", ""),
-            ":admitted": record.get("admitted_on", ""),
-            ":at": datetime.now(UTC).isoformat(),
-        },
-    )
-    return get_lawyer_verification(user_id)
-
-
 def create_workspace_invite(workspace_id: str, inviter_id: str) -> dict[str, Any]:
     token = secrets.token_urlsafe(18)
     now = datetime.now(UTC)
@@ -1171,15 +1081,13 @@ def _delete_keys(keys: list[dict[str, str]]) -> None:
 def admin_data_totals() -> dict[str, int]:
     """Count what the table holds, in one pass over the user and workspace rows."""
     items = _scan(
-        ProjectionExpression="PK, SK, verified, attempts",
+        ProjectionExpression="PK, SK",
         FilterExpression=Attr("PK").begins_with("USER#") | Attr("PK").begins_with("WORKSPACE#"),
     )
     totals = {
         "workspaces": 0,
         "documents": 0,
         "conversations": 0,
-        "lawyers_verified": 0,
-        "lawyers_locked": 0,
     }
     for item in items:
         pk, sk = item["PK"], item["SK"]
@@ -1189,11 +1097,6 @@ def admin_data_totals() -> dict[str, int]:
             totals["documents"] += 1
         elif sk.startswith("CHAT#"):
             totals["conversations"] += 1
-        elif sk == "LAWYER":
-            if item.get("verified"):
-                totals["lawyers_verified"] += 1
-            elif int(item.get("attempts", 0)) >= LAWYER_VERIFICATION_MAX_ATTEMPTS:
-                totals["lawyers_locked"] += 1
     return totals
 
 
@@ -1273,7 +1176,6 @@ def admin_user_data(user_id: str) -> dict[str, Any]:
         "documents": sum(item["SK"].startswith(("RECORD#", "DOC#")) for item in items),
         "conversations": sum(item["SK"].startswith("CHAT#") for item in items),
         "workspaces": workspaces,
-        "lawyer_verification": get_lawyer_verification(user_id),
     }
 
 
@@ -1291,12 +1193,6 @@ def admin_delete_user_data(user_id: str) -> None:
         else:
             admin_remove_workspace_member(workspace_id, user_id)
     _delete_keys([{"PK": item["PK"], "SK": item["SK"]} for item in items])
-
-
-def admin_reset_lawyer_verification(user_id: str) -> dict[str, Any]:
-    """Clear a bar verification and its spent attempts, so the person can try again."""
-    _table().delete_item(Key={"PK": f"USER#{user_id}", "SK": "LAWYER"})
-    return get_lawyer_verification(user_id)
 
 
 def record_admin_action(
