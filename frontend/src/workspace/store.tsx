@@ -152,6 +152,21 @@ function useWorkspaceState(userEmail?: string) {
     ? `${activeWorkspace.id}:${activeChannelId}`
     : PERSONAL_WORKSPACE_ID
   const comments = messagesByWorkspace[activeMessageWorkspace] ?? []
+  const recentMessageActivity = useMemo(() => Object.entries(messagesByWorkspace)
+    .flatMap(([key, messages]) => {
+      const divider = key.lastIndexOf(':')
+      const workspaceId = divider > 0 ? key.slice(0, divider) : PERSONAL_WORKSPACE_ID
+      const channelId = divider > 0 ? key.slice(divider + 1) : 'general'
+      const workspace = workspaces.find((item) => item.id === workspaceId)
+      return messages.map((message) => ({
+        ...message,
+        workspaceId,
+        workspaceName: workspace?.name ?? (workspaceId === PERSONAL_WORKSPACE_ID ? 'Personal workspace' : 'Shared workspace'),
+        channelId,
+      }))
+    })
+    .slice(-12)
+    .reverse(), [messagesByWorkspace, workspaces])
   const activeFinding = selected.findings.find((finding) => finding.id === activeFindingId) ?? null
   const isDemo = !documents.some((doc) => doc.id.startsWith('upload-'))
 
@@ -731,6 +746,26 @@ function useWorkspaceState(userEmail?: string) {
     try { setMembers(await workspaceRequest<WorkspaceMember[]>(`/workspaces/${workspace.id}/members`)) } catch { setMembers([]) }
   }, [workspaces])
 
+  /** Open the exact group conversation named by an activity item. */
+  const openWorkspaceChannel = useCallback(async (workspaceId: string, channelId = 'general') => {
+    if (workspaceId === PERSONAL_WORKSPACE_ID) {
+      setActiveWorkspace(null)
+      setActiveChannelId('general')
+      setNavState('team')
+      return
+    }
+    const workspace = workspaces.find((item) => item.id === workspaceId) ?? null
+    if (!workspace) {
+      setWorkspaceNotice('This group is no longer available.')
+      return
+    }
+    activeWorkspaceRef.current = workspace
+    setActiveWorkspace(workspace)
+    setActiveChannelId(channelId || 'general')
+    setNavState('team')
+    try { setMembers(await workspaceRequest<WorkspaceMember[]>(`/workspaces/${workspace.id}/members`)) } catch { setMembers([]) }
+  }, [workspaces])
+
   const stats = useMemo(() => {
     const open = documents.flatMap((doc) => openFindings(doc, resolved[doc.id]).map((finding) => ({ doc, finding })))
     const deadlines = documents.filter((doc) => doc.deadline).map((doc) => ({ doc, date: new Date(doc.deadline as string) })).sort((a, b) => a.date.getTime() - b.date.getTime())
@@ -746,9 +781,9 @@ function useWorkspaceState(userEmail?: string) {
     restoring, saveStatus,
     resolved, toggleResolved, resolveAndNext, jurisdiction, setJurisdiction, busyAction, runAction, applyRewrite, editText, editDocumentText, renameDocument, removeDocuments,
     notice, setNotice, addOpen, setAddOpen, addStage, setAddStage, addMessage, addDocument, isDemo, stats,
-    comments, toggleReaction, toggleSaved, deleteMessage, sendMessage, importSharedDocument, draft, setDraft, composerFocus, focusComposer, tasks, addTask, toggleTask,
+    comments, recentMessageActivity, toggleReaction, toggleSaved, deleteMessage, sendMessage, importSharedDocument, draft, setDraft, composerFocus, focusComposer, tasks, addTask, toggleTask,
     messageTab, setMessageTab, discuss,
-    workspaces, activeWorkspace, activeChannelId, setActiveChannelId, members, refreshMembers, forgetWorkspace, workspaceNotice, refreshWorkspaces, createWorkspace, createInvite, joinWorkspace, selectWorkspace,
+    workspaces, activeWorkspace, activeChannelId, setActiveChannelId, members, refreshMembers, forgetWorkspace, workspaceNotice, refreshWorkspaces, createWorkspace, createInvite, joinWorkspace, selectWorkspace, openWorkspaceChannel,
     assistantOpen, setAssistantOpen, assistantQuestion, askAssistant,
   }
 }

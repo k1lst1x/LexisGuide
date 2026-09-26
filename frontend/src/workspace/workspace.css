@@ -360,8 +360,13 @@
 .ws-deadline-empty strong, .ws-deadline-empty small { display: block; }
 .ws-deadline-empty strong { color: var(--ink-80); font-size: 13px; font-weight: 500; }
 .ws-deadline-empty small { margin-top: 3px; font-size: 12px; }
-.ws-feed li { display: flex; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.ws-feed li { border-top: 1px solid var(--line); }
 .ws-feed li:first-child { border-top: 0; }
+.ws-feed-item { display: flex; align-items: flex-start; width: 100%; gap: 12px; padding: 9px 0; border: 0; background: transparent; color: inherit; text-align: left; transition: background-color .16s var(--ease), padding .16s var(--ease); }
+.ws-feed-item:hover, .ws-feed-item:focus-visible { padding-right: 8px; padding-left: 8px; border-radius: 10px; background: var(--sand); outline: 0; }
+.ws-feed-item > div { flex: 1; min-width: 0; }
+.ws-feed-item > svg { flex: none; margin-top: 8px; color: var(--ink-45); opacity: 0; transition: opacity .16s var(--ease), transform .16s var(--ease); }
+.ws-feed-item:hover > svg, .ws-feed-item:focus-visible > svg { opacity: 1; transform: translateX(2px); }
 .ws-feed-dot { flex: none; width: 8px; height: 8px; margin-top: 7px; border-radius: 50%; background: var(--ink); }
 .ws-feed-dot-green { background: var(--green); }
 .ws-feed-dot-muted { background: var(--line-2); }
