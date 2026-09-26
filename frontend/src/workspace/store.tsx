@@ -754,7 +754,23 @@ function useWorkspaceState(userEmail?: string) {
       setNavState('team')
       return
     }
-    const workspace = workspaces.find((item) => item.id === workspaceId) ?? null
+    let workspace = workspaces.find((item) => item.id === workspaceId) ?? null
+    // A feed item can arrive from a group that was joined on another device,
+    // before the Home page has refreshed its workspace list. Resolve it first
+    // instead of leaving the person on the Home page with a vague error.
+    if (!workspace) {
+      try {
+        const remote = await workspaceRequest<WorkspaceSummary[]>('/workspaces')
+        workspace = remote.find((item) => item.id === workspaceId) ?? null
+        if (workspace) {
+          setWorkspaces((current) => {
+            const merged = [...remote, ...current.filter((item) => item.id.startsWith('local-') && !remote.some((remoteItem) => remoteItem.id === item.id))]
+            saveLocalWorkspaces(merged)
+            return merged
+          })
+        }
+      } catch { /* fall through to the clear unavailable notice below */ }
+    }
     if (!workspace) {
       setWorkspaceNotice('This group is no longer available.')
       return
