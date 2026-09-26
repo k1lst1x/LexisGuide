@@ -286,3 +286,32 @@ def test_an_answer_cut_off_by_the_length_limit_says_so() -> None:
 
     assert reply.reply.startswith("Part one")
     assert "Ask me to continue" in reply.reply
+
+
+def test_a_search_across_the_workspace_sees_every_document():
+    client = ScriptedBedrock(text_response("None of your documents mention David Le."))
+    ConversationAgent(client, "model").chat(
+        request(
+            ("user", "who is david le"),
+            page="AI Search",
+            library=[
+                {
+                    "title": "09_AB_1821_Fremont",
+                    "type": "PDF document",
+                    "score": 58,
+                    "open_findings": ["Lack of bill text (Scope)"],
+                    "excerpt": "AB 1821 was enrolled and presented to the Governor.",
+                },
+                {"title": "Lease agreement", "type": "Lease", "score": 62},
+            ],
+        )
+    )
+    context = client.calls[0]["system"][1]["text"]
+    assert "Documents in the person's workspace:" in context
+    assert (
+        '"09_AB_1821_Fremont" (PDF document, score 58/100). Open findings: Lack of bill text'
+        in context
+    )
+    assert "AB 1821 was enrolled" in context
+    assert '"Lease agreement" (Lease, score 62/100). Open findings: none.' in context
+    assert "never invent facts about a person" in client.calls[0]["system"][0]["text"].lower()

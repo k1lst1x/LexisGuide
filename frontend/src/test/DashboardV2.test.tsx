@@ -173,7 +173,7 @@ describe('Search and notifications', () => {
     expect(within(panel).getByText('Appeal filing deadline is vague')).toBeInTheDocument()
   })
 
-  it('answers AI search questions from workspace evidence when the service is offline', async () => {
+  it('searches the documents themselves when the AI is not available, and opens a match', async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
@@ -181,8 +181,24 @@ describe('Search and notifications', () => {
     await user.click(screen.getByRole('tab', { name: /AI Search/ }))
     await user.click(screen.getByRole('button', { name: 'Find termination without notice clauses' }))
 
-    expect(await screen.findByText(/termination provisions require explicit/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Open in Review' })).toBeInTheDocument()
+    const answer = await screen.findByRole('article')
+    expect(within(answer).getByText('Search result')).toBeInTheDocument()
+    expect(within(answer).getByText(/match “Find termination without notice clauses”/)).toBeInTheDocument()
+    const [first] = within(answer).getAllByRole('button', { name: /open in Review/ })
+    await user.click(first)
+    expect(screen.getByRole('heading', { level: 1, name: 'Review' })).toBeInTheDocument()
+  })
+
+  it('says plainly when no document mentions what was asked', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await user.click(screen.getByRole('button', { name: 'Search workspace' }))
+    await user.click(screen.getByRole('tab', { name: /AI Search/ }))
+    await user.type(screen.getByRole('textbox', { name: 'Search documents, issues, or rules' }), 'who is david le{Enter}')
+
+    expect(await screen.findByText(/None of your 3 documents mention “who is david le”/)).toBeInTheDocument()
+    expect(screen.queryByText(/notice timelines, liability limits/)).not.toBeInTheDocument()
   })
 
   it('shows the latest announcements', async () => {

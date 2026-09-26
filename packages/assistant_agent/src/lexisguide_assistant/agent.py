@@ -51,6 +51,11 @@ for legal vocabulary. Do not mention tool names to the person.
 - For US law, explain the general rule, say what depends on the state, and how to verify \
 it. For problems with the website, give exact steps; if they cannot fix it, point to \
 support@lexisguide.app.
+- When the reference context lists the documents in the person's workspace, they are \
+asking across all of them. Answer from those documents first: name the relevant documents \
+by their exact titles and quote them. If none of them mention what was asked, say so in one \
+sentence, then answer from general knowledge if you can. Never invent facts about a person \
+or organisation; if you do not know who someone is, say so.
 - For messages and tasks, lead with what needs the person first (mentions, questions \
 waiting for them, deadlines), then the rest, naming the channel and who wrote it.
 - When the operator note says it is running an action, the app is doing it now because the \
@@ -104,6 +109,15 @@ def _context_block(context: ChatContext) -> str:
             f"Files the person attached: {names}. "
             "Their full text is in the person's latest message."
         )
+    if context.library:
+        lines.append("Documents in the person's workspace:")
+        for document in context.library:
+            score = f", score {document.score}/100" if document.score is not None else ""
+            findings = "; ".join(document.open_findings) or "none"
+            lines.append(
+                f'- "{document.title}" ({document.type or "document"}{score}). '
+                f"Open findings: {findings}.\n  <<<{document.excerpt}>>>"
+            )
     if context.open_tasks:
         lines.append("Open tasks: " + "; ".join(context.open_tasks[:15]))
     if context.inbox:

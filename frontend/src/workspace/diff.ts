@@ -75,3 +75,72 @@ export function foldUnchanged(lines: DiffLine[], context = 2): Array<DiffLine | 
   if (folded) out.push({ kind: 'fold', count: folded })
   return out
 }
+
+export type WordPart = { kind: 'same' | 'added' | 'removed'; text: string }
+
+// Word comparisons longer than this fall back to showing both lines whole.
+const MAX_WORD_CELLS = 250_000
+
+/** Which words changed between two versions of one line. */
+export function diffWords(before: string, after: string): WordPart[] | null {
+  const a = before.split(/(\s+)/).filter(Boolean)
+  const b = after.split(/(\s+)/).filter(Boolean)
+  if (a.length * b.length > MAX_WORD_CELLS) return null
+  const cols = b.length + 1
+  const table = new Uint32Array((a.length + 1) * cols)
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      table[i * cols + j] = a[i] === b[j]
+        ? table[(i + 1) * cols + j + 1] + 1
+        : Math.max(table[(i + 1) * cols + j], table[i * cols + j + 1])
+    }
+  }
+  const parts: WordPart[] = []
+  const push = (kind: WordPart['kind'], text: string) => {
+    const last = parts[parts.length - 1]
+    if (last?.kind === kind) last.text += text
+    else parts.push({ kind, text })
+  }
+  let i = 0
+  let j = 0
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { push('same', a[i]); i++; j++ }
+    else if (table[(i + 1) * cols + j] >= table[i * cols + j + 1]) push('removed', a[i++])
+    else push('added', b[j++])
+  }
+  while (i < a.length) push('removed', a[i++])
+  while (j < b.length) push('added', b[j++])
+  return parts
+}
+
+export type DiffRow =
+  | DiffLine
+  | { kind: 'fold'; count: number }
+  | { kind: 'changed'; parts: WordPart[] }
+
+/** Fold unchanged lines, and show a line that was edited (removed then added
+    in place) as one line with the changed words marked. */
+export function diffRows(lines: DiffLine[], context = 2): DiffRow[] {
+  const rows: DiffRow[] = []
+  for (const row of foldUnchanged(lines, context)) {
+    if (row.kind === 'added') {
+      // Pair with the oldest unpaired removed line in the run just before.
+      let start = rows.length
+      while (start > 0 && rows[start - 1].kind === 'removed') start--
+      const removedIndex = rows.findIndex((item, index) => index >= start && item.kind === 'removed')
+      if (removedIndex !== -1) {
+        const removed = rows[removedIndex] as DiffLine
+        const parts = diffWords(removed.text, row.text)
+        // Only worth merging when most of the line survived.
+        const kept = parts?.filter((part) => part.kind === 'same').reduce((sum, part) => sum + part.text.length, 0) ?? 0
+        if (parts && kept >= Math.min(removed.text.length, row.text.length) * 0.4) {
+          rows.splice(removedIndex, 1)
+          rows.push({ kind: 'changed', parts })
+          continue
+        }
+      }
+    }
+    rows.push(row)
+  }
+  return rows
+}

@@ -112,7 +112,10 @@ export function fetchHistory(documentId: string, workspaceId?: string): Promise<
 
 /** The text of one earlier version, with the API's check against its block. */
 export function fetchVersion(documentId: string, changeId: string, workspaceId?: string): Promise<LedgerVersion | null> {
-  return request<LedgerVersion>(`/changes/${encodeURIComponent(changeId)}/version?${scope(documentId, workspaceId)}`).catch(() => null)
+  return request<LedgerVersion>(`/changes/${encodeURIComponent(changeId)}/version?${scope(documentId, workspaceId)}`)
+    // A reply without text is not a version the page can show or compare.
+    .then((version) => (version && typeof version.text === 'string' ? version : null))
+    .catch(() => null)
 }
 
 /** "sending" carries a stand-in for the change before the API has it, so the

@@ -68,7 +68,28 @@ describe('Document history', () => {
     await waitFor(() => expect(items[0]).toHaveTextContent('Current'))
   })
 
-  it('opens an earlier version verified by its block, shows what changed, and restores it', async () => {
+  it('shows what each edit changed, word by word, compared with the version before it', async () => {
+    const user = userEvent.setup()
+    render(<DocumentHistory documentId="upload-lease" currentText={CURRENT} recorded />)
+
+    // The newest version is the current text; its edit is still shown.
+    await user.click(await screen.findByRole('button', { name: /Text edited/ }))
+
+    expect(await screen.findByText(/Verified: matches the fingerprint in block 102/)).toBeInTheDocument()
+    expect(screen.getByText(/In this change:/)).toHaveTextContent('+1 −1 lines · by Maya')
+    const diff = screen.getByLabelText('What changed in this version')
+    const edited = diff.querySelector('.ws-diff-line.is-changed')!
+    expect(edited).toHaveTextContent('Rent is due on the 1st.5th.')
+    expect(edited.querySelector('del')).toHaveTextContent('1st.')
+    expect(edited.querySelector('ins')).toHaveTextContent('5th.')
+    expect(within(diff).getByText('Late fee: $50.')).toBeInTheDocument()
+    expect(screen.queryByText('This version is the same as the current text.')).not.toBeInTheDocument()
+    // Nothing to compare with now, and nothing to restore.
+    expect(screen.queryByRole('button', { name: 'Compared with now' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Restore this version/ })).not.toBeInTheDocument()
+  })
+
+  it('opens the first version, compares it with now, and restores it', async () => {
     const user = userEvent.setup()
     const onRestore = vi.fn()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -76,13 +97,23 @@ describe('Document history', () => {
 
     await user.click(await screen.findByRole('button', { name: /Document added/ }))
 
-    expect(await screen.findByText(/Verified: matches the fingerprint in block 101/)).toBeInTheDocument()
+    expect(await screen.findByText(/This is the first version/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Compared with now' }))
     const diff = screen.getByLabelText('Changes since this version')
-    expect(within(diff).getByText('Rent is due on the 1st.').closest('.ws-diff-line')).toHaveClass('is-removed')
-    expect(within(diff).getByText('Rent is due on the 5th.').closest('.ws-diff-line')).toHaveClass('is-added')
+    expect(diff.querySelector('.is-changed del')).toHaveTextContent('1st.')
+    expect(diff.querySelector('.is-changed ins')).toHaveTextContent('5th.')
 
     await user.click(screen.getByRole('button', { name: /Restore this version/ }))
     expect(onRestore).toHaveBeenCalledWith(FIRST, expect.objectContaining({ change_id: 'change-0001' }))
+  })
+
+  it('says when a step did not change the text', async () => {
+    const user = userEvent.setup()
+    versions['change-0002'] = { text: FIRST, on_chain: 'verified' }
+    render(<DocumentHistory documentId="upload-lease" currentText={FIRST} recorded />)
+
+    await user.click(await screen.findByRole('button', { name: /Text edited/ }))
+    expect(await screen.findByText(/The text did not change in this step/)).toBeInTheDocument()
   })
 
   it('refuses to vouch for a version that does not match its fingerprint', async () => {

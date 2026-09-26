@@ -69,6 +69,24 @@ class ProposedTask(BaseModel):
     priority: Literal["high", "medium", "low"] = "medium"
 
 
+MAX_LIBRARY = 12
+
+
+class LibraryDocument(BaseModel):
+    """One document in the person's workspace, for questions across all of them."""
+
+    title: str = Field(min_length=1, max_length=300)
+    type: str = Field(default="", max_length=120)
+    score: int | None = Field(default=None, ge=0, le=100)
+    open_findings: list[str] = Field(default_factory=list, max_length=12)
+    excerpt: str = Field(default="", max_length=3_000)
+
+    @field_validator("open_findings")
+    @classmethod
+    def clip(cls, value: list[str]) -> list[str]:
+        return [item.strip()[:200] for item in value if item.strip()]
+
+
 class ChatContext(BaseModel):
     """What the person is looking at. Treated as untrusted reference material."""
 
@@ -98,6 +116,8 @@ class ChatContext(BaseModel):
     # open follow-up tasks, so the inbox agent can summarise and prioritise.
     inbox: list[InboxMessage] = Field(default_factory=list, max_length=MAX_INBOX)
     open_tasks: list[str] = Field(default_factory=list, max_length=MAX_OPEN_TASKS)
+    # Every document in the workspace, for a search or question across them.
+    library: list[LibraryDocument] = Field(default_factory=list, max_length=MAX_LIBRARY)
 
     @field_validator("attachments")
     @classmethod
