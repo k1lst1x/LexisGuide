@@ -10,6 +10,8 @@ export function WorkspaceChat({ userEmail }: { userEmail?: string }) {
   const doc = ws.selected
   const open = openFindings(doc, ws.resolved[doc.id])
   const current = ws.activeFinding
+  const recentChannelActivity = ws.comments.slice(-3).map((message) => `${message.user}: ${message.text.slice(0, 180)}`).join(' · ')
+  const resolvedCount = ws.resolved[doc.id]?.length ?? 0
   const sectionSummary = ws.nav === 'overview'
     ? `${ws.documents.length} documents, ${ws.stats.open.length} open findings, and ${ws.stats.deadlines.length} detected deadlines.`
     : ws.nav === 'documents'
@@ -17,9 +19,9 @@ export function WorkspaceChat({ userEmail }: { userEmail?: string }) {
       : ws.nav === 'linter'
         ? `${open.length} open findings in ${documentDisplayName(doc)}. ${current ? `The selected finding is ${current.title}.` : 'No finding is selected.'}`
         : ws.nav === 'team'
-          ? `${ws.activeWorkspace ? `${ws.activeWorkspace.name} · ` : ''}${ws.comments.length} messages in the ${ws.activeChannelId} channel and ${ws.members.length} members.`
+          ? `${ws.activeWorkspace ? `${ws.activeWorkspace.name} · ` : ''}${ws.comments.length} messages in the ${ws.activeChannelId} channel and ${ws.members.length} members.${recentChannelActivity ? ` Recent messages: ${recentChannelActivity}` : ''}`
           : ws.nav === 'chain'
-            ? `Activity history for ${documentDisplayName(doc)} is in view.`
+            ? `Activity history for ${documentDisplayName(doc)} is in view. Version: ${doc.version}. ${resolvedCount} finding${resolvedCount === 1 ? '' : 's'} resolved; ${open.length} still open.`
             : ws.nav === 'settings'
               ? `Workspace settings are in view. Jurisdiction: ${ws.jurisdiction || 'not set'}.`
               : `AI assistant for ${documentDisplayName(doc)}.`
