@@ -44,6 +44,21 @@ export function AssistantView() {
           current_finding: current ? `${current.title}: ${current.explanation} Evidence: “${current.evidence}”` : undefined,
           jurisdiction: ws.jurisdiction || undefined,
         }}
+        onWorkspaceAction={(action) => {
+          if (action === 'apply_rewrite') {
+            if (current) ws.applyRewrite(current)
+            else ws.setNotice('Select a finding with suggested wording before applying a draft.')
+          } else if (action === 'resolve') {
+            if (current) ws.resolveAndNext(current.id)
+            else ws.setNotice('Select a finding before marking it resolved.')
+          } else if (action === 'create_task') {
+            if (current) ws.addTask(`Review: ${current.title}`, `${documentDisplayName(document)} · ${current.category}`)
+            else ws.addTask(`Review ${documentDisplayName(document)}`, 'Follow up on this document.')
+            ws.setNotice('Follow-up task created in Messages → Tasks.')
+          } else {
+            void ws.runAction(action)
+          }
+        }}
       />
     </div>
   )

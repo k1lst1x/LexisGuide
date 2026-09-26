@@ -7,7 +7,7 @@ import { AttachButton, DropOverlay, MessageFiles, SentText, StagedFiles, type At
 import { CopyAnswer, RegenerateAnswer } from './MessageActions'
 import { PromptComposer } from './PromptComposer'
 import { RichText } from './RichText'
-import { useAssistantChat, type ChatContext, type Turn } from './useAssistantChat'
+import { useAssistantChat, type ChatContext, type Turn, type WorkspaceAction } from './useAssistantChat'
 import { useFileDrop } from './useFileDrop'
 import './chat.css'
 
@@ -21,9 +21,19 @@ export type AssistantConsoleProps = {
   pendingQuestion?: { id: number; text: string } | null
   /** Documents the person can attach without uploading them again. */
   documents?: AttachableDocument[]
+  onWorkspaceAction?: (action: WorkspaceAction) => void
 }
 
-function Message({ turn, onRegenerate }: { turn: Turn; onRegenerate?: () => void }) {
+function actionLabel(action: WorkspaceAction) {
+  return action === 'review' ? 'Re-check this document'
+    : action === 'negotiate' ? 'Suggest negotiation points'
+      : action === 'rewrite' ? 'Draft clearer wording'
+        : action === 'apply_rewrite' ? 'Apply the current draft'
+          : action === 'resolve' ? 'Mark current issue resolved'
+            : 'Create follow-up task'
+}
+
+function Message({ turn, onRegenerate, onWorkspaceAction }: { turn: Turn; onRegenerate?: () => void; onWorkspaceAction?: (action: WorkspaceAction) => void }) {
   const isAssistant = turn.role === 'assistant'
   return (
     <article className={`ac-msg ac-msg-${turn.role}`}>
@@ -33,6 +43,9 @@ function Message({ turn, onRegenerate }: { turn: Turn; onRegenerate?: () => void
       <div className="ac-bubble">
         {isAssistant ? <RichText text={turn.content} /> : <SentText text={turn.content} />}
         <MessageFiles files={turn.attachments} />
+        {isAssistant && turn.workspaceActions?.map((action) => (
+          <button key={action} type="button" className="ac-workspace-action" onClick={() => onWorkspaceAction?.(action)}>{actionLabel(action)}</button>
+        ))}
         {isAssistant && turn.id !== 'welcome' && (
           <span className="ac-actions">
             <CopyAnswer text={turn.content} />
@@ -52,6 +65,7 @@ export function AssistantConsole({
   greeting,
   pendingQuestion,
   documents = [],
+  onWorkspaceAction,
 }: AssistantConsoleProps) {
   const chat = useAssistantChat({ storageKey, context, greeting, fallback, persist: true })
   const { dragging, dropProps } = useFileDrop((files) => void chat.attachFiles(files))
@@ -83,6 +97,7 @@ export function AssistantConsole({
             <Message
               key={turn.id}
               turn={turn}
+              onWorkspaceAction={onWorkspaceAction}
               onRegenerate={turn.id === lastAnswer?.id && chat.canRegenerate ? () => void chat.regenerate() : undefined}
             />
           ))}
