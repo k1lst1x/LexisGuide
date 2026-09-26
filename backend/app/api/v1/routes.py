@@ -7,6 +7,7 @@ from lexisguide_assistant import ChatReply, ChatRequest
 from pydantic import BaseModel, Field, field_validator
 from review_contract import ReviewResult
 
+from app.assistant_research import add_official_source
 from app.auth import current_user
 from app.chat_agent import AssistantUnavailableError, configured_assistant, runtime_session_id
 from app.lawfirm import (
@@ -150,7 +151,6 @@ class LawyerVerification(BaseModel):
     verified_at: str = ""
 
 
-
 CONVERSATION_ID = r"^[A-Za-z0-9-]{8,64}$"
 MAX_STORED_TURNS = 60
 
@@ -236,7 +236,7 @@ async def analyze_document(
     return AnalyzeResponse(**result)
 
 
-@router.post("/chat", response_model=ChatReply)
+@router.post("/chat", response_model=ChatReply, response_model_exclude_defaults=True)
 async def chat(payload: ChatPayload, user: dict[str, str] = Depends(current_user)) -> ChatReply:
     """Talk to the LexisGuide assistant (the LexisGuideAssistant AgentCore runtime)."""
     assistant = configured_assistant()
@@ -262,8 +262,14 @@ async def chat(payload: ChatPayload, user: dict[str, str] = Depends(current_user
         messages=payload.messages,
         context=payload.context.model_copy(update={"signed_in": True}),
     )
+    workspace_id = request.context.workspace_id or ""
+    if workspace_id and not get_workspace_membership(workspace_id, user["sub"]):
+        raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
+    request = add_official_source(request)
     try:
-        return assistant.chat(request, runtime_session_id(user["sub"], payload.conversation_id))
+        return assistant.chat(
+            request, runtime_session_id(user["sub"], payload.conversation_id, workspace_id)
+        )
     except AssistantUnavailableError as error:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

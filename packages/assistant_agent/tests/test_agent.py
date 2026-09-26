@@ -10,6 +10,7 @@ from lexisguide_assistant import (
     parse_chat_request,
     run_tool,
 )
+from lexisguide_assistant.orchestrator import SupervisorAgent
 
 
 class ScriptedBedrock:
@@ -128,3 +129,19 @@ def test_tools():
 
 def test_parse_reply_unwraps_runtime_envelope():
     assert parse_chat_reply({"result": {"reply": "hi", "tools_used": []}}).reply == "hi"
+
+
+def test_supervisor_routes_document_research_and_drafting_without_applying_changes():
+    client = ScriptedBedrock(text_response("Here is a draft; nothing was changed."))
+    reply = SupervisorAgent(ConversationAgent(client, "model")).chat(
+        request(
+            ("user", "Draft clearer wording for section 768.28."),
+            document_excerpt="Either party may terminate.",
+            jurisdiction="FL",
+        )
+    )
+
+    assert reply.agents_used == ["review", "research", "drafting"]
+    specialist_notes = client.calls[0]["system"][-1]["text"]
+    assert "not changed the document" in specialist_notes
+    assert "no official source receipt" in specialist_notes

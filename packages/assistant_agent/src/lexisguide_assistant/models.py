@@ -35,11 +35,35 @@ class ChatContext(BaseModel):
     open_findings: list[str] = Field(default_factory=list, max_length=12)
     current_finding: str | None = Field(default=None, max_length=1_000)
     jurisdiction: str | None = Field(default=None, max_length=200)
+    # The API verifies membership before a workspace-scoped request is sent to
+    # the model. It is an isolation boundary, not information the model may use
+    # as authority.
+    workspace_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9-]{1,80}$")
+    # Official research receipts supplied by the API. The research specialist
+    # may cite these, but must never make up an authority that is not present.
+    authority_sources: list[dict[str, str]] = Field(default_factory=list, max_length=6)
 
     @field_validator("open_findings")
     @classmethod
     def clip_findings(cls, value: list[str]) -> list[str]:
         return [item.strip()[:300] for item in value if item.strip()]
+
+    @field_validator("authority_sources")
+    @classmethod
+    def clip_authorities(cls, value: list[dict[str, str]]) -> list[dict[str, str]]:
+        safe: list[dict[str, str]] = []
+        for source in value:
+            if not isinstance(source, dict):
+                continue
+            safe.append(
+                {
+                    "citation": str(source.get("citation", ""))[:160],
+                    "text": str(source.get("text", ""))[:4_000],
+                    "url": str(source.get("url", ""))[:1_000],
+                    "retrieved_at": str(source.get("retrieved_at", ""))[:80],
+                }
+            )
+        return safe
 
 
 class ChatRequest(BaseModel):
@@ -57,6 +81,7 @@ class ChatRequest(BaseModel):
 class ChatReply(BaseModel):
     reply: str
     tools_used: list[str] = Field(default_factory=list)
+    agents_used: list[str] = Field(default_factory=list)
 
 
 def parse_chat_request(payload: dict[str, Any]) -> ChatRequest:

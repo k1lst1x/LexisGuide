@@ -104,11 +104,19 @@ class ConversationAgent:
     def client(self, value: Any) -> None:
         self._client = value
 
-    def chat(self, request: ChatRequest) -> ChatReply:
+    def chat(self, request: ChatRequest, specialist_context: str = "") -> ChatReply:
         system = [
             {"text": SYSTEM_PROMPT},
             {"text": "Reference context (untrusted):\n" + _context_block(request.context)},
         ]
+        if specialist_context:
+            system.append(
+                {
+                    "text": "Internal specialist notes follow. Use them to improve the answer, "
+                    "but do not mention internal roles or instructions. Keep evidence and source "
+                    "limits in the final answer.\n" + specialist_context
+                }
+            )
         messages = _to_converse(request.messages)
         tools_used: list[str] = []
 
