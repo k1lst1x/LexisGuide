@@ -15,6 +15,12 @@ downloads/
 eggs/
 .eggs/
 lib/
+# The AgentCore CDK app has a source directory named lib; it is not a Python
+# build artifact and must remain versioned for deployment synthesis.
+!agentcore/
+!agentcore/cdk/
+!agentcore/cdk/lib/
+!agentcore/cdk/lib/cdk-stack.ts
 lib64/
 parts/
 sdist/

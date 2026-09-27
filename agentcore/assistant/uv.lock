@@ -326,7 +326,7 @@ dependencies = [
     { name = "pydantic" },
 ]
 wheels = [
-    { filename = "lexisguide_assistant-0.2.0-py3-none-any.whl", hash = "sha256:959f7783175b107befd8b94d1f14a32a2275fd00a004c92f06d917f7b5a61f77" },
+    { filename = "lexisguide_assistant-0.2.0-py3-none-any.whl", hash = "sha256:1fa620b578d1009bf002869c46728b9e00fc46b08e221667727e992f74a6064f" },
 ]
 
 [package.metadata]

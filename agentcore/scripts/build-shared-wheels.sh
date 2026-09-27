@@ -11,7 +11,9 @@ build() {
   local package_dir=$1 runtime_dir=$2
   rm -rf "$runtime_dir/vendor"
   uv build --wheel --quiet --out-dir "$runtime_dir/vendor" "$package_dir"
-  (cd "$runtime_dir" && uv lock --quiet)
+  # A same-version wheel can have new contents after shared-contract changes.
+  # Refresh cached local-source metadata so the lock records its new hash.
+  (cd "$runtime_dir" && uv lock --refresh --quiet)
   echo "Built $(ls "$runtime_dir/vendor") for $(basename "$runtime_dir")"
 }
 
