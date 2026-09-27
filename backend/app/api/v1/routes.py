@@ -493,6 +493,16 @@ async def chat(payload: ChatPayload, user: dict[str, str] = Depends(current_user
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="The assistant is not configured.",
         )
+    request = ChatRequest(
+        messages=payload.messages,
+        context=payload.context.model_copy(update={"signed_in": True}),
+    )
+    workspace_id = request.context.workspace_id or ""
+    # Authorize every piece of workspace context before spending a globally
+    # limited remote-operation lease. Otherwise rejected requests could hold a
+    # slot until its expiry and temporarily starve legitimate AI requests.
+    if workspace_id and not get_workspace_membership(workspace_id, user["sub"]):
+        raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
     if not consume_chat_quota(user["sub"]):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -506,13 +516,6 @@ async def chat(payload: ChatPayload, user: dict[str, str] = Depends(current_user
             detail="The AI service is busy. Please try again shortly.",
             headers={"Retry-After": "60"},
         )
-    request = ChatRequest(
-        messages=payload.messages,
-        context=payload.context.model_copy(update={"signed_in": True}),
-    )
-    workspace_id = request.context.workspace_id or ""
-    if workspace_id and not get_workspace_membership(workspace_id, user["sub"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this workspace.")
     request = add_official_source(request)
     request = add_inbox(request, user)
     try:

@@ -12,5 +12,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // These integration tests stub browser-global fetch and storage. Running
+    // files concurrently makes those shared browser seams race and turns valid
+    // messaging tests into intermittent timeouts on constrained CI runners.
+    fileParallelism: false,
   },
 })

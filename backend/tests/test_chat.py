@@ -86,6 +86,33 @@ def test_chat_rejects_when_shared_remote_capacity_is_full(
     assert response.json() == {"detail": "The AI service is busy. Please try again shortly."}
 
 
+def test_chat_checks_workspace_access_before_reserving_remote_capacity(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rejected workspace context must not consume a shared AI lease."""
+    reserved: list[str] = []
+    quota_checks: list[str] = []
+
+    class Assistant:
+        def chat(self, *_):
+            raise AssertionError("The assistant must not receive another workspace's context.")
+
+    monkeypatch.setattr(routes, "configured_assistant", lambda: Assistant())
+    monkeypatch.setattr(routes, "get_workspace_membership", lambda *_: None)
+    monkeypatch.setattr(routes, "consume_chat_quota", lambda user_id: quota_checks.append(user_id))
+    monkeypatch.setattr(
+        routes, "acquire_remote_operation", lambda user_id: reserved.append(user_id)
+    )
+
+    response = authenticated_client.post(
+        "/api/v1/chat", json={**CHAT, "context": {"page": "Messages", "workspace_id": "other-ws"}}
+    )
+
+    assert response.status_code == 403
+    assert reserved == []
+    assert quota_checks == []
+
+
 def test_chat_releases_shared_capacity_when_the_remote_agent_fails(
     authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
