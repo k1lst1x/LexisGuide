@@ -46,9 +46,7 @@ def test_members_can_post_and_read_workspace_messages(
     assert listed.json()[0]["text"] == "Please review the deadline."
 
 
-def test_message_storage_limit_returns_429(
-    authenticated_client: TestClient, monkeypatch
-) -> None:
+def test_message_storage_limit_returns_429(authenticated_client: TestClient, monkeypatch) -> None:
     monkeypatch.setattr(routes, "get_workspace_membership", lambda *_: {"role": "member"})
     monkeypatch.setattr(
         routes, "get_workspace_channel", lambda *_: {"id": "general", "name": "General"}

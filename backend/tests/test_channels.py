@@ -118,8 +118,30 @@ def test_others_can_browse_preview_and_join(api: TestClient, workspace: str) -> 
     assert blocked.status_code == 403
     assert "Join #deadlines" in blocked.json()["detail"]
 
+    # Preview is intentionally read-only. A workspace owner must not be able
+    # to alter a channel they have not joined through reactions, saved state,
+    # or moderation of somebody else's message.
+    for request in (
+        lambda: api.post(
+            f"/api/v1/workspaces/{workspace}/messages/{preview.json()[0]['id']}/reactions",
+            json={"emoji": "👍", "channel_id": channel["id"]},
+        ),
+        lambda: api.put(
+            f"/api/v1/workspaces/{workspace}/messages/{preview.json()[0]['id']}/saved?channel_id={channel['id']}"
+        ),
+        lambda: api.delete(
+            f"/api/v1/workspaces/{workspace}/messages/{preview.json()[0]['id']}?channel_id={channel['id']}"
+        ),
+    ):
+        assert request().status_code == 403
+
     joined = api.post(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}/join").json()
     assert joined["is_member"] and joined["member_count"] == 2
+    reacted = api.post(
+        f"/api/v1/workspaces/{workspace}/messages/{preview.json()[0]['id']}/reactions",
+        json={"emoji": "👍", "channel_id": channel["id"]},
+    )
+    assert reacted.status_code == 200
     members = api.get(f"/api/v1/workspaces/{workspace}/channels/{channel['id']}/members").json()
     assert [member["name"] for member in members] == ["Bob", "Ada"]
     assert {member["name"]: member["role"] for member in members} == {

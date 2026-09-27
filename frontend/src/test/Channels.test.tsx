@@ -11,6 +11,8 @@ type Channel = { id: string; name: string; description: string; created_at: stri
 let channels: Channel[]
 let myRole = 'member'
 let calls: Array<{ method: string; path: string; body: Record<string, unknown> | null }>
+let deferChannelList = false
+let resolveChannelList: (() => void) | null = null
 
 const PEOPLE = [
   { user_id: 'u-ada', email: 'ada@example.com', name: 'Ada', role: 'owner', joined_at: '2026-09-20T00:00:00Z' },
@@ -21,6 +23,8 @@ beforeEach(() => {
   window.localStorage.clear()
   calls = []
   myRole = 'member'
+  deferChannelList = false
+  resolveChannelList = null
   channels = [
     { id: 'general', name: 'General', description: 'Everyone in the workspace.', created_at: '', created_by_name: '', member_count: 2, is_member: true, can_manage: false, last_message_at: '' },
     { id: 'ch-deadlines', name: 'deadlines', description: 'Every date we must not miss.', created_at: '2026-09-24T00:00:00Z', created_by_name: 'Ada', member_count: 1, is_member: false, can_manage: false, last_message_at: '' },
@@ -34,7 +38,13 @@ beforeEach(() => {
     const channel = (id: string) => channels.find((item) => item.id === id)!
     if (path === '/workspaces' && method === 'GET') return json([{ id: 'ws-1', name: 'Lease review', owner_id: 'u-ada', created_at: '', role: myRole }])
     if (path === '/workspaces/ws-1/members') return json(PEOPLE)
-    if (path === '/workspaces/ws-1/channels' && method === 'GET') return json(channels)
+    if (path === '/workspaces/ws-1/channels' && method === 'GET') {
+      if (deferChannelList) return new Promise<Response>((resolve) => {
+        const snapshot = channels
+        resolveChannelList = () => resolve(new Response(JSON.stringify(snapshot), { status: 200 }))
+      })
+      return json(channels)
+    }
     if (path === '/workspaces/ws-1/channels' && method === 'POST') {
       const created = { id: 'ch-new', name: body.name, description: body.description, created_at: '2026-09-26T00:00:00Z', created_by_name: 'You', member_count: 1, is_member: true, can_manage: true, can_delete: myRole !== 'member', last_message_at: '' }
       channels = [...channels, created]
@@ -111,6 +121,28 @@ describe('Slack-style channels', () => {
 
     expect(within(screen.getByRole('dialog')).queryByRole('button', { name: 'Delete channel' })).not.toBeInTheDocument()
     expect(within(screen.getByRole('dialog')).getByText(/Only workspace admins can delete channels/)).toBeInTheDocument()
+  })
+
+  it('opens a newly created channel before the initial channel list finishes loading', async () => {
+    deferChannelList = true
+    const user = userEvent.setup()
+    render(<DashboardV2 onClose={vi.fn()} userEmail="bob@example.com" />)
+    await user.click(screen.getByRole('button', { name: 'Messages' }))
+    await user.click(await screen.findByRole('button', { name: /^L\s*Lease review/ }))
+
+    await user.click(await screen.findByRole('button', { name: 'Create a channel' }))
+    const create = screen.getByRole('dialog', { name: 'Create a channel' })
+    await user.type(within(create).getByLabelText('Channel name'), 'notes')
+    await user.click(within(create).getByRole('button', { name: 'Create channel' }))
+
+    expect(await screen.findByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Message #notes')
+    expect(calls).toContainEqual({ method: 'POST', path: '/workspaces/ws-1/channels', body: { name: 'notes', description: '' } })
+    // An in-flight list request may be a snapshot from before the POST.
+    // Resolving that old response must not take us back to General.
+    deferChannelList = false
+    resolveChannelList?.()
+    await waitFor(() => expect(calls.filter((call) => call.method === 'GET' && call.path === '/workspaces/ws-1/channels')).toHaveLength(2))
+    expect(await screen.findByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Message #notes')
   })
 
   it('creates a channel with a Slack-style name and a description, then an admin deletes it', async () => {
