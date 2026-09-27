@@ -1,0 +1,28 @@
+<svg width="140" height="140" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LexisGuide, drawing itself">
+  <style>
+    .lg-fill { opacity: 0; animation: lg-fill 3.6s ease-in-out infinite; }
+    .lg-outline { stroke-dasharray: 110; stroke-dashoffset: 110; animation: lg-outline 3.6s ease-in-out infinite; }
+    .lg-vein { stroke-dasharray: 40; stroke-dashoffset: 40; opacity: 0; animation: lg-vein 3.6s ease-in-out infinite; }
+    @keyframes lg-outline {
+      0%   { stroke-dashoffset: 110; }
+      40%  { stroke-dashoffset: 0; }
+      82%  { stroke-dashoffset: 0; }
+      100% { stroke-dashoffset: 110; }
+    }
+    @keyframes lg-vein {
+      0%, 48%  { stroke-dashoffset: 40; opacity: 0; }
+      62%      { stroke-dashoffset: 0; opacity: 1; }
+      82%      { stroke-dashoffset: 0; opacity: 1; }
+      100%     { stroke-dashoffset: 40; opacity: 0; }
+    }
+    @keyframes lg-fill {
+      0%, 48% { opacity: 0; }
+      62%     { opacity: 1; }
+      82%     { opacity: 1; }
+      100%    { opacity: 0; }
+    }
+  </style>
+  <path class="lg-fill" d="M6 26C6 15 13 6 27 5c-1 13-9 21-21 21Z" fill="#00674F"/>
+  <path class="lg-outline" d="M6 26C6 15 13 6 27 5c-1 13-9 21-21 21Z" fill="none" stroke="#00674F" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path class="lg-vein" d="M9 23c4-5 8-9 14-13" fill="none" stroke="#fffaeb" stroke-width="1.6" stroke-linecap="round"/>
+</svg>
