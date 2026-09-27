@@ -48,6 +48,9 @@ export function useChannels({ workspace, activeChannelId, setActiveChannelId, no
   const [marks, setMarks] = useState(readMarks)
   const [members, setMembers] = useState<{ key: string; people: WorkspaceMember[] } | null>(null)
   const [version, setVersion] = useState(0)
+  // A response that was requested before a channel mutation is stale: applying
+  // it would make the just-created/updated channel disappear again.
+  const channelMutationVersion = useRef(0)
   const localKey = workspace?.id ?? 'personal'
   const channels = useMemo(() => shared
     ? (remote && remote.workspaceId === workspace?.id ? remote.channels : [LOCAL_GENERAL])
@@ -71,9 +74,16 @@ export function useChannels({ workspace, activeChannelId, setActiveChannelId, no
   useEffect(() => {
     if (!shared || !workspace) return
     let live = true
-    const load = () => workspaceRequest<WorkspaceChannel[]>(`/workspaces/${workspace.id}/channels`)
+    const load = () => {
+      const requestedMutationVersion = channelMutationVersion.current
+      return workspaceRequest<WorkspaceChannel[]>(`/workspaces/${workspace.id}/channels`)
       .then((next) => {
         if (!live) return
+        if (requestedMutationVersion !== channelMutationVersion.current) {
+          // Keep the optimistic mutation on screen and fetch a current list.
+          void load()
+          return
+        }
         setRemote({ workspaceId: workspace.id, channels: next })
         // Channels seen for the first time start as read, not as a wall of
         // unread marks; the open channel is read as its messages arrive.
@@ -90,6 +100,7 @@ export function useChannels({ workspace, activeChannelId, setActiveChannelId, no
         if (!next.some((channel) => channel.id === activeRef.current)) setActiveChannelId(GENERAL_ID)
       })
       .catch(() => { /* General stays usable while offline */ })
+    }
     void load()
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void load() }, REFRESH_MS)
     return () => { live = false; window.clearInterval(timer) }
@@ -107,12 +118,29 @@ export function useChannels({ workspace, activeChannelId, setActiveChannelId, no
     workspace && channel.is_member && channel.id !== active?.id && channel.last_message_at
     && channel.last_message_at > (marks[`${workspace.id}:${channel.id}`] || ''))
 
-  const replace = (channel: WorkspaceChannel) => setRemote((current) => current && ({
-    ...current,
-    channels: current.channels.some((item) => item.id === channel.id)
-      ? current.channels.map((item) => (item.id === channel.id ? channel : item))
-      : [...current.channels, channel],
-  }))
+  /**
+   * Keep a completed channel mutation visible even when the initial list
+   * request is still in flight. Previously `remote` was null in that short
+   * window, so a successfully created channel was discarded until polling
+   * caught up; selecting it then fell back to General.
+   */
+  const replace = (channel: WorkspaceChannel) => {
+    const workspaceId = workspace?.id
+    if (!workspaceId) return
+    channelMutationVersion.current += 1
+    setRemote((current) => {
+      // A request started for a workspace the person has since left must not
+      // overwrite the channel list currently shown for another workspace.
+      if (current && current.workspaceId !== workspaceId) return current
+      const currentChannels = current?.channels ?? [LOCAL_GENERAL]
+      return {
+        workspaceId,
+        channels: currentChannels.some((item) => item.id === channel.id)
+          ? currentChannels.map((item) => (item.id === channel.id ? channel : item))
+          : [...currentChannels, channel],
+      }
+    })
+  }
 
   const create = async (name: string, description: string): Promise<WorkspaceChannel | null> => {
     if (!shared || !workspace) {
@@ -137,6 +165,7 @@ export function useChannels({ workspace, activeChannelId, setActiveChannelId, no
 
   const remove = async (channel: WorkspaceChannel) => {
     if (shared && workspace) await workspaceRequest<void>(`/workspaces/${workspace.id}/channels/${channel.id}`, { method: 'DELETE' })
+    if (shared) channelMutationVersion.current += 1
     setRemote((current) => current && ({ ...current, channels: current.channels.filter((item) => item.id !== channel.id) }))
     setLocal((current) => ({ ...current, [localKey]: (current[localKey] ?? []).filter((item) => item.id !== channel.id) }))
     if (activeChannelId === channel.id) setActiveChannelId(GENERAL_ID)

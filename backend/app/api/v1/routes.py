@@ -756,6 +756,20 @@ def _channel_view(workspace_id: str, channel_id: str, user: dict[str, str]) -> W
     return _as_view(channel, membership, user)
 
 
+def _joined_channel_or_403(
+    workspace_id: str, channel_id: str, user: dict[str, str], action: str
+) -> dict:
+    """Return a channel only when the workspace member has joined it.
+
+    People may preview a channel before joining, but preview access must not
+    grant permission to change its messages, reactions, or saved state.
+    """
+    channel = _channel_or_404(workspace_id, channel_id)
+    if not is_channel_member(workspace_id, channel_id, user["sub"]):
+        raise HTTPException(status_code=403, detail=f"Join #{channel['name']} to {action}.")
+    return channel
+
+
 @router.put("/workspaces/{workspace_id}/members/{member_id}/role", response_model=WorkspaceMember)
 async def change_member_role(
     workspace_id: str,
@@ -976,9 +990,7 @@ async def post_workspace_message(
     user: dict[str, str] = Depends(current_user),
 ) -> WorkspaceMessage:
     _workspace_member(workspace_id, user)
-    channel = _channel_or_404(workspace_id, payload.channel_id)
-    if not is_channel_member(workspace_id, payload.channel_id, user["sub"]):
-        raise HTTPException(status_code=403, detail=f"Join #{channel['name']} to post in it.")
+    _joined_channel_or_403(workspace_id, payload.channel_id, user, "post in it")
     if not consume_workspace_message_quota(workspace_id, user["sub"]):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -1032,6 +1044,7 @@ async def react_to_message(
 ) -> WorkspaceMessage:
     """Add your reaction, or take it back if you already reacted with that emoji."""
     _workspace_member(workspace_id, user)
+    _joined_channel_or_403(workspace_id, payload.channel_id, user, "react")
     message = get_workspace_message(workspace_id, payload.channel_id, message_id)
     if message is None:
         raise HTTPException(status_code=404, detail="Message not found.")
@@ -1062,6 +1075,7 @@ async def save_message(
     user: dict[str, str] = Depends(current_user),
 ) -> None:
     _workspace_member(workspace_id, user)
+    _joined_channel_or_403(workspace_id, channel_id, user, "save messages")
     if get_workspace_message(workspace_id, channel_id, message_id) is None:
         raise HTTPException(status_code=404, detail="Message not found.")
     if not set_message_saved(user["sub"], workspace_id, channel_id, message_id, True):
@@ -1082,6 +1096,7 @@ async def unsave_message(
     user: dict[str, str] = Depends(current_user),
 ) -> None:
     _workspace_member(workspace_id, user)
+    _joined_channel_or_403(workspace_id, channel_id, user, "save messages")
     set_message_saved(user["sub"], workspace_id, channel_id, message_id, False)
 
 
@@ -1147,6 +1162,7 @@ async def remove_workspace_message(
 ) -> None:
     """Authors can delete their own messages; workspace admins can delete any."""
     membership = _workspace_member(workspace_id, user)
+    _joined_channel_or_403(workspace_id, channel_id, user, "delete messages")
     message = get_workspace_message(workspace_id, channel_id, message_id)
     if message is None:
         raise HTTPException(status_code=404, detail="Message not found.")

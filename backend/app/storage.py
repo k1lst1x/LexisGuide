@@ -153,9 +153,11 @@ def _count_workspace_resources(workspace_id: str, prefix: str) -> int:
 
 
 def _workspace_quota_count(workspace_id: str, kind: str) -> int:
-    item = _table().get_item(
-        Key={"PK": f"WORKSPACE#{workspace_id}", "SK": f"QUOTA#{kind}"}
-    ).get("Item", {})
+    item = (
+        _table()
+        .get_item(Key={"PK": f"WORKSPACE#{workspace_id}", "SK": f"QUOTA#{kind}"})
+        .get("Item", {})
+    )
     value = item.get("count", 0)
     return int(value) if isinstance(value, int | Decimal) and value >= 0 else 0
 
