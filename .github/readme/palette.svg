@@ -1,0 +1,20 @@
+<svg width="618" height="98" viewBox="0 0 618 98" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LexisGuide brand palette">
+<rect x="4" y="4" width="90" height="90" rx="15" fill="#1B1C14" stroke="#ECE3CD" stroke-width="1.5"/>
+<text x="49.0" y="45.0" text-anchor="middle" font-family="Georgia, serif" font-size="16" fill="#FFFDF5">Ink</text>
+<text x="49.0" y="65.0" text-anchor="middle" font-family="Consolas, Menlo, monospace" font-size="11" fill="#FFFDF5" opacity="0.8">#1B1C14</text>
+<rect x="108" y="4" width="90" height="90" rx="15" fill="#FFFDF5" stroke="#ECE3CD" stroke-width="1.5"/>
+<text x="153.0" y="45.0" text-anchor="middle" font-family="Georgia, serif" font-size="16" fill="#1B1C14">Paper</text>
+<text x="153.0" y="65.0" text-anchor="middle" font-family="Consolas, Menlo, monospace" font-size="11" fill="#1B1C14" opacity="0.8">#FFFDF5</text>
+<rect x="212" y="4" width="90" height="90" rx="15" fill="#FAF7EE" stroke="#ECE3CD" stroke-width="1.5"/>
+<text x="257.0" y="45.0" text-anchor="middle" font-family="Georgia, serif" font-size="16" fill="#1B1C14">Sand</text>
+<text x="257.0" y="65.0" text-anchor="middle" font-family="Consolas, Menlo, monospace" font-size="11" fill="#1B1C14" opacity="0.8">#FAF7EE</text>
+<rect x="316" y="4" width="90" height="90" rx="15" fill="#00674F" stroke="#ECE3CD" stroke-width="1.5"/>
+<text x="361.0" y="45.0" text-anchor="middle" font-family="Georgia, serif" font-size="16" fill="#FFFDF5">Green</text>
+<text x="361.0" y="65.0" text-anchor="middle" font-family="Consolas, Menlo, monospace" font-size="11" fill="#FFFDF5" opacity="0.8">#00674F</text>
+<rect x="420" y="4" width="90" height="90" rx="15" fill="#2F8A5E" stroke="#ECE3CD" stroke-width="1.5"/>
+<text x="465.0" y="45.0" text-anchor="middle" font-family="Georgia, serif" font-size="16" fill="#FFFDF5">Meadow</text>
+<text x="465.0" y="65.0" text-anchor="middle" font-family="Consolas, Menlo, monospace" font-size="11" fill="#FFFDF5" opacity="0.8">#2F8A5E</text>
+<rect x="524" y="4" width="90" height="90" rx="15" fill="#C98A1A" stroke="#ECE3CD" stroke-width="1.5"/>
+<text x="569.0" y="45.0" text-anchor="middle" font-family="Georgia, serif" font-size="16" fill="#FFFDF5">Amber</text>
+<text x="569.0" y="65.0" text-anchor="middle" font-family="Consolas, Menlo, monospace" font-size="11" fill="#FFFDF5" opacity="0.8">#C98A1A</text>
+</svg>
