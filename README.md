@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src=".github/readme/mark.svg" width="72" height="72" alt="LexisGuide" />
+<img src=".github/readme/flourish.svg" width="120" height="120" alt="LexisGuide" />
 
 # LexisGuide
 
@@ -49,7 +49,9 @@ Built for **LexHack 2026** — decision support, not legal advice.
 </p>
 
 <p align="center">
-  <img src=".github/readme/shots/hero.png" width="100%" alt="LexisGuide landing page: a plain-language guide to legal documents" />
+  <img src=".github/readme/shots/demo.gif" width="100%" alt="LexisGuide answering a question about a benefits letter, then explaining the risky clause and handing over a dated action plan" />
+  <br>
+  <sub>The landing page's own live demo — ask a question, see the exact clause it's grounded in, get a dated plan. Not a mockup.</sub>
 </p>
 
 <br>
@@ -77,6 +79,12 @@ every edit, so nothing can be quietly rewritten later.
 
 This is decision support, not legal advice — LexisGuide points people to what
 to check and who to ask, it does not replace a lawyer for a high-stakes decision.
+
+<p align="center">
+  <img src=".github/readme/palette.svg" width="480" alt="LexisGuide's palette: ink, paper, sand, green, meadow, amber" />
+  <br>
+  <sub>Every color in this README is the app's own — paper, ink and meadow green, pulled straight from its CSS.</sub>
+</p>
 
 <br>
 
@@ -131,13 +139,23 @@ to check and who to ask, it does not replace a lawyer for a high-stakes decision
 
 </td>
 </tr>
-</table>
+<tr>
+<td width="50%">
 
-<details>
-<summary><b>Sign-in</b></summary>
-<br>
+**Landing page** — the full pitch, watercolor meadow and all.
+
+<img src=".github/readme/shots/landing.png" width="100%" alt="The full LexisGuide landing page hero" />
+
+</td>
+<td width="50%">
+
+**Sign-in** — email and password, or one tap with Google.
+
 <img src=".github/readme/shots/signin.png" width="100%" alt="LexisGuide sign-in screen with email and Google sign-in" />
-</details>
+
+</td>
+</tr>
+</table>
 
 <br>
 
